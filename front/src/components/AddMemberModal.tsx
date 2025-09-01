@@ -1,77 +1,151 @@
-import { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, UserPlus, Check } from 'lucide-react';
 import { UserService } from '@/services';
 import type { User } from '@/models';
 
-const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+type AddMemberModalProps = {
+  open: boolean;
+  onClose: () => void;
+  /**
+   * Called when user confirms adding members
+   * Receives an array of selected User objects.
+   */
+  onAddMembers: (members: User[]) => void;
+  boardTitle?: string;
+  boardId?: string;
+};
+
+/**
+ * AddMemberModal
+ *
+ * Reusable modal for searching and selecting users to add to a board.
+ * - Debounced search (300ms)
+ * - Prevents stale-response races using an internal request id
+ * - Accessible: focuses search input on open, supports Esc/backdrop to close
+ */
+const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, onAddMembers, boardTitle = '', boardId }) => {
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedMembers, setSelectedMembers] = useState<User[]>([]);
   const [availableMembers, setAvailableMembers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ref to the search input for focus management
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // request id to ignore stale responses
+  const requestIdRef = useRef<number>(0);
+  // mounted flag to avoid setting state after unmount
+  const mountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Clear internal state when modal closes
   useEffect(() => {
     if (!open) {
-      // Resetear estado al cerrar
       setSearchTerm('');
       setSelectedMembers([]);
       setAvailableMembers([]);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
-    const fetchMembers = async () => {
+    // focus the search input shortly after open for keyboard users
+    const t = setTimeout(() => searchInputRef.current?.focus(), 80);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  /**
+   * Debounced fetch of members using searchTerm and boardId.
+   * Uses requestIdRef to ignore out-of-order responses.
+   */
+  useEffect(() => {
+    if (!open) return;
+
+    const debounceMs = 300;
+    const currentRequestId = ++requestIdRef.current;
+
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      setError(null);
+
+      let members: User[] = [];
+      let fetchError: string | null = null;
+
       try {
-        setIsLoading(true);
-        setError(null);
-        const members = await UserService.search(searchTerm, boardId);
-        setAvailableMembers(members);
+        const res = await UserService.search(searchTerm, boardId);
+        members = res || [];
       } catch (err) {
         console.error('Error fetching members:', err);
-        setError('Failed to load team members');
-      } finally {
-        setIsLoading(false);
+        fetchError = 'Failed to load team members';
+        members = [];
       }
-    };
 
-    const debounceTimer = setTimeout(() => {
-      fetchMembers();
-    }, 300);
+      if (!mountedRef.current || currentRequestId !== requestIdRef.current) {
+        return;
+      }
 
-    return () => clearTimeout(debounceTimer);
+      // Apply results to state
+      if (fetchError) {
+        setError(fetchError);
+        setAvailableMembers([]);
+      } else {
+        setAvailableMembers(members);
+      }
+
+      setIsLoading(false);
+    }, debounceMs);
+
+    return () => clearTimeout(timer);
   }, [searchTerm, open, boardId]);
 
-  const handleMemberToggle = (member: User) => {
+  // Keyboard: close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  const handleMemberToggle = useCallback((member: User) => {
     setSelectedMembers(prev => {
-      const isSelected = prev.find(m => m._id === member._id);
-      if (isSelected) {
-        return prev.filter(m => m._id !== member._id);
-      } else {
-        return [...prev, member];
-      }
+      const exists = prev.some(m => m._id === member._id);
+      if (exists) return prev.filter(m => m._id !== member._id);
+      return [...prev, member];
     });
-  };
+  }, []);
 
-  const handleAddMembers = () => {
-    if (selectedMembers.length > 0) {
-      onAddMembers(selectedMembers);
-      setSelectedMembers([]);
-      setSearchTerm('');
-      onClose();
-    }
-  };
-
-  const handleClose = () => {
+  const handleAddMembers = useCallback(() => {
+    if (selectedMembers.length === 0) return;
+    onAddMembers(selectedMembers);
+    // reset local state and close
     setSelectedMembers([]);
     setSearchTerm('');
     onClose();
-  };
+  }, [onAddMembers, onClose, selectedMembers]);
 
+  const handleClose = useCallback(() => {
+    setSelectedMembers([]);
+    setSearchTerm('');
+    setAvailableMembers([]);
+    setError(null);
+    onClose();
+  }, [onClose]);
+
+  // Early return for performance (AnimatePresence expects null allowed)
   if (!open) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center" aria-hidden={!open}>
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -86,15 +160,24 @@ const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) =>
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add members"
           className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
               <h2 className="text-xl font-semibold text-gray-900 font-heading">Add Members</h2>
-              <p className="text-sm text-gray-600 font-body mt-1">Add team members to "{boardTitle}"</p>
+              <p className="text-sm text-gray-600 font-body mt-1">
+                {boardTitle ? `Add team members to "${boardTitle}"` : 'Add team members'}
+              </p>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+            <button
+              onClick={handleClose}
+              aria-label="Close add members modal"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+            >
               <X size={20} className="text-gray-500" />
             </button>
           </div>
@@ -104,11 +187,13 @@ const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) =>
             <div className="relative">
               <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="Search team members..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-body"
+                aria-label="Search team members"
               />
             </div>
           </div>
@@ -145,6 +230,7 @@ const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) =>
                     </span>
                     <button
                       onClick={() => handleMemberToggle(member)}
+                      aria-label={`Remove ${member.firstName} ${member.lastName}`}
                       className="text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
                       <X size={14} />
@@ -186,7 +272,7 @@ const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) =>
               ) : (
                 <div className="space-y-3">
                   {availableMembers.map(member => {
-                    const isSelected = selectedMembers.find(m => m._id === member._id);
+                    const isSelected = selectedMembers.some(m => m._id === member._id);
                     return (
                       <motion.div
                         key={member._id}
@@ -197,6 +283,15 @@ const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) =>
                             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
                         onClick={() => handleMemberToggle(member)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleMemberToggle(member);
+                          }
+                        }}
+                        aria-pressed={isSelected}
                       >
                         <div className="relative">
                           {member.avatar ? (
@@ -259,6 +354,7 @@ const AddMemberModal = ({ open, onClose, onAddMembers, boardTitle, boardId }) =>
                     ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
+                aria-disabled={selectedMembers.length === 0}
               >
                 Add {selectedMembers.length > 0 ? selectedMembers.length : ''} Member
                 {selectedMembers.length !== 1 ? 's' : ''}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Board, Task } from '@/models';
+import type { Board as BoardModel, Task } from '@/models';
 import { BoardService, TaskService } from '@/services';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
@@ -15,11 +15,11 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
-import Column from './Column';
-import PageHeader from './PageHeader';
-import TaskCard from './TaskCard';
-import TaskDrawer from './TaskDrawer';
-import UserAvatar from './UserAvatar';
+import Column from '../components/Column';
+import PageHeader from '../components/PageHeader';
+import TaskCard from '../components/TaskCard';
+import TaskDrawer from '../components/TaskDrawer';
+import UserAvatar from '../components/UserAvatar';
 
 interface ColumnData {
   _id: string;
@@ -29,11 +29,11 @@ interface ColumnData {
   order: number;
 }
 
-const KanbanBoard = () => {
+const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [currentBoard, setCurrentBoard] = useState<Board | null>(null);
+  const [currentBoard, setCurrentBoard] = useState<BoardModel | null>(null);
   const [columns, setColumns] = useState<ColumnData[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -323,4 +323,4 @@ const KanbanBoard = () => {
   );
 };
 
-export default KanbanBoard;
+export default Board;

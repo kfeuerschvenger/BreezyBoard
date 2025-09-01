@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+
+import Footer from '@/components/Footer';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
-import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
-import BoardDashboard from './components/BoardDashboard';
-import Footer from './components/Footer';
-import KanbanBoard from './components/KanbanBoard';
-import Login from './components/Login';
-import ProfilePage from './components/ProfilePage';
-import Register from './components/Register';
+import { Board, Home, Login, Profile, Register } from '@/pages';
+
 import './index.css';
 
 // Component to protect routes that require authentication
@@ -37,7 +35,7 @@ const AppRoutes = () => {
         path="/"
         element={
           <ProtectedRoute>
-            <BoardDashboard />
+            <Home />
           </ProtectedRoute>
         }
       />
@@ -45,7 +43,7 @@ const AppRoutes = () => {
         path="/board/:boardId"
         element={
           <ProtectedRoute>
-            <KanbanBoard />
+            <Board />
           </ProtectedRoute>
         }
       />
@@ -53,7 +51,7 @@ const AppRoutes = () => {
         path="/profile"
         element={
           <ProtectedRoute>
-            <ProfilePage />
+            <Profile />
           </ProtectedRoute>
         }
       />

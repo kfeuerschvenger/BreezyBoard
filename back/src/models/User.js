@@ -56,6 +56,7 @@ const userSchema = new mongoose.Schema(
       transform: (_doc, ret) => {
         ret.firstName = capitalize(ret.firstName);
         ret.lastName = capitalize(ret.lastName);
+        ret.location = capitalize(ret.location);
         delete ret.password;
         delete ret.__v;
         return ret;
@@ -73,6 +74,10 @@ userSchema.pre('save', function (next) {
   if (this.isModified('lastName')) {
     this.lastName = capitalize(this.lastName);
   }
+
+  if (this.isModified('location')) {
+    this.location = capitalize(this.location);
+  }
   next();
 });
 
@@ -86,6 +91,10 @@ userSchema.pre('findOneAndUpdate', function (next) {
 
   if (update?.lastName) {
     update.lastName = capitalize(update.lastName);
+  }
+
+  if (update?.location) {
+    update.location = capitalize(update.location);
   }
 
   next();

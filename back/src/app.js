@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import path from 'path';
 import connectDB from './config/db.js';
 import env from './config/env.js';
 import { errorHandler } from './middleware/error.middleware.js';
@@ -12,6 +13,8 @@ import templateRoutes from './routes/template.routes.js';
 import userRoutes from './routes/user.routes.js';
 
 const app = express();
+
+app.set('trust proxy', true);
 
 // Middlewares
 app.use(cors());
@@ -33,6 +36,9 @@ app.use('/api/users', userRoutes);
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Error handling
 app.use(errorHandler);

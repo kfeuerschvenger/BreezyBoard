@@ -3,13 +3,13 @@ import { motion } from 'framer-motion';
 import { Plus, Users, Calendar, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import CreateBoardModal from './CreateBoardModal';
-import AddMemberModal from './AddMemberModal';
+import CreateBoardModal from '../components/CreateBoardModal';
+import AddMemberModal from '../components/AddMemberModal';
 import { BoardService, DashboardService } from '@/services';
 import { resolveColorValue, resolveColorValueSync } from '@/utils/colorUtils';
 import type { Board, User } from '@/models';
-import PageHeader from './PageHeader';
-import UserAvatar from './UserAvatar';
+import PageHeader from '../components/PageHeader';
+import UserAvatar from '../components/UserAvatar';
 
 const safeFormatDate = (dateString?: string) => {
   if (!dateString) return 'N/A';

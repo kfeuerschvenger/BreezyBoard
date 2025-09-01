@@ -1,21 +1,54 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as Icons from 'lucide-react';
 import { X } from 'lucide-react';
 import { TemplateService, ColorService } from '@/services';
 
-const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
-  const [templates, setTemplates] = useState([]);
-  const [boardColors, setBoardColors] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+// Board form data structure
+interface BoardFormData {
+  title: string;
+  description: string;
+  color: string;
+  template: string;
+}
 
-  const [formData, setFormData] = useState({
+// Template data structure
+interface Template {
+  _id?: string;
+  name: string;
+  description?: string;
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  iconName?: keyof typeof Icons;
+  columns: Array<string | { title?: string }>;
+}
+
+// Color data structure
+interface BoardColor {
+  _id?: string;
+  value: string;
+  name: string;
+}
+
+// Component props
+interface CreateBoardModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreateBoard: (data: BoardFormData) => void;
+}
+
+const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCreateBoard }) => {
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [boardColors, setBoardColors] = useState<BoardColor[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const [formData, setFormData] = useState<BoardFormData>({
     title: '',
     description: '',
     color: '',
     template: '',
   });
 
+  // Fetch templates and colors when modal is opened
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -23,8 +56,8 @@ const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
           TemplateService.getAll(),
           ColorService.getByType('board'),
         ]);
-        setTemplates(templatesData || []);
-        setBoardColors(colorsData || []);
+        setTemplates(templatesData ?? []);
+        setBoardColors(colorsData ?? []);
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -35,36 +68,39 @@ const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
     if (open) fetchData();
   }, [open]);
 
-  // Set default values for formData when templates and colors are loaded
+  // Set default values for formData once templates and colors are available
   useEffect(() => {
     if (!isLoading) {
       setFormData(prev => {
-        const next = { ...prev };
+        const next: BoardFormData = { ...prev };
         if (!next.template && templates.length > 0) {
           next.template = templates[0]._id ?? templates[0].name ?? '';
         }
         if ((!next.color || next.color === '') && boardColors.length > 0) {
-          next.color = boardColors[0]._id ?? '';
+          next.color = boardColors[0]._id ?? boardColors[0].value ?? '';
         }
         return next;
       });
     }
   }, [isLoading, templates, boardColors]);
 
-  const handleSubmit = e => {
+  // Handle form submission
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (formData && formData.title && formData.title.trim()) {
+    if (formData.title.trim()) {
       onCreateBoard(formData);
+      // Reset form after submission
       setFormData({
         title: '',
         description: '',
-        color: '#0052CC',
-        template: templates.length > 0 ? templates[0]._id ?? '' : '',
+        color: boardColors[0]?._id ?? '#0052CC',
+        template: templates[0]?._id ?? '',
       });
     }
   };
 
-  const handleInputChange = (field, value) => {
+  // Update form fields
+  const handleInputChange = (field: keyof BoardFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -83,7 +119,7 @@ const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
             className="absolute inset-0 bg-black bg-opacity-50"
           />
 
-          {/* Modal */}
+          {/* Modal container */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -140,7 +176,7 @@ const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => handleInputChange('color', color._id)}
+                        onClick={() => handleInputChange('color', color._id ?? color.value)}
                         className={`relative p-3 rounded-lg border-2 transition-all cursor-pointer ${
                           isSelected ? 'border-gray-400 ring-2 ring-blue-500' : 'border-gray-200 hover:border-gray-300'
                         }`}
@@ -163,7 +199,7 @@ const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-3">Board Template</label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {templates.map(template => {
-                    // resolver icon: puede ser componente directo o string en iconName
+                    // Resolve icon component
                     const IconComponent =
                       template.icon || (template.iconName ? Icons[template.iconName] : null) || Icons.Folder;
 
@@ -228,7 +264,7 @@ const CreateBoardModal = ({ open, onClose, onCreateBoard }) => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!formData.title || !formData.title.trim()}
+                  disabled={!formData.title.trim()}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors"
                 >
                   Create Board

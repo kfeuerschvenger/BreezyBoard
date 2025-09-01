@@ -24,4 +24,22 @@ export const UserService = {
     const response = await api.get(`/users/${userId}`);
     return response.data.data;
   },
+
+  // Update the user's profile
+  async update(userId: string, payload: Partial<User>): Promise<User> {
+    const response = await api.put(`/users/${userId}`, payload);
+    return response.data.data;
+  },
+
+  // Upload avatar image (multipart/form-data)
+  async uploadAvatar(userId: string, file: File): Promise<string> {
+    const fd = new FormData();
+    fd.append('avatar', file);
+
+    const response = await api.post(`/users/${userId}/avatar`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    return response.data.data.avatar;
+  },
 };

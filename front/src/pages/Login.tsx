@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, Mail, Lock, X } from 'lucide-react';
-import AuthLayout from './AuthLayout';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Eye, EyeOff, Lock, Mail, X } from 'lucide-react';
+
 import { useAuth } from '@/hooks/useAuth';
+import AuthLayout from '@/components/AuthLayout';
 import type { LoginCredentials } from '@/models';
 
 const Login = () => {
@@ -66,13 +67,11 @@ const Login = () => {
     }
   };
 
-  // Función para abrir el modal de "Forgot Password"
   const openForgotPasswordModal = (e: React.MouseEvent) => {
     e.preventDefault();
     setShowForgotPasswordModal(true);
   };
 
-  // Función para cerrar el modal
   const closeForgotPasswordModal = () => {
     setShowForgotPasswordModal(false);
   };
@@ -191,7 +190,7 @@ const Login = () => {
           </p>
         </div>
 
-        {/* Modal para "Forgot Password" */}
+        {/* "Forgot Password" Modal */}
         <AnimatePresence>
           {showForgotPasswordModal && (
             <>

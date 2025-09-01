@@ -1,12 +1,5 @@
 import express from 'express';
-import {
-  addBoardMembers,
-  createBoard,
-  deleteBoard,
-  getBoard,
-  getUserBoards,
-  updateBoard,
-} from '../controllers/board.controller.js';
+import * as BoardController from '../controllers/board.controller.js';
 import { authenticate, authorizeBoard } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -14,11 +7,11 @@ const router = express.Router();
 // Protect all routes after this middleware
 router.use(authenticate);
 
-router.get('/', getUserBoards);
-router.post('/', createBoard);
-router.get('/:id', authorizeBoard, getBoard);
-router.put('/:id', authorizeBoard, updateBoard);
-router.delete('/:id', authorizeBoard, deleteBoard);
-router.patch('/:id/members', authorizeBoard, addBoardMembers);
+router.get('/', BoardController.getUserBoards);
+router.post('/', BoardController.createBoard);
+router.get('/:id', authorizeBoard, BoardController.getBoard);
+router.put('/:id', authorizeBoard, BoardController.updateBoard);
+router.delete('/:id', authorizeBoard, BoardController.deleteBoard);
+router.patch('/:id/members', authorizeBoard, BoardController.addBoardMembers);
 
 export default router;
