@@ -37,9 +37,12 @@ services:
     ports:
       - "${BACK_PORT:-5000}:5000"
     volumes:
+      # Source only. node_modules deliberately stays inside the image: the bind
+      # mounts above do not cover it, so a named volume there would only shadow
+      # the image's tree with a stale copy and make every dependency change
+      # require deleting a volume by hand.
       - ./back/src:/app/src
       - ./back/seeds:/app/seeds
-      - back-node-modules:/app/node_modules
       - uploads:/app/uploads
 
   front:
@@ -60,10 +63,7 @@ services:
       - ./front/public:/app/public
       - ./front/index.html:/app/index.html
       - ./front/vite.config.ts:/app/vite.config.ts
-      - front-node-modules:/app/node_modules
 
 volumes:
   mongo-data:
   uploads:
-  back-node-modules:
-  front-node-modules:
