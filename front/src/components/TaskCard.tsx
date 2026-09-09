@@ -110,26 +110,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isDragging = false }
     e.stopPropagation();
   }, []);
 
-  // Accessibility: allow keyboard to start dragging alternative action (calls listeners.onPointerDown if present)
-  const handleDragHandleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      // Activate drag listeners on Space or Enter — mimic pointer interaction for keyboard users.
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault();
-        // Some dnd-kit listeners expect pointer events; we provide the listeners by calling the handler if exists.
-        // If listeners has onPointerDown or onMouseDown, simulate a click by calling it with a synthetic event if possible.
-        const anyListeners = listeners as any;
-        if (typeof anyListeners.onPointerDown === 'function') {
-          // create a minimal synthetic event shape expected by handler
-          anyListeners.onPointerDown({} as any);
-        } else if (typeof anyListeners.onMouseDown === 'function') {
-          anyListeners.onMouseDown({} as any);
-        }
-      }
-    },
-    [listeners]
-  );
-
   return (
     <motion.div
       ref={setNodeRef}
@@ -157,18 +137,16 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isDragging = false }
           )}
         </div>
 
-        {/* Drag handle (accessible) */}
+        {/* Drag handle. The dnd-kit spreads MUST come last: they supply onPointerDown and
+            onKeyDown, which are the sensor activators, and a duplicate JSX prop declared
+            after a spread silently replaces them. aria-label survives because dnd-kit does
+            not set it, and onClick is not an activator. */}
         <div
           className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600"
-          {...listeners}
-          {...attributes}
-          onClick={stopAndHandle}
-          role="button"
           aria-label="Drag handle"
-          tabIndex={0}
-          onKeyDown={handleDragHandleKeyDown}
-          // prevent parent pointer/click from being interpreted when interacting with handle
-          onPointerDown={e => e.stopPropagation()}
+          onClick={stopAndHandle}
+          {...attributes}
+          {...listeners}
         >
           <GripVertical size={16} />
         </div>
