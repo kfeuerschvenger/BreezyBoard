@@ -69,15 +69,32 @@ export const moveTask = async (taskId, newStatus, newOrder) => {
   return task;
 };
 
-export const updateOrders = async updates => {
-  const bulkOps = updates.map(update => ({
-    updateOne: {
-      filter: { _id: update.id },
-      update: { order: update.order },
-    },
-  }));
+export const updateOrders = async (boardId, updates) => {
+  if (!Array.isArray(updates) || updates.length === 0) {
+    return;
+  }
 
-  await Task.bulkWrite(bulkOps);
+  // Only tasks that actually belong to the authorized board (from the URL)
+  // may be renumbered. A task id in the body that belongs to a different
+  // board is silently skipped rather than written: the caller is already
+  // authorized against boardId by the route middleware, so this is a data
+  // scoping guard, not a second authorization boundary.
+  const requestedIds = updates.map(update => update.id);
+  const scopedTasks = await Task.find({ _id: { $in: requestedIds }, boardId }).select('_id');
+  const scopedIds = new Set(scopedTasks.map(task => task._id.toString()));
+
+  const bulkOps = updates
+    .filter(update => scopedIds.has(update.id.toString()))
+    .map(update => ({
+      updateOne: {
+        filter: { _id: update.id, boardId },
+        update: { order: update.order },
+      },
+    }));
+
+  if (bulkOps.length > 0) {
+    await Task.bulkWrite(bulkOps);
+  }
 };
 
 export const getTasksByBoard = async boardId => {

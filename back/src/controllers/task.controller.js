@@ -54,7 +54,7 @@ export const moveTask = async (req, res, next) => {
 export const updateOrders = async (req, res, next) => {
   try {
     const { updates } = req.body;
-    await taskService.updateOrders(updates);
+    await taskService.updateOrders(req.params.boardId, updates);
     responseHandler(res, 200, { message: 'Orders updated successfully' });
   } catch (error) {
     next(error);

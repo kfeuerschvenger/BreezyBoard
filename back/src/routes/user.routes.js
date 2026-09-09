@@ -1,6 +1,6 @@
 import express from 'express';
 import * as UserController from '../controllers/user.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
+import { authenticate, requireBoardRole } from '../middleware/auth.middleware.js';
 import upload from '../middleware/upload.middleware.js';
 
 const router = express.Router();
@@ -9,7 +9,8 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/search', UserController.searchUsers);
-router.get('/board-members', UserController.getBoardMembers);
+// requireBoardRole reads the target board from req.query.boardId here (no boardId route param).
+router.get('/board-members', requireBoardRole('member'), UserController.getBoardMembers);
 router.get('/:id', UserController.getUser);
 router.put('/:id', UserController.updateUser);
 router.post('/:id/avatar', upload.single('avatar'), UserController.uploadAvatar);
