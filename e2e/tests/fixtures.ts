@@ -1,0 +1,78 @@
+import { test as base, expect, type Page } from '@playwright/test';
+
+const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api';
+
+export interface TestUser {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+}
+
+/** Every run registers its own account, so the suite never depends on seeded users. */
+export function makeUser(): TestUser {
+  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  return {
+    firstName: 'E2E',
+    lastName: 'Runner',
+    email: `e2e-${stamp}@example.test`,
+    password: 'E2eRunner1',
+  };
+}
+
+/**
+ * Fails with an actionable message when the stack is not ready, rather than
+ * letting every test time out on a blank page.
+ */
+export async function assertStackIsReady(page: Page): Promise<void> {
+  const health = await page.request.get(`${API_URL}/health`).catch(() => null);
+  expect(health, `The API is not reachable at ${API_URL}. Run: docker compose up -d`).not.toBeNull();
+  expect(health!.ok(), `The API answered ${health!.status()} at ${API_URL}/health`).toBe(true);
+}
+
+/** Board creation needs the seeded colors and templates to exist. */
+export async function assertSeedDataExists(page: Page, token: string): Promise<void> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const templates = await page.request.get(`${API_URL}/templates`, { headers });
+  const body = await templates.json();
+  expect(
+    Array.isArray(body?.data) && body.data.length > 0,
+    'No board templates found. Run: docker compose exec back npm run seed:all'
+  ).toBe(true);
+}
+
+export async function registerViaApi(page: Page, user: TestUser): Promise<string> {
+  const response = await page.request.post(`${API_URL}/auth/register`, { data: user });
+  expect(response.ok(), `Registration failed with ${response.status()}`).toBe(true);
+  const body = await response.json();
+  return body.data.token as string;
+}
+
+export async function logInThroughTheUi(page: Page, user: TestUser): Promise<void> {
+  await page.goto('/login');
+  // Scoped to the form: a bare /email/i also matches the mailto link in the footer.
+  const form = page.locator('form').first();
+  await form.getByLabel('Email address', { exact: true }).fill(user.email);
+  await form.getByLabel('Password', { exact: true }).fill(user.password);
+  await form.getByRole('button', { name: /sign in/i }).click();
+  await expect(page.getByText('My Boards')).toBeVisible();
+}
+
+/** Reads the count badge rendered next to a column title. */
+export async function columnCount(page: Page, columnTitle: string): Promise<number> {
+  const text = await page.locator('body').innerText();
+  const match = text.match(new RegExp(`${columnTitle}\\s+(\\d+)`));
+  return match ? Number(match[1]) : -1;
+}
+
+export const test = base.extend<{ authedUser: TestUser }>({
+  authedUser: async ({ page }, use) => {
+    await assertStackIsReady(page);
+    const user = makeUser();
+    const token = await registerViaApi(page, user);
+    await assertSeedDataExists(page, token);
+    await use(user);
+  },
+});
+
+export { expect };
