@@ -39,6 +39,7 @@ const Board = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -48,11 +49,17 @@ const Board = () => {
   );
 
   useEffect(() => {
-    if (!boardId) return;
+    // Without this guard the page keeps the initial isLoading value and spins forever.
+    if (!boardId) {
+      setIsLoading(false);
+      setError('No board was specified in the address.');
+      return;
+    }
 
     const fetchBoardData = async () => {
       try {
         setIsLoading(true);
+        setError(null);
 
         // Get current board
         const boardData = await BoardService.getById(boardId);
@@ -74,8 +81,9 @@ const Board = () => {
           }));
           setColumns(formattedColumns);
         }
-      } catch (error) {
-        console.error('Error loading board data:', error);
+      } catch (err) {
+        console.error('Error loading board data:', err);
+        setError('This board could not be loaded. Check your connection and try again.');
       } finally {
         setIsLoading(false);
       }
@@ -214,12 +222,15 @@ const Board = () => {
       const hasChecklist = result.checklist && result.checklist.length > 0;
       const allCompleted = hasChecklist && result.checklist.every(item => item.completed);
 
-      if (hasChecklist && allCompleted && result.status !== 'done') {
-        // Find column with highest order (last column)
+      if (hasChecklist && allCompleted && columns.length > 0) {
+        // status holds a column id, so comparing it to the literal 'done' never matches.
+        // Resolve the last column and compare against its id instead.
         const doneColumn = columns.reduce((max, col) => (col.order > max.order ? col : max), columns[0]);
 
-        if (doneColumn) {
-          await handleTaskMove(result._id, doneColumn.id);
+        if (doneColumn && result.status !== doneColumn.id) {
+          const doneTasks = tasks.filter(task => task.status === doneColumn.id);
+          const nextOrder = doneTasks.length > 0 ? Math.max(...doneTasks.map(t => t.order)) + 1 : 0;
+          await handleTaskMove(result._id, doneColumn.id, nextOrder);
         }
       }
 
@@ -262,6 +273,31 @@ const Board = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
+        <div role="alert" className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center max-w-md">
+          <p className="text-gray-900 font-medium mb-2">This board could not be loaded</p>
+          <p className="text-sm text-gray-600 mb-6">{error}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 cursor-pointer"
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Back to boards
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
