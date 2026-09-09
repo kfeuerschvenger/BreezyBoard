@@ -30,7 +30,7 @@ const registerSchema = z
       .regex(/(?=.*[A-Z])/, 'Password must contain an uppercase letter')
       .regex(/(?=.*\d)/, 'Password must contain a number'),
     confirmPassword: z.string().min(1, 'Please confirm your password'),
-    terms: z.literal(true, { errorMap: () => ({ message: 'You must accept the terms' }) }),
+    terms: z.boolean().refine(value => value === true, { message: 'You must accept the terms' }),
   })
   .refine(data => data.password === data.confirmPassword, {
     path: ['confirmPassword'],
@@ -231,13 +231,13 @@ const RegisterForm: React.FC = () => {
       <LegalModal
         open={openModal === 'terms'}
         onClose={closeModal}
-        title="Terms of Service — BreezyBoard"
+        title="Terms of Service - BreezyBoard"
         filePath="/terms-of-service.txt"
       />
       <LegalModal
         open={openModal === 'privacy'}
         onClose={closeModal}
-        title="Privacy Policy — BreezyBoard"
+        title="Privacy Policy - BreezyBoard"
         filePath="/privacy-policy.txt"
       />
     </>

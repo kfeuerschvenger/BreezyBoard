@@ -12,7 +12,11 @@ export const TaskService = {
     return response.data.data;
   },
 
-  async create(boardId: string, taskData: Omit<Task, '_id'>): Promise<Task> {
+  // The API only truly requires title, status, and color (mongoose Task
+  // schema); boardId is set server-side from the route param and other
+  // fields have server defaults, so callers only have a Partial<Task> at
+  // this point.
+  async create(boardId: string, taskData: Partial<Task>): Promise<Task> {
     const response = await api.post(`/tasks/board/${boardId}`, taskData);
     return response.data.data;
   },
@@ -26,7 +30,9 @@ export const TaskService = {
     await api.delete(`/tasks/${id}`);
   },
 
-  async move(taskId: string, newStatus: string, newOrder: number): Promise<Task> {
+  // newOrder is optional: some callers only change status and leave order untouched
+  // (the backend ignores an undefined order field on the update).
+  async move(taskId: string, newStatus: string, newOrder?: number): Promise<Task> {
     const payload = {
       status: newStatus,
       order: newOrder,

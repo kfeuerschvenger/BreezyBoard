@@ -392,7 +392,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       owner: ownerId,
       checklist:
         task.checklist?.map(item => ({
-          id: (item._id as string) ?? (crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+          id: item._id ?? (crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString()),
           text: item.text,
           completed: item.completed,
         })) ?? [],
@@ -515,17 +515,19 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
   const handleChecklistReorder = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (active.id !== over?.id) {
-      setFormData(prev => {
-        const oldIndex = prev.checklist.findIndex(item => item.id === active.id);
-        const newIndex = prev.checklist.findIndex(item => item.id === over.id);
+    // A null `over` means the drag ended outside any valid drop target, so
+    // there is nothing to reorder.
+    if (!over || active.id === over.id) return;
 
-        return {
-          ...prev,
-          checklist: arrayMove(prev.checklist, oldIndex, newIndex),
-        };
-      });
-    }
+    setFormData(prev => {
+      const oldIndex = prev.checklist.findIndex(item => item.id === active.id);
+      const newIndex = prev.checklist.findIndex(item => item.id === over.id);
+
+      return {
+        ...prev,
+        checklist: arrayMove(prev.checklist, oldIndex, newIndex),
+      };
+    });
   };
 
   const handleOwnerChange = (ownerId: string) => {

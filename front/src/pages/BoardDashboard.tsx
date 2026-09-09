@@ -142,9 +142,7 @@ const BoardDashboard: React.FC = () => {
 
   const handleBoardClick = (boardId: string) => navigate(`/board/${boardId}`);
 
-  const handleCreateBoard = async (
-    newBoard: Omit<Board, 'id' | 'taskCount' | 'memberCount' | 'lastUpdated' | 'progress'>
-  ) => {
+  const handleCreateBoard = async (newBoard: Pick<Board, 'title' | 'description' | 'color' | 'template'>) => {
     try {
       await BoardService.create(newBoard);
       await refreshData();
@@ -342,7 +340,7 @@ const BoardDashboard: React.FC = () => {
               progress: calculateProgress(board),
               taskCount: typeof board.taskCount === 'number' ? board.taskCount : 0,
               memberCount: typeof board.memberCount === 'number' ? board.memberCount : 0,
-              lastUpdated: board.lastUpdated || board.updatedAt || new Date().toISOString(),
+              lastUpdated: board.updatedAt || new Date().toISOString(),
             };
 
             const isMenuOpen = openMenuId === id;
