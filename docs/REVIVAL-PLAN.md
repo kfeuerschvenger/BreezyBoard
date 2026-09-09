@@ -321,7 +321,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 2, end to end | Done | Playwright suite covering the core loop and keyboard reachability of the drag handle |
 | 2, frontend units | Done | Vitest and Testing Library, 13 tests over the task drawer, the board page and the auth guard |
 | 2, overall | Done | Backend, frontend and end to end suites all green. Phase 3 closes when the 11 tripwires are flipped |
-| 3 onward | Not started | |
+| 3, authorization | Done | Task and board routes role-gated, original exploit replayed and fully refused, 9 tripwires flipped |
+| 3, remaining slices | In progress | Validation, hardening, sliding session, API surface |
+| 4 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
 
@@ -372,6 +374,22 @@ Frontend: Vitest plus Testing Library. Component tests for the task drawer submi
 Acceptance: `npm test` runs green in both packages, the Playwright test passes against the Docker stack, and the authorization tests written against the not-yet-fixed backend fail for the documented reason.
 
 ### Phase 3. Security. Size: M.
+
+Phase 3 does not fit in one reviewable change. The tasks below together run well past the 400-line budget, and a single diff touching authorization, validation, transport hardening and the session model at once is a diff nobody reviews carefully. It ships as five chained slices, each independently valuable and each verifiable on its own:
+
+| Slice | Covers | State |
+|---|---|---|
+| 1, authorization | P1-1, P1-2, P1-4, H2, and the role-shaped middleware from section 11.2 | Done |
+| 2, request validation | P1-3, P1-6, P3-2, L3 | In progress |
+| 3, hardening | P1-5, P1-7, P1-8, and the remaining P1-9 items | Not started |
+| 4, sliding session | All of section 9, backend and frontend | Not started |
+| 5, API surface | Versioning, pagination, error codes, request ids, structured logging | Not started |
+
+Slice 1 is complete. A note on the design choice, because it deviates from what section 11.2 literally asks for. The plan calls for a per-board role model, which read strictly means turning `Board.members` into subdocuments carrying a role. That is a schema migration whose blast radius reaches every board query and several frontend components, and it buys nothing today because there are only two roles in play.
+
+What was built instead is the half that matters: the middleware is written in terms of a role, not a boolean. `requireBoardRole('owner')` and `requireTaskBoardRole('member')` are the route-level API, and `resolveBoardRole(board, userId)` derives owner from `createdBy` and member from the existing array. Adding a viewer or an admin later means one entry in the rank table and one change inside `resolveBoardRole`, with no route touched. The schema change becomes a separate, additive decision rather than a prerequisite.
+
+The remaining slice content is unchanged:
 
 | Task | Addresses |
 |---|---|
@@ -857,7 +875,7 @@ P0-2 was withdrawn. To confirm the board is correct: fix P0-1, create a task thr
 
 P0-3, drag and drop. Drag a card by its handle or its body. Nothing happens and no request is issued. Focus the handle and press space. The console shows `TypeError: Cannot read properties of undefined (reading 'dndKit')`.
 
-P1-1, task IDOR. Log in as `john@example.com` with password `john123`, who is not a member of the admin's board.
+P1-1, task IDOR. **Closed in Phase 3 slice 1.** Every step below now returns 403. Kept here as the reproduction to re-run against any future change to the authorization middleware. Log in as a second account that is not a member of the board.
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" \
