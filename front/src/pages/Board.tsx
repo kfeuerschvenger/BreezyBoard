@@ -90,7 +90,7 @@ const Board = () => {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
+    const { over } = event;
 
     // If dropping outside any container or no active task
     if (!over || !activeTask) {
@@ -249,9 +249,9 @@ const Board = () => {
     setDrawerOpen(true);
   };
 
-  const handleTaskMove = async (taskId: string, newStatus: string) => {
+  const handleTaskMove = async (taskId: string, newStatus: string, newOrder?: number) => {
     try {
-      await TaskService.move(taskId, newStatus);
+      await TaskService.move(taskId, newStatus, newOrder);
       setTasks(prev => prev.map(task => (task._id === taskId ? { ...task, status: newStatus } : task)));
     } catch (error) {
       console.error('Error moving task:', error);

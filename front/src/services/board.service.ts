@@ -12,9 +12,9 @@ export const BoardService = {
     return response.data.data;
   },
 
-  async create(
-    boardData: Omit<Board, '_id' | 'taskCount' | 'memberCount' | 'lastUpdated' | 'progress'>
-  ): Promise<Board> {
+  // createdBy and members are set server-side (creator injected, membership
+  // defaulted), so the client only ever supplies these four fields.
+  async create(boardData: Pick<Board, 'title' | 'description' | 'color' | 'template'>): Promise<Board> {
     const response = await api.post('/boards', boardData);
     return response.data.data;
   },

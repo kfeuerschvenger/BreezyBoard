@@ -2,7 +2,9 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as Icons from 'lucide-react';
 import { X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { TemplateService, ColorService } from '@/services';
+import type { Template, Color } from '@/models';
 
 // Board form data structure
 interface BoardFormData {
@@ -12,22 +14,12 @@ interface BoardFormData {
   template: string;
 }
 
-// Template data structure
-interface Template {
-  _id?: string;
-  name: string;
-  description?: string;
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
-  iconName?: keyof typeof Icons;
-  columns: Array<string | { title?: string }>;
-}
-
-// Color data structure
-interface BoardColor {
-  _id?: string;
-  value: string;
-  name: string;
-}
+// Only the actual icon components from the lucide-react namespace are kept here.
+// This excludes helpers such as createLucideIcon, which is a plain function and
+// is not a valid JSX element type.
+const iconComponents: Record<string, LucideIcon> = Object.fromEntries(
+  Object.entries(Icons).filter((entry): entry is [string, LucideIcon] => typeof entry[1] === 'object')
+);
 
 // Component props
 interface CreateBoardModalProps {
@@ -38,7 +30,7 @@ interface CreateBoardModalProps {
 
 const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCreateBoard }) => {
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [boardColors, setBoardColors] = useState<BoardColor[]>([]);
+  const [boardColors, setBoardColors] = useState<Color[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [formData, setFormData] = useState<BoardFormData>({
@@ -201,7 +193,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
                   {templates.map(template => {
                     // Resolve icon component
                     const IconComponent =
-                      template.icon || (template.iconName ? Icons[template.iconName] : null) || Icons.Folder;
+                      (template.iconName ? iconComponents[template.iconName] : undefined) ?? Icons.Folder;
 
                     const templateKey = template._id ?? template.name;
 

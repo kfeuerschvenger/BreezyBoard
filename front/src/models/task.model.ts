@@ -16,7 +16,10 @@ export interface Task {
 }
 
 export interface ChecklistItem {
-  _id: string;
+  // A checklist item only gets an _id once the backend persists it (mongoose
+  // assigns it to the subdocument). A newly created item, not yet saved, has
+  // none.
+  _id?: string;
   text: string;
   completed: boolean;
 }
