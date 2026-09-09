@@ -322,7 +322,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 2, frontend units | Done | Vitest and Testing Library, 13 tests over the task drawer, the board page and the auth guard |
 | 2, overall | Done | Backend, frontend and end to end suites all green. Phase 3 closes when the 11 tripwires are flipped |
 | 3, authorization | Done | Task and board routes role-gated, original exploit replayed and fully refused, 9 tripwires flipped |
-| 3, remaining slices | In progress | Validation, hardening, sliding session, API surface |
+| 3, validation | Done | Zod layer replacing every request value with the parsed output, all 11 tripwires flipped |
+| 3, hardening | Done | Fail-fast secrets, CORS allowlist, helmet, rate limits, pinned JWT algorithm, escaped search, upload magic bytes, CSP |
+| 3, remaining slices | Not started | Sliding session, API surface |
 | 4 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -380,8 +382,8 @@ Phase 3 does not fit in one reviewable change. The tasks below together run well
 | Slice | Covers | State |
 |---|---|---|
 | 1, authorization | P1-1, P1-2, P1-4, H2, and the role-shaped middleware from section 11.2 | Done |
-| 2, request validation | P1-3, P1-6, P3-2, L3 | In progress |
-| 3, hardening | P1-5, P1-7, P1-8, and the remaining P1-9 items | Not started |
+| 2, request validation | P1-3, P1-6, P3-2, L3 | Done |
+| 3, hardening | P1-5, P1-7, P1-8, and the remaining P1-9 items | Done |
 | 4, sliding session | All of section 9, backend and frontend | Not started |
 | 5, API surface | Versioning, pagination, error codes, request ids, structured logging | Not started |
 
@@ -596,6 +598,16 @@ This work belongs in Phase 3, alongside the rest of the security work, and it de
 | Configure both windows as validated environment variables, defaulting to fifteen minutes and four hours | `back/src/config/env.js` |
 
 Acceptance: a session with no activity signs out at fifteen minutes after showing a persistent toast at fourteen, activity extends it, the absolute cap ends the session at four hours regardless of activity, logout immediately invalidates the token server side, a second tab follows the first into the login screen, and a draft open in the task drawer survives the sign-out and is restored on the next login.
+
+### Notes from slices 2 and 3
+
+Two things are worth carrying forward from this work.
+
+The validation middleware **replaces** the request value with the parsed output rather than merely checking it. That is the whole fix for mass assignment: a controller that still reads the raw body would happily act on a field no schema declared. There is an Express 5 detail buried in it worth knowing about, because it is not obvious and it fails loudly: `req.query` is a getter with no setter, so the parsed value has to be installed with `defineProperty` instead of assigned.
+
+Two of the hardening changes proved themselves by breaking something during verification, which is the outcome to want from a fail-fast. Requiring `CORS_ORIGINS` in production stopped the production stack from booting, which is how it emerged that the production compose file never passed it. And adding `helmet` produced a container that crashed with a missing module, which exposed a real defect in the development compose file: it mounted a named volume over `node_modules` in both services. That protected nothing, since the bind mounts only cover source directories, and it persisted a stale dependency tree across rebuilds so that every new dependency required deleting a volume by hand. Both are fixed.
+
+Also confirmed in production, incidentally: the computed font on a rendered page is the default Tailwind stack, not Inter. That is finding P4-1 observed rather than deduced. The typography system genuinely does not exist.
 
 ## 10. Accessibility, responsive and UX as a gate
 
