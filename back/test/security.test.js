@@ -6,17 +6,21 @@ import { seedColorsAndTemplates } from './helpers/seed.js';
 import { createTask } from './helpers/task.factory.js';
 import { registerUser } from './helpers/user.factory.js';
 
-// Suite 2: documented security holes.
+// Suite 2: the documented security holes.
 //
-// P1-3 and P1-6 are still open and remain wrapped in test.fails(...): each
-// asserts the CORRECT, secure behavior, which today throws because the
-// vulnerability is present, so the wrapper reports green (expected
-// failure). The moment either hole is closed, its assertion will stop
-// throwing and test.fails will turn red, forcing whoever fixed it to flip
-// it into a normal test(...), the same way P1-1, P1-2, P1-4, and H2 were
-// flipped below once their fixes landed. Each closed hole also has a
-// companion positive-case test guarding against a middleware that denies
-// everyone instead of enforcing the actual role check.
+// Every hole recorded in the revival plan as P1-1 through P1-6 and H2 is now
+// closed, so every test here is an ordinary test(...) and must stay green.
+//
+// They started life wrapped in Vitest's test.fails(...), each asserting the
+// CORRECT secure behavior. While a hole was open the assertion threw, so the
+// wrapper reported an expected failure and the suite was green. Closing the
+// hole made the assertion pass, which made test.fails turn red, which forced
+// whoever fixed it to flip the test rather than leave a skipped one behind.
+// That is the pattern to reuse for any hole found from here on: write the
+// secure assertion, wrap it, and let the wrapper go off when the work lands.
+//
+// Each closed hole also has a companion positive-case test. Without those, a
+// middleware that simply denied everyone would pass this entire file.
 
 describe('security tripwires', () => {
   let colors;
@@ -170,10 +174,12 @@ describe('security tripwires', () => {
     });
   });
 
-  // Finding P1-3: PUT /api/tasks/:id accepts a boardId in the body and
-  // relocates the task into a different board. Actual current behavior:
-  // returns 200 and moves the task to the new board.
-  test.fails('PUT /api/tasks/:id should not accept a boardId that relocates the task', async () => {
+  // Finding P1-3: PUT /api/tasks/:id used to accept a boardId in the body
+  // and relocate the task into a different board. Fixed: updateTaskSchema
+  // whitelists the body and strips boardId before it reaches
+  // task.service.js updateTask, so the request succeeds but the task stays
+  // on its original board.
+  test('PUT /api/tasks/:id should not accept a boardId that relocates the task', async () => {
     const otherBoard = await createBoard(owner.token, colors.boardColor._id, { title: 'Other Board' });
     const task = await createTask(owner.token, board._id, colors.taskColor._id);
 
@@ -184,6 +190,27 @@ describe('security tripwires', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.boardId).toBe(board._id);
+  });
+
+  // New coverage for the request-validation layer: updateTaskSchema
+  // whitelists the update body, so a field never defined in the schema
+  // (unrelated to boardId relocation) is also silently stripped rather than
+  // persisted.
+  test('PUT /api/tasks/:id strips an unexpected field instead of persisting it', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id);
+
+    const res = await request(app)
+      .put(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Updated by owner', internalNote: 'hack' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.title).toBe('Updated by owner');
+    expect(res.body.data.internalNote).toBeUndefined();
+
+    const check = await request(app).get(`/api/tasks/${task._id}`).set('Authorization', `Bearer ${owner.token}`);
+
+    expect(check.body.data.internalNote).toBeUndefined();
   });
 
   // Finding P1-4: PATCH /api/tasks/board/:boardId/orders now filters
@@ -226,18 +253,39 @@ describe('security tripwires', () => {
     expect(check.body.data.order).toBe(7);
   });
 
-  // Finding P1-6: POST /api/auth/login treats an object value for `email`
-  // as a MongoDB query operator instead of rejecting non-string input.
-  // Actual current behavior: the query resolves to some user (matched via
-  // { $ne: null }) and the request is rejected only because the supplied
-  // password does not match that user's hash (401), not because the input
-  // shape itself was validated (400).
-  test.fails('login with a $ne query operator as email should be rejected as invalid input', async () => {
+  // Finding P1-6: POST /api/auth/login used to treat an object value for
+  // `email` as a MongoDB query operator instead of rejecting non-string
+  // input. Fixed: loginSchema requires email to be a string in valid email
+  // format, so a non-string value like { $ne: null } fails validation (400)
+  // before it ever reaches User.findOne({ email }).
+  test('login with a $ne query operator as email should be rejected as invalid input', async () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({ email: { $ne: null }, password: 'anything' });
 
     expect(res.status).toBe(400);
+  });
+
+  // New coverage for the request-validation layer: any non-string email
+  // (not just a Mongo operator object) must be rejected as invalid input.
+  test('login with a numeric email should be rejected as invalid input', async () => {
+    const res = await request(app).post('/api/auth/login').send({ email: 123, password: 'whatever' });
+
+    expect(res.status).toBe(400);
+  });
+
+  // Positive case for P1-6: a valid, correctly-typed email with a wrong
+  // password must still fail as an authentication error (401), not a
+  // validation error. Guards against loginSchema turning every wrong
+  // password into a 400.
+  test('login with a valid email and wrong password should be rejected as invalid credentials', async () => {
+    const registered = await registerUser();
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: registered.user.email, password: 'definitely-wrong' });
+
+    expect(res.status).toBe(401);
   });
 
   // Finding H2: GET /api/users/board-members now requires membership of the
