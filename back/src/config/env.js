@@ -8,7 +8,7 @@ const env = {
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost/boards-db',
   JWT_SECRET: process.env.JWT_SECRET || 'secret-key',
   NODE_ENV: process.env.NODE_ENV || 'development',
-  SALT: process.env.SALT || 10,
+  SALT: Number(process.env.SALT) || 10,
 };
 
 export default env;
