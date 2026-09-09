@@ -317,3 +317,40 @@ describe('security tripwires', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('avatar upload content verification', () => {
+  let user;
+
+  beforeEach(async () => {
+    await seedColorsAndTemplates();
+    user = await registerUser({ email: 'uploader@example.com' });
+  });
+
+  // Multer's fileFilter only sees the mime type the client declares, which is
+  // attacker controlled. These two pin that the bytes on disk are what decide.
+  test('rejects a file whose declared type does not match its contents', async () => {
+    const res = await request(app)
+      .post(`/api/users/${user.user._id}/avatar`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .attach('avatar', Buffer.from('#!/bin/sh\necho not an image\n'), {
+        filename: 'payload.png',
+        contentType: 'image/png',
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  test('accepts a file whose bytes really are a PNG', async () => {
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(64),
+    ]);
+
+    const res = await request(app)
+      .post(`/api/users/${user.user._id}/avatar`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .attach('avatar', png, { filename: 'avatar.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+  });
+});

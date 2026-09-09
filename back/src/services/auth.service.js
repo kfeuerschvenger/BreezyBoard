@@ -28,6 +28,7 @@ export const registerUser = async userData => {
   // Generate JWT token
   const token = jwt.sign({ id: user._id }, env.JWT_SECRET, {
     expiresIn: '1d',
+    algorithm: env.JWT_ALGORITHM,
   });
 
   return { token, user };
@@ -49,6 +50,7 @@ export const loginUser = async (email, password) => {
   // Generate JWT token
   const token = jwt.sign({ id: user._id }, env.JWT_SECRET, {
     expiresIn: '1d',
+    algorithm: env.JWT_ALGORITHM,
   });
 
   return { token, user };
