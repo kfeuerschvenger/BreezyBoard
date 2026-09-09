@@ -62,7 +62,10 @@ const renderDrawer = (onSave = vi.fn()) => {
 const selectOwner = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
   const ownerSearch = screen.getByLabelText('Search team members');
   await user.type(ownerSearch, name);
-  await user.click(await screen.findByText('Ada Lovelace'));
+  // The suggestion list is behind a 220ms debounce on a real timer, stacked on
+  // top of the colour settle above. The default 5s was close enough to the edge
+  // that this timed out under CPU load from an unrelated build.
+  await user.click(await screen.findByText('Ada Lovelace', {}, { timeout: 15_000 }));
 };
 
 describe('TaskDrawer submit gating', () => {
