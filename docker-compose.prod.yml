@@ -31,6 +31,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       NODE_ENV: production
       SALT: 12
+      # Comma separated list of origins allowed to call the API from a browser.
+      # nginx proxies /api on the same origin as the site, so for this topology
+      # the value is simply the public origin of the site itself, for example
+      # https://breezyboard.example. The API refuses to start without it rather
+      # than falling back to allowing every origin, which is what it used to do.
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS to the public origin of the site}
     volumes:
       - uploads:/app/uploads
 

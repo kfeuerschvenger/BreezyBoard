@@ -4,6 +4,11 @@ import User from '../models/User.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
 
+const MAX_SEARCH_TERM_LENGTH = 100;
+
+/** Escapes every regex metacharacter so a search term is matched literally. */
+const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const searchUsers = async (q, excludeUserId, excludeBoardId = null) => {
   // If a boardId is provided, get the existing members of that board
   let excludeUserIds = [excludeUserId];
@@ -24,15 +29,21 @@ export const searchUsers = async (q, excludeUserId, excludeBoardId = null) => {
     }
   }
 
+  // The search term went into $regex verbatim, so a caller could send regex
+  // metacharacters and have Mongo evaluate them: at best a search that matches
+  // nothing sensible, at worst a pattern that scans the collection slowly.
+  // Escaped, and capped, so it can only ever be a literal substring.
+  const term = escapeRegex(String(q ?? '').slice(0, MAX_SEARCH_TERM_LENGTH));
+
   const filter = {
     $and: [
       {
         $or: [
-          { firstName: { $regex: q, $options: 'i' } },
-          { lastName: { $regex: q, $options: 'i' } },
-          { email: { $regex: q, $options: 'i' } },
-          { role: { $regex: q, $options: 'i' } },
-          { department: { $regex: q, $options: 'i' } },
+          { firstName: { $regex: term, $options: 'i' } },
+          { lastName: { $regex: term, $options: 'i' } },
+          { email: { $regex: term, $options: 'i' } },
+          { role: { $regex: term, $options: 'i' } },
+          { department: { $regex: term, $options: 'i' } },
         ],
       },
       { _id: { $nin: excludeUserIds } },

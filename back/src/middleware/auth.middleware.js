@@ -16,7 +16,9 @@ export const authenticate = async (req, _res, next) => {
     const token = authHeader.split(' ')[1];
 
     // Verify and decode the token
-    const decoded = jwt.verify(token, env.JWT_SECRET);
+    // The algorithm is pinned rather than read from the token header, so a
+    // token asking to be verified with a different one is rejected outright.
+    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: [env.JWT_ALGORITHM] });
 
     // Search for the user in the database
     const user = await User.findById(decoded.id).select('-password');
