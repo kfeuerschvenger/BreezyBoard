@@ -39,13 +39,12 @@ const getTitleInput = () => screen.getByPlaceholderText('Enter task title');
 const getDescriptionInput = () => screen.getByPlaceholderText('Enter task description');
 const getSaveButton = () => screen.getByRole('button', { name: 'Save Changes' });
 
-// The color fetch populates `taskColors`, and a second effect (keyed on
-// [task, taskColors]) reacts to that change by rebuilding the whole
-// formData object from `task`. That second effect is scheduled slightly
-// after the color swatches themselves paint, so a test that starts typing
-// the moment the swatches appear can still get its keystrokes wiped out an
-// instant later. Waiting for the swatches plus one extra real tick gives
-// that second effect a chance to finish before any typing starts.
+// Waits for the color swatches to paint before a test starts interacting.
+// This used to be load bearing: the reset effect depended on taskColors, so
+// it rebuilt the whole form when the request resolved and wiped any typing
+// that happened first. That is fixed, and the test at the bottom of this
+// file pins it. The helper stays because tests that need a color to click
+// have to wait for one to exist anyway.
 const waitForColorsLoaded = async () => {
   const button = await screen.findByRole('button', { name: 'Blue' });
   await act(async () => {
@@ -139,5 +138,75 @@ describe('TaskDrawer submit gating', () => {
     expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+
+describe('TaskDrawer form state versus the async color fetch', () => {
+  beforeEach(() => {
+    mockedColorService.getByType.mockReset();
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  // Regression guard. The reset effect listed taskColors as a dependency, so
+  // it ran a second time when the colors request resolved and rebuilt formData
+  // from the task, silently discarding anything typed in the meantime. On a
+  // slow connection that is a user losing a sentence they just wrote.
+  it('keeps what the user typed when the colors resolve after mount', async () => {
+    let releaseColors: (colors: Color[]) => void = () => {};
+    mockedColorService.getByType.mockReturnValue(
+      new Promise<Color[]>(resolve => {
+        releaseColors = resolve;
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+
+    // Let the mount effects settle. The colors request is still pending on
+    // purpose: this test types into the form before it resolves.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+
+    await user.type(getTitleInput(), 'Typed before the colors arrived');
+    await user.type(getDescriptionInput(), 'And so was this');
+
+    await act(async () => {
+      releaseColors(COLORS);
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    await screen.findByRole('button', { name: 'Blue' });
+
+    expect(getTitleInput()).toHaveValue('Typed before the colors arrived');
+    expect(getDescriptionInput()).toHaveValue('And so was this');
+  });
+
+  it('still resolves the color of an existing task once the colors arrive', async () => {
+    let releaseColors: (colors: Color[]) => void = () => {};
+    mockedColorService.getByType.mockReturnValue(
+      new Promise<Color[]>(resolve => {
+        releaseColors = resolve;
+      })
+    );
+
+    render(
+      <TaskDrawer
+        open
+        task={{ _id: 'task-1', boardId: 'board-1', title: 'Existing', description: 'Existing', color: '#EF4444' }}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      releaseColors(COLORS);
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // The raw hex resolves to the matching swatch rather than being kept as is.
+    const red = await screen.findByRole('button', { name: 'Red' });
+    expect(red.className).toContain('ring-2');
   });
 });

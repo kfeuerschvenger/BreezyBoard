@@ -48,15 +48,27 @@ const stripMotionProps = (props: AnyProps): AnyProps => {
 };
 
 vi.mock('framer-motion', () => {
+  // The component for a given tag MUST be cached. Creating a new forwardRef on
+  // every property access gives React a different element type on every render,
+  // so it unmounts and remounts the whole subtree each time. In practice that
+  // destroys the focused input after a single keystroke, which shows up as
+  // typing that silently stops after one character.
+  const componentsByTag = new Map<string, React.ComponentType<AnyProps>>();
+
   const motion = new Proxy(
     {},
     {
       get: (_target, tag) => {
         const tagName = String(tag);
-        const Component = React.forwardRef<unknown, AnyProps>((props, ref) =>
-          React.createElement(tagName, { ...stripMotionProps(props), ref })
-        );
-        Component.displayName = `motion.${tagName}`;
+        let Component = componentsByTag.get(tagName);
+        if (!Component) {
+          const Forwarded = React.forwardRef<unknown, AnyProps>((props, ref) =>
+            React.createElement(tagName, { ...stripMotionProps(props), ref })
+          );
+          Forwarded.displayName = `motion.${tagName}`;
+          Component = Forwarded as unknown as React.ComponentType<AnyProps>;
+          componentsByTag.set(tagName, Component);
+        }
         return Component;
       },
     }

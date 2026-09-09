@@ -34,6 +34,20 @@ interface ChecklistItemData {
   completed: boolean;
 }
 
+type TaskColorOption = { _id: string; name?: string; value: string };
+
+/**
+ * A task colour arrives either populated, as an id, or as a raw hex value.
+ * Resolves all three to the id of a known colour, falling back to the raw value
+ * so an unknown colour is not silently discarded.
+ */
+const resolveColorId = (taskColor: Task['color'] | undefined, colors: TaskColorOption[]): string => {
+  if (!taskColor) return '';
+  if (typeof taskColor === 'object') return (taskColor as { _id?: string })._id ?? '';
+  const foundByValue = colors.find(color => color.value.toLowerCase() === String(taskColor).toLowerCase());
+  return foundByValue?._id ?? String(taskColor);
+};
+
 // ----------------------
 // Sortable Checklist Item Component
 // ----------------------
@@ -267,7 +281,11 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
 // ----------------------
 const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onSave }) => {
   const [isLoadingColors, setIsLoadingColors] = useState(true);
-  const [taskColors, setTaskColors] = useState<Array<{ _id: string; name?: string; value: string }>>([]);
+  const [taskColors, setTaskColors] = useState<TaskColorOption[]>([]);
+  // Read by the reset effect without making it depend on the colors, which would
+  // re-run it and discard whatever the user has typed.
+  const taskColorsRef = useRef<TaskColorOption[]>([]);
+  taskColorsRef.current = taskColors;
   const [boardMembers, setBoardMembers] = useState<UserModel[]>([]);
   const [formData, setFormData] = useState({
     title: '',
@@ -357,22 +375,17 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     };
   }, [task]);
 
-  // Update form when task or taskColors change
+  // Reset the form when a different task is opened.
+  //
+  // taskColors is deliberately NOT a dependency here. It starts empty and is
+  // replaced once the colors request resolves, so listing it rebuilt the whole
+  // form from the task a second time after mount and silently wiped whatever the
+  // user had already typed. Resolving the colour is handled by the effect below,
+  // which patches that one field instead of rebuilding everything.
   useEffect(() => {
     if (!task) {
       setErrors({});
       return;
-    }
-
-    // Determine color id from task.color
-    let colorId = '';
-    if (task.color) {
-      if (typeof task.color === 'object') {
-        colorId = (task.color as any)._id ?? '';
-      } else if (typeof task.color === 'string') {
-        const foundByValue = taskColors.find(c => c.value.toLowerCase() === String(task.color).toLowerCase());
-        colorId = foundByValue?._id ?? String(task.color);
-      }
     }
 
     // Determine owner id from task.owner
@@ -389,7 +402,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       title: task.title ?? '',
       description: task.description ?? '',
       priority: task.priority ?? 'medium',
-      color: colorId,
+      color: resolveColorId(task.color, taskColorsRef.current),
       owner: ownerId,
       checklist:
         task.checklist?.map(item => ({
@@ -400,6 +413,20 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     });
 
     setErrors({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task]);
+
+  // The colors arrive asynchronously. Patch only the colour field, and only when
+  // the one currently held is not already a valid choice, so a colour the user
+  // picked by hand is never overwritten.
+  useEffect(() => {
+    if (!task || taskColors.length === 0) return;
+
+    setFormData(prev => {
+      if (taskColors.some(color => color._id === prev.color)) return prev;
+      const resolved = resolveColorId(task.color, taskColors) || taskColors[0]._id;
+      return prev.color === resolved ? prev : { ...prev, color: resolved };
+    });
   }, [task, taskColors]);
 
   const priorities = [
