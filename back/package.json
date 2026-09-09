@@ -4,11 +4,13 @@
   "type": "module",
   "main": "app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "seed:templates": "node seeds/templates_and_colors.js",
     "seed:users": "node seeds/users.seed.js",
-    "seed:all": "npm run seed:templates && npm run seed:users"
+    "seed:all": "npm run seed:templates && npm run seed:users",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
   },
   "keywords": [],
   "author": {
@@ -28,6 +30,12 @@
     "multer": "^2.0.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.2.2",
+    "vitest": "^5.0.0"
+  },
+  "allowScripts": {
+    "mongodb-memory-server@11.2.0": true
   }
 }

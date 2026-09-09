@@ -1,8 +1,6 @@
 import cors from 'cors';
 import express from 'express';
 import path from 'path';
-import connectDB from './config/db.js';
-import env from './config/env.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import authRoutes from './routes/auth.routes.js';
 import boardRoutes from './routes/board.routes.js';
@@ -19,9 +17,6 @@ app.set('trust proxy', true);
 // Middlewares
 app.use(cors());
 app.use(express.json());
-
-// Connect to MongoDB
-connectDB();
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -43,7 +38,4 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // Error handling
 app.use(errorHandler);
 
-// Start the server
-app.listen(env.PORT, () => {
-  console.log(`Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
-});
+export default app;
