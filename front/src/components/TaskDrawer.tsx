@@ -284,6 +284,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     color?: string;
   }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // DnD sensors for checklist reordering
   const sensors = useSensors(
@@ -443,7 +444,9 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       formData.description.trim() !== '' &&
       formData.owner !== '' &&
       formData.color !== '' &&
-      Object.keys(errors).length === 0
+      // Check for error values, not keys: a cleared error is stored as undefined
+      // under an existing key, so counting keys keeps the form permanently invalid.
+      Object.values(errors).every(message => !message)
     );
   };
 
@@ -451,6 +454,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     e.preventDefault();
     if (!validateForm() || isSubmitting) return;
 
+    setSubmitError(null);
     setIsSubmitting(true);
     try {
       const taskData: Partial<Task> = {
@@ -479,6 +483,8 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       onClose();
     } catch (error) {
       console.error('Error saving task:', error);
+      // A failed save used to look identical to an idle form. Tell the user.
+      setSubmitError('The task could not be saved. Check your connection and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -697,6 +703,12 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
                     </SortableContext>
                   </DndContext>
                 </div>
+
+                {submitError && (
+                  <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                    {submitError}
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <button
