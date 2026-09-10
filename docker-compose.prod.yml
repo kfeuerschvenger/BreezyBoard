@@ -45,7 +45,7 @@ services:
       context: ./front
       target: prod
       args:
-        VITE_API_URL: /api
+        VITE_API_URL: /api/v1
         VITE_USE_STRICT_MODE: "true"
     restart: unless-stopped
     depends_on:

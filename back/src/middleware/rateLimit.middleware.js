@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import env from '../config/env.js';
+import { ErrorCode } from '../constants/errorCodes.js';
 
 /**
  * The authentication endpoints had no limit of any kind, so credential
@@ -16,6 +17,7 @@ const shared = {
   message: {
     success: false,
     message: 'Too many attempts. Please wait before trying again.',
+    code: ErrorCode.RATE_LIMITED,
   },
 };
 

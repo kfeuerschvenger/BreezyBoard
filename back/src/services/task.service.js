@@ -97,12 +97,32 @@ export const updateOrders = async (boardId, updates) => {
   }
 };
 
-export const getTasksByBoard = async boardId => {
-  const tasks = await Task.find({ boardId })
+// Pagination is opt-in: `limit` undefined means "return everything", exactly
+// as before this parameter existed. `pagination` is always returned
+// alongside the tasks so a client can discover `total` either way; only
+// whether `tasks` itself is truncated depends on `limit` being present.
+export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
+  const filter = { boardId };
+
+  const total = await Task.countDocuments(filter);
+
+  let query = Task.find(filter)
     .populate('owner', 'firstName lastName avatar')
     .populate('color', 'name value')
     .sort({ createdAt: -1 });
-  return tasks;
+
+  const hasLimit = typeof limit === 'number';
+  const safeOffset = typeof offset === 'number' ? offset : 0;
+
+  if (hasLimit) {
+    query = query.skip(safeOffset).limit(limit);
+  }
+
+  const tasks = await query;
+
+  const pagination = hasLimit ? { total, limit, offset: safeOffset } : { total };
+
+  return { tasks, pagination };
 };
 
 export const updateChecklistItem = async (taskId, itemId, updateData) => {

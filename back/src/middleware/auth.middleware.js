@@ -4,6 +4,7 @@ import Board from '../models/Board.js';
 import Task from '../models/Task.js';
 import ApiError from '../utils/apiError.js';
 import env from '../config/env.js';
+import { ErrorCode } from '../constants/errorCodes.js';
 import { isAbsoluteSessionExpired, renewSessionToken } from '../services/auth.service.js';
 
 /**
@@ -47,14 +48,14 @@ export const authenticate = async (req, res, next) => {
     // carries the old tokenVersion and is rejected here even though its
     // signature and exp are both still perfectly valid.
     if (decoded.tokenVersion !== user.tokenVersion) {
-      return next(new ApiError(401, 'Token has been revoked, please sign in again'));
+      return next(new ApiError(401, 'Token has been revoked, please sign in again', [], ErrorCode.TOKEN_REVOKED));
     }
 
     // The absolute cap. Anchored on sessionStartedAt (stamped once at login,
     // never refreshed), not on iat (rewritten on every renewal). No renewal
     // header is issued once this fires.
     if (isAbsoluteSessionExpired(decoded.sessionStartedAt)) {
-      return next(new ApiError(401, 'Session expired, please sign in again'));
+      return next(new ApiError(401, 'Session expired, please sign in again', [], ErrorCode.SESSION_EXPIRED));
     }
 
     // Renewal is a side effect of any authenticated request, not an
@@ -65,7 +66,7 @@ export const authenticate = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error('Authentication error:', error.message);
+    req.log?.warn({ errorName: error.name }, 'Authentication error');
 
     if (error.name === 'TokenExpiredError') {
       return next(new ApiError(401, 'Token expired'));

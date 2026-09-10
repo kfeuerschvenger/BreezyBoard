@@ -63,8 +63,9 @@ export const updateOrders = async (req, res, next) => {
 
 export const getBoardTasks = async (req, res, next) => {
   try {
-    const tasks = await taskService.getTasksByBoard(req.params.boardId);
-    responseHandler(res, 200, tasks);
+    const { limit, offset } = req.query;
+    const { tasks, pagination } = await taskService.getTasksByBoard(req.params.boardId, { limit, offset });
+    responseHandler(res, 200, tasks, { pagination });
   } catch (error) {
     next(error);
   }

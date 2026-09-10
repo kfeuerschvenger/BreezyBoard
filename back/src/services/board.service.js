@@ -85,10 +85,16 @@ export const deleteBoard = async id => {
   return board;
 };
 
-export const getUserBoards = async userId => {
-  const boards = await Board.find({
-    $or: [{ createdBy: userId }, { members: userId }],
-  })
+// Pagination is opt-in: `limit` undefined means "return everything", exactly
+// as before this parameter existed. `pagination` is always returned
+// alongside the boards so a client can discover `total` either way; only
+// whether `boards` itself is truncated depends on `limit` being present.
+export const getUserBoards = async (userId, { limit, offset } = {}) => {
+  const filter = { $or: [{ createdBy: userId }, { members: userId }] };
+
+  const total = await Board.countDocuments(filter);
+
+  let query = Board.find(filter)
     .populate('createdBy', 'firstName lastName avatar')
     .populate('color', 'name value')
     .populate({
@@ -97,7 +103,18 @@ export const getUserBoards = async userId => {
     })
     .sort({ updatedAt: -1 });
 
-  return boards;
+  const hasLimit = typeof limit === 'number';
+  const safeOffset = typeof offset === 'number' ? offset : 0;
+
+  if (hasLimit) {
+    query = query.skip(safeOffset).limit(limit);
+  }
+
+  const boards = await query;
+
+  const pagination = hasLimit ? { total, limit, offset: safeOffset } : { total };
+
+  return { boards, pagination };
 };
 
 export const addBoardMembers = async (boardId, members) => {

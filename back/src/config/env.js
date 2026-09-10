@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import logger from '../utils/logger.js';
 
 // Load environment variables before anything else
 dotenv.config();
@@ -23,7 +24,7 @@ const requireSecret = (name, developmentFallback) => {
     throw new Error(`${name} is required in production and was not set. Refusing to start.`);
   }
 
-  console.warn(`[env] ${name} is not set. Using an insecure development value. Never do this outside development.`);
+  logger.warn(`[env] ${name} is not set. Using an insecure development value. Never do this outside development.`);
   return developmentFallback;
 };
 
@@ -44,7 +45,7 @@ const parseDurationMs = (name, raw, fallbackMs) => {
   const parsed = Number(raw);
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.warn(`[env] ${name} is not a valid positive number. Using the default of ${fallbackMs}ms.`);
+    logger.warn(`[env] ${name} is not a valid positive number. Using the default of ${fallbackMs}ms.`);
     return fallbackMs;
   }
 

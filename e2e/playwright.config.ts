@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const FRONT_URL = process.env.E2E_FRONT_URL ?? 'http://localhost:5173';
-const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api';
+const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
 
 export default defineConfig({
   testDir: './tests',

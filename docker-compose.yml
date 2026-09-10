@@ -61,7 +61,7 @@ services:
     depends_on:
       - back
     environment:
-      VITE_API_URL: http://localhost:${BACK_PORT:-5000}/api
+      VITE_API_URL: http://localhost:${BACK_PORT:-5000}/api/v1
       VITE_USE_STRICT_MODE: "false"
     ports:
       - "${FRONT_PORT:-5173}:5173"

@@ -2,6 +2,7 @@ import express from 'express';
 import * as BoardController from '../controllers/board.controller.js';
 import { authenticate, requireBoardRole } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
+import { paginationQuerySchema } from '../validation/common.validation.js';
 import {
   addBoardMembersSchema,
   createBoardSchema,
@@ -14,7 +15,7 @@ const router = express.Router();
 // Protect all routes after this middleware
 router.use(authenticate);
 
-router.get('/', BoardController.getUserBoards);
+router.get('/', validate({ query: paginationQuerySchema }), BoardController.getUserBoards);
 router.post('/', validate({ body: createBoardSchema }), BoardController.createBoard);
 router.get('/:id', validate({ params: idParamSchema }), requireBoardRole('member'), BoardController.getBoard);
 // Destructive/ownership-changing operations require the creator, not just any member.

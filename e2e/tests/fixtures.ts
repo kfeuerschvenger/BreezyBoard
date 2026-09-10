@@ -1,6 +1,6 @@
 import { test as base, expect, type Page } from '@playwright/test';
 
-const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api';
+const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
 
 export interface TestUser {
   firstName: string;

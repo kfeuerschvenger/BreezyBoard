@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import ApiError from '../utils/apiError.js';
+import logger from '../utils/logger.js';
 
 /**
  * Multer's fileFilter can only see the mime type the client declares in the
@@ -46,7 +47,7 @@ const discard = async filePath => {
   } catch (error) {
     // The upload is being rejected either way; a failed cleanup must not mask
     // the real reason from the caller.
-    console.error('Could not remove a rejected upload:', error.message);
+    logger.error({ err: error }, 'Could not remove a rejected upload');
   }
 };
 
