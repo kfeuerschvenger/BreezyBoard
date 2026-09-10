@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AuthService } from '@/services';
 import type { User } from '@/models';
 import { AuthContext, type AuthContextType } from './AuthContext';
+import SessionManager from '@/features/session/SessionManager';
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -16,17 +17,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const storedUser = localStorage.getItem('user');
 
         if (token && storedUser) {
-          // Verify the token with the backend
-          const response = await AuthService.validateToken();
-
-          if (response.valid) {
-            setUser(JSON.parse(storedUser));
-            setIsAuthenticated(true);
-          } else {
-            // Invalid token, clear storage
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-          }
+          // Verify the token with the backend and refresh the stored user
+          // with the canonical object the server just returned.
+          const currentUser = await AuthService.me();
+          localStorage.setItem('user', JSON.stringify(currentUser));
+          setUser(currentUser);
+          setIsAuthenticated(true);
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -38,6 +34,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     initAuth();
+  }, []);
+
+  // Another tab clearing its token (its user signed out) signs this tab out
+  // locally too. No need to call the logout endpoint again: the tab that
+  // actually acted already revoked the session server-side.
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'token' && !event.newValue) {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   const login = async (credentials: { email: string; password: string }) => {
@@ -56,8 +67,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(true);
   };
 
-  const logout = () => {
-    AuthService.logout();
+  const logout = async () => {
+    await AuthService.logout();
     setUser(null);
     setIsAuthenticated(false);
   };
@@ -71,7 +82,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loading,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <SessionManager />
+    </AuthContext.Provider>
+  );
 };
 
 export default AuthProvider;
