@@ -33,6 +33,27 @@ const parseOrigins = raw =>
     .map(origin => origin.trim())
     .filter(Boolean);
 
+// Both windows of the sliding session must be settable to tiny values so
+// tests can exercise expiry without waiting minutes or hours, so a plain
+// Number(...) with a warning replaces a bad value rather than throwing.
+const parseDurationMs = (name, raw, fallbackMs) => {
+  if (raw === undefined || raw.trim() === '') {
+    return fallbackMs;
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.warn(`[env] ${name} is not a valid positive number. Using the default of ${fallbackMs}ms.`);
+    return fallbackMs;
+  }
+
+  return parsed;
+};
+
+const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+
 const env = {
   PORT: process.env.PORT || 5000,
   MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost/boards-db',
@@ -48,6 +69,12 @@ const env = {
   // which is convenient locally; in production an empty list is a hard error
   // because the previous behavior was a wildcard for the whole internet.
   CORS_ORIGINS: parseOrigins(process.env.CORS_ORIGINS),
+
+  // The sliding session's two independent clocks. JWT_INACTIVITY_TTL_MS is
+  // the exp window, rewritten on every renewal. JWT_ABSOLUTE_TTL_MS is the
+  // hard cap measured from sessionStartedAt, which is never rewritten.
+  JWT_INACTIVITY_TTL_MS: parseDurationMs('JWT_INACTIVITY_TTL_MS', process.env.JWT_INACTIVITY_TTL_MS, FIFTEEN_MINUTES_MS),
+  JWT_ABSOLUTE_TTL_MS: parseDurationMs('JWT_ABSOLUTE_TTL_MS', process.env.JWT_ABSOLUTE_TTL_MS, FOUR_HOURS_MS),
 };
 
 if (isProduction && env.CORS_ORIGINS.length === 0) {

@@ -4,8 +4,21 @@ import Board from '../models/Board.js';
 import Task from '../models/Task.js';
 import ApiError from '../utils/apiError.js';
 import env from '../config/env.js';
+import { isAbsoluteSessionExpired, renewSessionToken } from '../services/auth.service.js';
 
-export const authenticate = async (req, _res, next) => {
+/**
+ * Verifies the bearer token, enforces the sliding-session rules, and, when
+ * the token is genuinely still good, renews it as a side effect and sets it
+ * on the response as X-Auth-Token before the route handler ever runs.
+ *
+ * That ordering is not incidental. The header is set here, before next(),
+ * because this middleware cannot know what the eventual response status
+ * will be, and because the response may already be committed by the time a
+ * "was this successful" check downstream would run. A 403 or a 500 from the
+ * handler still proves a human made the request, so renewal happens
+ * regardless of what the handler ends up returning.
+ */
+export const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -20,12 +33,34 @@ export const authenticate = async (req, _res, next) => {
     // token asking to be verified with a different one is rejected outright.
     const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: [env.JWT_ALGORITHM] });
 
-    // Search for the user in the database
+    // Search for the user in the database. This lookup is not a new cost
+    // introduced by tokenVersion: every authenticated request already loads
+    // the user document here to populate req.user, and tokenVersion is a
+    // field on that same document, not a separate query.
     const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {
       return next(new ApiError(401, 'User not found'));
     }
+
+    // Real revocation: a token minted before a logout or a password change
+    // carries the old tokenVersion and is rejected here even though its
+    // signature and exp are both still perfectly valid.
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      return next(new ApiError(401, 'Token has been revoked, please sign in again'));
+    }
+
+    // The absolute cap. Anchored on sessionStartedAt (stamped once at login,
+    // never refreshed), not on iat (rewritten on every renewal). No renewal
+    // header is issued once this fires.
+    if (isAbsoluteSessionExpired(decoded.sessionStartedAt)) {
+      return next(new ApiError(401, 'Session expired, please sign in again'));
+    }
+
+    // Renewal is a side effect of any authenticated request, not an
+    // endpoint the client calls. sessionStartedAt and tokenVersion are
+    // copied verbatim; only iat and exp move forward.
+    res.set('X-Auth-Token', renewSessionToken(decoded));
 
     req.user = user;
     next();

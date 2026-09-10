@@ -48,6 +48,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Bumped on logout and on password change so a token minted before the
+    // bump fails the middleware's tokenVersion check even though its
+    // signature and exp are still valid. This is what gives the sliding
+    // session real revocation instead of a purely stateless one.
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -59,6 +67,7 @@ const userSchema = new mongoose.Schema(
         ret.location = capitalize(ret.location);
         delete ret.password;
         delete ret.__v;
+        delete ret.tokenVersion;
         return ret;
       },
     },
