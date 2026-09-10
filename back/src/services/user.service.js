@@ -1,8 +1,10 @@
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
+import env from '../config/env.js';
 
 const MAX_SEARCH_TERM_LENGTH = 100;
 
@@ -103,6 +105,38 @@ export const updateUser = async (id, updateData, actor = null) => {
   }
 
   return updated;
+};
+
+/**
+ * Change a user's password. Verifies the current password, hashes the new
+ * one, and bumps tokenVersion so every token issued before this call fails
+ * the auth middleware's version check on its next use, per the sliding
+ * session's revocation design. This is the sole reason this service
+ * imports bcrypt and env.
+ *
+ * @param {string} userId
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ * @returns {Promise<import('mongoose').Document>}
+ */
+export const changePassword = async (userId, currentPassword, newPassword) => {
+  const user = await User.findById(userId).select('+password');
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new ApiError(401, 'Current password is incorrect');
+  }
+
+  const salt = await bcrypt.genSalt(env.SALT);
+  user.password = await bcrypt.hash(newPassword, salt);
+  user.tokenVersion += 1;
+  await user.save();
+
+  return user;
 };
 
 /**
