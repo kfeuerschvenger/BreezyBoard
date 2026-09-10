@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TaskDrawer from './TaskDrawer';
@@ -16,6 +16,15 @@ vi.mock('@/services', () => ({
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
 }));
+
+// TaskDrawer now autosaves a draft to localStorage as the user types (see the
+// draft-persistence describe block below). Without this, a draft written by
+// one test would leak into the next test that opens the drawer for the same
+// task/boardId and get restored, silently changing that test's starting form
+// state.
+afterEach(() => {
+  window.localStorage.clear();
+});
 
 const mockedColorService = vi.mocked(ColorService);
 const mockedUserService = vi.mocked(UserService);
@@ -211,5 +220,62 @@ describe('TaskDrawer form state versus the async color fetch', () => {
     // The raw hex resolves to the matching swatch rather than being kept as is.
     const red = await screen.findByRole('button', { name: 'Red' });
     expect(red.className).toContain('ring-2');
+  });
+});
+
+describe('TaskDrawer draft persistence', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  const DRAFT_STORAGE_KEY = 'breezyboard:draft:task:new:board-1';
+
+  it('restores a draft into the form when one exists in storage for a new task', async () => {
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        value: {
+          title: 'Draft title',
+          description: 'Draft description',
+          priority: 'high',
+          color: 'color-red',
+          owner: 'user-grace',
+          checklist: [],
+        },
+      })
+    );
+
+    render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitForColorsLoaded();
+
+    expect(getTitleInput()).toHaveValue('Draft title');
+    expect(getDescriptionInput()).toHaveValue('Draft description');
+  });
+
+  it('clears the stored draft after a successful save', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+    await waitForColorsLoaded();
+
+    await user.type(getTitleInput(), 'Ship the release notes');
+    await user.type(getDescriptionInput(), 'Write and publish the notes for this cycle.');
+    await user.click(screen.getByRole('button', { name: 'Blue' }));
+    await selectOwner(user, 'Ada');
+    await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+    // Confirm the autosave actually landed before saving, so clearing it is a
+    // meaningful assertion rather than checking a key that was never set.
+    await waitFor(() => expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull());
+
+    await user.click(getSaveButton());
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
   });
 });

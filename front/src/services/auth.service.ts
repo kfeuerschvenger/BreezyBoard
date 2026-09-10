@@ -19,17 +19,34 @@ export const AuthService = {
     return response.data.data;
   },
 
-  async validateToken(): Promise<{ valid: boolean }> {
-    try {
-      const response = await api.get('/auth/validate-token');
-      return response.data.data;
-    } catch {
-      return { valid: false };
-    }
+  // Replaces validateToken(). The backend wraps every response body as
+  // { success, data }, /auth/me included, so this unwraps via
+  // response.data.data like every other endpoint here.
+  async me(): Promise<User> {
+    const response = await api.get('/auth/me');
+    return response.data.data;
   },
 
-  logout() {
-    clearAuth();
+  // 204 No Content: a pure renewal side effect carried entirely by the
+  // X-Auth-Token response header, already handled by the api.service.ts
+  // response interceptor. There is no body to unwrap.
+  async ping(): Promise<void> {
+    await api.get('/auth/ping');
+  },
+
+  // Calls the server-side revocation (bumps tokenVersion) before clearing
+  // local state, so a token that leaked elsewhere stops working immediately
+  // instead of only going stale on this device. Never throws: signing out is
+  // a local action that must always succeed even if the network call to
+  // revoke the session fails (e.g. the user is offline).
+  async logout(): Promise<void> {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.warn('Server-side logout failed; clearing the local session anyway', error);
+    } finally {
+      clearAuth();
+    }
   },
 
   getCurrentUser(): User | null {

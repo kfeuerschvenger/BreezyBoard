@@ -14,6 +14,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useDraft } from '@/shared/hooks/useDraft';
 
 interface UserSearchInputProps {
   value: string;
@@ -304,6 +305,12 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Persists an in-progress edit across a reload or an accidental close.
+  // Gated to null while the drawer is closed so nothing is read or written
+  // for a drawer nobody has open.
+  const draftKey = open ? `task:${task?._id ?? 'new:' + (task?.boardId ?? 'unknown')}` : null;
+  const draft = useDraft<typeof formData>(draftKey);
+
   // DnD sensors for checklist reordering
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -398,7 +405,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       }
     }
 
-    setFormData({
+    const baseFormData = {
       title: task.title ?? '',
       description: task.description ?? '',
       priority: task.priority ?? 'medium',
@@ -410,7 +417,13 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
           text: item.text,
           completed: item.completed,
         })) ?? [],
-    });
+    };
+
+    // A saved draft, when one exists, takes priority over rebuilding the
+    // form from the task prop: it is exactly the in-progress edit the user
+    // had not saved yet.
+    const restoredDraft = draft.read();
+    setFormData(restoredDraft ?? baseFormData);
 
     setErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -428,6 +441,15 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       return prev.color === resolved ? prev : { ...prev, color: resolved };
     });
   }, [task, taskColors]);
+
+  // Autosave: fires on every change while the drawer is open. Depends on
+  // draft.write (stable per draft key) rather than the whole draft object,
+  // so it does not re-fire on every unrelated render.
+  useEffect(() => {
+    if (!open) return;
+    draft.write(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, open, draft.write]);
 
   const priorities = [
     { value: 'low', label: 'Low', color: 'bg-green-100 text-green-800' },
@@ -507,6 +529,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
       }
 
       await onSave(taskData);
+      draft.clear();
       onClose();
     } catch (error) {
       console.error('Error saving task:', error);

@@ -1,10 +1,11 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as Icons from 'lucide-react';
 import { X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { TemplateService, ColorService } from '@/services';
 import type { Template, Color } from '@/models';
+import { useDraft } from '@/shared/hooks/useDraft';
 
 // Board form data structure
 interface BoardFormData {
@@ -40,8 +41,28 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
     template: '',
   });
 
+  // Persists an in-progress "new board" form across a reload or an
+  // accidental close. The key stays constant (not gated by `open`) so that
+  // draft.clear() below still targets the right storage entry after the
+  // modal has already closed; the read/write effects each guard on `open`
+  // themselves instead.
+  const draft = useDraft<BoardFormData>('board:new');
+  const hasRestoredDraftRef = useRef(false);
+  // Set when a submit was attempted, so the draft is only cleared once the
+  // modal actually closes afterward, not the instant onCreateBoard fires.
+  // onCreateBoard has a void/fire-and-forget contract, so this component has
+  // no direct success signal; the parent closes the modal on success and
+  // leaves it open on failure, so "submitted, then closed" is the closest
+  // available proxy for "saved successfully" without changing that contract.
+  const didSubmitRef = useRef(false);
+  const wasOpenRef = useRef(open);
+
   // Fetch templates and colors when modal is opened
   useEffect(() => {
+    if (open) {
+      hasRestoredDraftRef.current = false;
+    }
+
     const fetchData = async () => {
       try {
         const [templatesData, colorsData] = await Promise.all([
@@ -76,10 +97,55 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
     }
   }, [isLoading, templates, boardColors]);
 
+  // Restore-on-open. Runs after the defaulting effect above, on the same
+  // isLoading transition, and only once per time the modal opens, so a
+  // restored draft is not immediately overwritten by the defaults and does
+  // not fight edits the user makes afterward.
+  useEffect(() => {
+    if (!open || isLoading || hasRestoredDraftRef.current) return;
+
+    const restored = draft.read();
+    if (restored) {
+      setFormData(restored);
+    }
+    hasRestoredDraftRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isLoading, draft.read]);
+
+  // Autosave while open. Gated on hasRestoredDraftRef so it never persists
+  // the still-empty formData before the restore-on-open effect above has had
+  // its turn: without this guard, this effect also re-fires the instant
+  // `open` becomes true (its own dependency), writing an empty snapshot to
+  // storage before the user has typed anything and before the async
+  // template/colour fetch resolves; if that fetch resolves after the user
+  // has since typed a title, the restore effect reads that stale empty
+  // snapshot back and overwrites the freshly typed input. Depends on
+  // draft.write (stable per draft key) rather than the whole draft object,
+  // so it does not re-fire on every unrelated render.
+  useEffect(() => {
+    if (!open || !hasRestoredDraftRef.current) return;
+    draft.write(formData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, open, draft.write]);
+
+  // Clear the draft only once a submit was attempted and the modal has
+  // since closed (see didSubmitRef comment above for why this is the
+  // signal used instead of clearing directly in handleSubmit).
+  useEffect(() => {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (wasOpen && !open && didSubmitRef.current) {
+      draft.clear();
+      didSubmitRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draft.clear]);
+
   // Handle form submission
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (formData.title.trim()) {
+      didSubmitRef.current = true;
       onCreateBoard(formData);
       // Reset form after submission
       setFormData({
