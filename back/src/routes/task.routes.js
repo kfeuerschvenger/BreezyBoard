@@ -2,6 +2,7 @@ import express from 'express';
 import * as TaskController from '../controllers/task.controller.js';
 import { authenticate, requireBoardRole, requireTaskBoardRole } from '../middleware/auth.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
+import { paginationQuerySchema } from '../validation/common.validation.js';
 import {
   boardIdParamSchema,
   checklistParamsSchema,
@@ -21,7 +22,7 @@ router.use(authenticate);
 // Board specific routes
 router.get(
   '/board/:boardId',
-  validate({ params: boardIdParamSchema }),
+  validate({ params: boardIdParamSchema, query: paginationQuerySchema }),
   requireBoardRole('member'),
   TaskController.getBoardTasks
 );

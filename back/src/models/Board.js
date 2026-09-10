@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger from '../utils/logger.js';
 
 const boardSchema = new mongoose.Schema(
   {
@@ -65,7 +66,7 @@ boardSchema.virtual('progress').get(async function () {
 
     return Math.round((completedTasks / tasks.length) * 100);
   } catch (error) {
-    console.error('Error calculating progress:', error);
+    logger.error({ err: error }, 'Error calculating progress');
     return 0;
   }
 });

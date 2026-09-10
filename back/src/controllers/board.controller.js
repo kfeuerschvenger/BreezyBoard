@@ -39,8 +39,9 @@ export const deleteBoard = async (req, res, next) => {
 
 export const getUserBoards = async (req, res, next) => {
   try {
-    const boards = await boardService.getUserBoards(req.user.id);
-    responseHandler(res, 200, boards);
+    const { limit, offset } = req.query;
+    const { boards, pagination } = await boardService.getUserBoards(req.user.id, { limit, offset });
+    responseHandler(res, 200, boards, { pagination });
   } catch (error) {
     next(error);
   }

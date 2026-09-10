@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
 import env from '../config/env.js';
+import logger from '../utils/logger.js';
 
 const MAX_SEARCH_TERM_LENGTH = 100;
 
@@ -27,7 +28,7 @@ export const searchUsers = async (q, excludeUserId, excludeBoardId = null) => {
         excludeUserIds = [...new Set(excludeUserIds.map(id => id.toString()))];
       }
     } catch (error) {
-      console.error('Error fetching board members:', error);
+      logger.error({ err: error }, 'Error fetching board members');
     }
   }
 
@@ -173,7 +174,7 @@ export const uploadAvatar = async (id, file, actor = null) => {
         fs.unlinkSync(oldPath);
       }
     } catch (err) {
-      console.warn('Failed to remove old avatar file', err);
+      logger.warn({ err }, 'Failed to remove old avatar file');
     }
   }
 
