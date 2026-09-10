@@ -324,7 +324,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 3, authorization | Done | Task and board routes role-gated, original exploit replayed and fully refused, 9 tripwires flipped |
 | 3, validation | Done | Zod layer replacing every request value with the parsed output, all 11 tripwires flipped |
 | 3, hardening | Done | Fail-fast secrets, CORS allowlist, helmet, rate limits, pinned JWT algorithm, escaped search, upload magic bytes, CSP |
-| 3, remaining slices | Not started | Sliding session, API surface |
+| 3, sliding session | Done | Two clocks, real revocation via tokenVersion, warning toast, draft persistence, verified live |
+| 3, API surface | Not started | Versioning, pagination, error codes, request ids, structured logging |
 | 4 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -384,7 +385,7 @@ Phase 3 does not fit in one reviewable change. The tasks below together run well
 | 1, authorization | P1-1, P1-2, P1-4, H2, and the role-shaped middleware from section 11.2 | Done |
 | 2, request validation | P1-3, P1-6, P3-2, L3 | Done |
 | 3, hardening | P1-5, P1-7, P1-8, and the remaining P1-9 items | Done |
-| 4, sliding session | All of section 9, backend and frontend | Not started |
+| 4, sliding session | All of section 9, backend and frontend | Done |
 | 5, API surface | Versioning, pagination, error codes, request ids, structured logging | Not started |
 
 Slice 1 is complete. A note on the design choice, because it deviates from what section 11.2 literally asks for. The plan calls for a per-board role model, which read strictly means turning `Board.members` into subdocuments carrying a role. That is a schema migration whose blast radius reaches every board query and several frontend components, and it buys nothing today because there are only two roles in play.
@@ -550,6 +551,30 @@ Two constraints on the toast that are not negotiable:
 It must not auto-dismiss. An auto-dismissing warning for an event this consequential is worse than no warning, and the existing `SuccessModal` auto-close behavior described in section 5.5 is the pattern to avoid, not to copy. It must also carry an explicit action, because WCAG 2.2.1 requires the user be able to extend the limit, not merely be told it exists.
 
 The countdown must not be announced sixty times. A number ticking inside a live region produces one screen reader announcement per second, which is worse than silence. Announce the full message once with `role="alert"`, render the ticking number in an `aria-hidden` element, and re-announce only at thirty and ten seconds remaining.
+
+### 9.4b What changed during implementation, and what was verified
+
+Two refinements to the design above, both improvements on what section 9.4 originally specified.
+
+The warning is scheduled from the token's own `exp` claim rather than from a hardcoded fourteen minutes. The client already has to decode the token, so deriving the deadline from it costs nothing and keeps the client correct if the server window is ever changed without a matching frontend release. The rule is simply: warn sixty seconds before `exp`, sign out at `exp`.
+
+A `jti` claim was added, which the brief did not call for. It turned out to be necessary rather than decorative: `iat` and `exp` are whole seconds, so two tokens minted within the same second were byte for byte identical, and a renewal that returns the token you already had is indistinguishable from no renewal at all.
+
+The behavior was verified by running it rather than by reading it, with the inactivity window shortened to ninety seconds so the whole lifecycle fits in a test:
+
+| Checked | Result |
+|---|---|
+| Background traffic while idle | Zero API calls across 85 seconds |
+| Warning timing | Appeared at t+30s of a 90s window, which is `exp` minus 60 |
+| Warning persistence | Still present at t+85s, never dismissed itself |
+| Warning action | Keyboard reachable, calls the ping endpoint, dismisses, and the session outlived its original expiry |
+| Countdown announcement | The ticking number sits in an `aria-hidden` element |
+| Unattended expiry | Signed out at t+90s and landed on the login page |
+| Draft persistence | A half written description survived a full page reload and was cleared after a successful save |
+
+The first row is the one that matters most, because the inactivity window is not enforced by the server. The server renews on every request it sees, so a single stray poll anywhere in the client would turn a fifteen minute window into a session that never ends, and nothing would fail loudly when it did.
+
+One deliberate consequence of deploying this: tokens issued before the change carry no `sessionStartedAt`, which is treated as expired, so every existing session ends once and users sign in again.
 
 ### 9.5 Multi-tab behavior
 
