@@ -17,7 +17,8 @@
     "verify:idle": "node verify/idle.mjs expire",
     "verify:idle-extend": "node verify/idle.mjs extend",
     "verify:csp": "node verify/csp.mjs",
-    "verify": "npm run verify:auth && npm run verify:session && npm run verify:api && npm run verify:drafts"
+    "verify:integrity": "node verify/integrity.mjs",
+    "verify": "npm run verify:auth && npm run verify:session && npm run verify:api && npm run verify:drafts && npm run verify:integrity"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0"

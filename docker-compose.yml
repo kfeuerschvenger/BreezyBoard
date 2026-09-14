@@ -5,14 +5,33 @@ services:
     image: mongo:7
     container_name: breezyboard-mongo
     restart: unless-stopped
+    # A single node replica set rather than a standalone instance. Multi
+    # document transactions are only available on a replica set or a sharded
+    # cluster, and the board delete cascade needs one. A single node is enough
+    # for that: it provides the oplog and the session support transactions are
+    # built on, without the operational weight of real replication.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     environment:
       MONGO_INITDB_DATABASE: ${MONGO_DB:-boards-db}
     ports:
       - "${MONGO_PORT:-27017}:27017"
     volumes:
       - mongo-data:/data/db
+    # The health check doubles as the one time initiator. A fresh data volume
+    # starts uninitiated, so rs.status() throws and the catch initiates the
+    # set; every later run finds it already configured and does nothing. The
+    # exit code then reports healthy only once the node is actually a writable
+    # primary, which is what dependent services need to wait for, rather than
+    # merely answering a ping.
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - |
+          try { rs.status() } catch (error) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) }
+          quit(db.hello().isWritablePrimary ? 0 : 1)
       interval: 10s
       timeout: 5s
       retries: 10
@@ -29,7 +48,13 @@ services:
         condition: service_healthy
     environment:
       PORT: 5000
-      MONGODB_URI: mongodb://mongo:27017/${MONGO_DB:-boards-db}
+      # replicaSet=rs0 is what makes the driver open sessions against a
+      # replica set topology, which is the prerequisite for transactions. A
+      # tool connecting from the host instead of from this network cannot use
+      # it, because the seed list it receives names mongo:27017, a hostname
+      # that only resolves inside the compose network. Use
+      # mongodb://localhost:27017/boards-db?directConnection=true from the host.
+      MONGODB_URI: mongodb://mongo:27017/${MONGO_DB:-boards-db}?replicaSet=rs0
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
       NODE_ENV: development
       SALT: 10

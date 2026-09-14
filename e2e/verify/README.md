@@ -22,6 +22,7 @@ node verify/api-surface.mjs
 node verify/drafts.mjs
 node verify/idle.mjs expire
 node verify/idle.mjs extend
+node verify/integrity.mjs
 ```
 
 Base URLs default to the local development stack and can be overridden with `E2E_API_URL`, `E2E_FRONT_URL` and `E2E_PROD_URL`.
@@ -36,6 +37,7 @@ graph TD
   G[api-surface.mjs] -->|real HTTP| H[versioning, pagination,<br/>error codes, request ids]
   I[drafts.mjs] -->|real browser| J[in-progress work survives<br/>losing the page]
   K[csp.mjs] -->|production stack| L[the policy does not<br/>break the app]
+  M[integrity.mjs] -->|real database| N[the deployment can<br/>actually run transactions]
 ```
 
 **`authorization.mjs`** replays the exploit recorded in appendix A of the revival plan. It registers two accounts, has the first create a board and a task, and asserts twelve outcomes. Six are refusals for an outsider, three cover a legitimate member who is not the creator, and three confirm the owner can still do their work.
@@ -62,6 +64,12 @@ Remember to restore the normal window afterwards with `docker compose up -d --fo
 **`api-surface.mjs`** checks that both mount paths return identical bodies, that a supplied `X-Request-Id` comes back verbatim and an absent one is generated, and the pagination contract from both sides: no `limit` returns everything and still reports the total, `limit` returns exactly that page with the total unchanged. It also checks that error responses carry a machine-readable `code` without having lost any pre-existing envelope field.
 
 **`drafts.mjs`** types into the task drawer, reloads the page entirely, and asserts the text comes back, then saves the task and asserts the draft is gone. This is what makes the discreet expiry warning acceptable: being signed out mid-sentence stops costing the user their work.
+
+**`integrity.mjs`** creates a board with three tasks, deletes the board, and asserts the board and all three tasks are gone. The interesting assertion is the first one, that the delete returns 200 at all.
+
+The board delete cascade runs inside a transaction, and transactions exist only on a replica set. That property lives in `docker-compose.yml`, not in any source file, and the unit suite cannot observe it because its own in-memory database is configured separately. Every other request in this application works perfectly against a standalone mongod, so a deployment that quietly lost its replica set would look entirely healthy right up until somebody deleted a board. This script is what notices.
+
+The other half of the guarantee, that a failure partway through the cascade rolls the whole thing back, is covered in `back/test/boards.test.js` by injecting a failure into the cascade. That one needs to reach inside the process, so it cannot live here.
 
 **`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. Bring that stack up first:
 

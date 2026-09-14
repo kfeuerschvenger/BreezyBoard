@@ -8,10 +8,44 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?set MONGO_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?set MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-boards-db}
+    # A single node replica set, for the same reason as in development: the
+    # board delete cascade runs in a transaction, and transactions do not
+    # exist on a standalone instance. Production adds one requirement
+    # development does not have. Once authentication is on, a replica set also
+    # demands internal authentication between its members, and that is a
+    # keyfile even when the set has exactly one member. The keyfile is a
+    # shared secret, so it is generated on first start into its own named
+    # volume rather than committed to this repository. Deleting that volume
+    # without deleting mongo-data leaves a set that can no longer authenticate
+    # to itself.
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        if [ ! -s /etc/mongo-keyfile/keyfile ]; then
+          head -c 756 /dev/urandom | base64 > /etc/mongo-keyfile/keyfile
+        fi
+        chmod 400 /etc/mongo-keyfile/keyfile
+        chown mongodb:mongodb /etc/mongo-keyfile/keyfile
+        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /etc/mongo-keyfile/keyfile --bind_ip_all
     volumes:
       - mongo-data:/data/db
+      - mongo-keyfile:/etc/mongo-keyfile
+    # Initiates the set on first start and reports healthy only once the node
+    # is a writable primary. Unlike development this has to authenticate,
+    # because the keyfile turns authorization on for every connection.
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      test:
+        - CMD
+        - bash
+        - -c
+        - |
+          mongosh --quiet \
+            --username "$$MONGO_INITDB_ROOT_USERNAME" \
+            --password "$$MONGO_INITDB_ROOT_PASSWORD" \
+            --authenticationDatabase admin \
+            --eval "try { rs.status() } catch (error) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) } quit(db.hello().isWritablePrimary ? 0 : 1)"
       interval: 10s
       timeout: 5s
       retries: 10
@@ -27,7 +61,7 @@ services:
         condition: service_healthy
     environment:
       PORT: 5000
-      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB:-boards-db}?authSource=admin
+      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB:-boards-db}?authSource=admin&replicaSet=rs0
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       NODE_ENV: production
       SALT: 12
@@ -55,4 +89,5 @@ services:
 
 volumes:
   mongo-data:
+  mongo-keyfile:
   uploads:

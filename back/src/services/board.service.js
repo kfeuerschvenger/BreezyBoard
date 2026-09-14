@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+
 import Board from '../models/Board.js';
 import Task from '../models/Task.js';
 import ApiError from '../utils/apiError.js';
@@ -72,15 +74,38 @@ export const updateBoard = async (id, updateData) => {
   return board;
 };
 
+// Removing a board and its tasks used to be two independent writes. If the
+// second one failed the board was already gone, and its tasks survived
+// pointing at a board that no longer existed, invisible to every query in the
+// application and reclaimed by nothing. One transaction makes the pair
+// atomic: either the board and all of its tasks are gone, or neither is.
+//
+// This is why docker-compose runs MongoDB as a single node replica set.
+// A standalone instance rejects transactions outright, so on a standalone
+// deployment this function throws rather than silently falling back to the
+// old unsafe pair, which is the correct failure: a deployment that cannot
+// guarantee the cascade should say so instead of orphaning data quietly.
 export const deleteBoard = async id => {
-  const board = await Board.findByIdAndDelete(id);
+  const session = await mongoose.startSession();
+  let board = null;
 
-  if (!board) {
-    throw new ApiError(404, 'Board not found');
+  try {
+    // withTransaction commits on success, aborts on any throw, and retries
+    // the callback on a transient error. The 404 below is raised inside the
+    // transaction on purpose: it aborts cleanly, and it is not transient, so
+    // it propagates on the first attempt rather than being retried.
+    await session.withTransaction(async () => {
+      board = await Board.findByIdAndDelete(id, { session });
+
+      if (!board) {
+        throw new ApiError(404, 'Board not found');
+      }
+
+      await Task.deleteMany({ boardId: id }, { session });
+    });
+  } finally {
+    await session.endSession();
   }
-
-  // Delete tasks associated with the board
-  await Task.deleteMany({ boardId: id });
 
   return board;
 };
