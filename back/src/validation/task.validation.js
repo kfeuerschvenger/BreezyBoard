@@ -35,13 +35,19 @@ const checklistItemInputSchema = z.object({
 // only because the real frontend (TaskDrawer.tsx) echoes it back in the
 // create payload; task.controller.js createTask always overwrites it with
 // req.params.boardId before calling the service, so a client-supplied value
-// here is never actually trusted. status has no enum on the model today, so
-// it stays a plain string.
+// here is never actually trusted.
+//
+// status is an id, not a label: it names a column subdocument of the board's
+// template. It is required rather than optional because the model requires
+// it anyway, and failing here gives the caller the field name instead of a
+// Mongoose validation error. Whether that id belongs to this board in
+// particular is settled in task.service.js, which is the only layer that can
+// see the board.
 export const createTaskSchema = z
   .object({
     title: z.string().trim().min(1, 'Title is required'),
     description: z.string().trim().optional(),
-    status: z.string().trim().min(1).optional(),
+    status: objectIdSchema,
     priority: z.enum(['low', 'medium', 'high']).optional(),
     color: objectIdSchema,
     owner: objectIdSchema.optional(),
@@ -62,7 +68,7 @@ export const createTaskSchema = z
 export const updateTaskSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').optional(),
   description: z.string().trim().optional(),
-  status: z.string().trim().min(1).optional(),
+  status: objectIdSchema.optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   color: objectIdSchema.optional(),
   owner: objectIdSchema.optional(),
@@ -71,7 +77,7 @@ export const updateTaskSchema = z.object({
 
 export const moveTaskSchema = z
   .object({
-    status: z.string().trim().min(1, 'Status is required'),
+    status: objectIdSchema,
     order: z.number(),
   })
   .strict();

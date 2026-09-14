@@ -32,15 +32,28 @@ log('two accounts created, attacker is not a member of the victim board\n');
 const templates = await req('GET', '/templates', victim.token);
 const colors = await req('GET', '/colors?type=board', victim.token);
 const taskColors = await req('GET', '/colors?type=task', victim.token);
+const template = templates.body.data[0];
 const board = await post(
   '/boards',
-  { title: 'Victim board', description: 'private', color: colors.body.data[0]._id, template: templates.body.data[0]._id },
+  { title: 'Victim board', description: 'private', color: colors.body.data[0]._id, template: template._id },
   victim.token
 );
 const boardId = board.body.data._id;
+// A task's status is the id of a column in the board's template, not its
+// title. Every payload below has to be a legitimate one, because request
+// validation runs before the authorization middleware: a malformed body
+// returns 400 and the attacker never reaches the check these assertions
+// exist to prove.
+const columns = [...template.columns].sort((a, b) => a.order - b.order);
 const task = await post(
   `/tasks/board/${boardId}`,
-  { title: 'Private task', description: 'secret', status: 'Backlog', priority: 'medium', color: taskColors.body.data[0]._id },
+  {
+    title: 'Private task',
+    description: 'secret',
+    status: columns[0]._id,
+    priority: 'medium',
+    color: taskColors.body.data[0]._id,
+  },
   victim.token
 );
 const taskId = task.body.data._id;
@@ -63,7 +76,8 @@ check(
 check('DELETE /tasks/:id     as outsider', (await req('DELETE', `/tasks/${taskId}`, attacker.token)).status, 403);
 check(
   'PATCH /tasks/:id/move as outsider',
-  (await req('PATCH', `/tasks/${taskId}/move`, attacker.token, { status: 'x', order: 0 })).status,
+  (await req('PATCH', `/tasks/${taskId}/move`, attacker.token, { status: columns[columns.length - 1]._id, order: 0 }))
+    .status,
   403
 );
 check(

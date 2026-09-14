@@ -4,6 +4,7 @@ import app from '../src/app.js';
 import Task from '../src/models/Task.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
+import { createTask } from './helpers/task.factory.js';
 import { registerUser } from './helpers/user.factory.js';
 
 describe('boards', () => {
@@ -95,13 +96,9 @@ describe('boards', () => {
   test('delete as the creator also deletes that board tasks', async () => {
     const board = await createBoard(owner.token, colors.boardColor._id);
 
-    const taskRes = await request(app)
-      .post(`/api/tasks/board/${board._id}`)
-      .set('Authorization', `Bearer ${owner.token}`)
-      .send({ title: 'Task to remove', status: 'todo', color: colors.taskColor._id.toString() });
-
-    expect(taskRes.status).toBe(201);
-    const taskId = taskRes.body.data._id;
+    const { _id: taskId } = await createTask(owner.token, board._id, colors.taskColor._id, {
+      title: 'Task to remove',
+    });
 
     const deleteRes = await request(app)
       .delete(`/api/boards/${board._id}`)
@@ -117,13 +114,9 @@ describe('boards', () => {
   test('delete leaves the board and its tasks intact when the cascade fails', async () => {
     const board = await createBoard(owner.token, colors.boardColor._id);
 
-    const taskRes = await request(app)
-      .post(`/api/tasks/board/${board._id}`)
-      .set('Authorization', `Bearer ${owner.token}`)
-      .send({ title: 'Task that must survive', status: 'todo', color: colors.taskColor._id.toString() });
-
-    expect(taskRes.status).toBe(201);
-    const taskId = taskRes.body.data._id;
+    const { _id: taskId } = await createTask(owner.token, board._id, colors.taskColor._id, {
+      title: 'Task that must survive',
+    });
 
     // The cascade is the second write of the pair. Forcing it to fail is the
     // only way to observe whether the first write is undone, and it is

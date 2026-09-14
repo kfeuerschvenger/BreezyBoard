@@ -2,6 +2,38 @@ import Task from '../models/Task.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
 
+// The columns a task on this board may legally sit in. They live on the
+// BoardTemplate the board was created from, one collection away, which is
+// why this cannot be a schema enum.
+const loadColumnIds = async boardId => {
+  const board = await Board.findById(boardId).select('template').populate('template', 'columns');
+
+  if (!board) {
+    throw new ApiError(404, 'Board not found');
+  }
+
+  return (board.template?.columns ?? []).map(column => column._id.toString());
+};
+
+// A well-formed id that belongs to a different board is still wrong, and it
+// is the failure with real consequences: the task disappears from the board
+// it was filed under while continuing to count in its totals. The shape check
+// on the model catches the careless case, this catches the plausible one.
+const assertStatusNamesAColumnOfThisBoard = async (boardId, status) => {
+  const columnIds = await loadColumnIds(boardId);
+
+  if (columnIds.length === 0) {
+    throw new ApiError(
+      400,
+      'This board has no columns, because it was created without a template. A task cannot be given a status on it.'
+    );
+  }
+
+  if (!columnIds.includes(String(status))) {
+    throw new ApiError(400, 'status must be the id of a column belonging to this board');
+  }
+};
+
 export const createTask = async taskData => {
   if (!taskData.boardId) {
     throw new ApiError(400, 'boardId is required to create a task');
@@ -16,6 +48,9 @@ export const createTask = async taskData => {
       throw new ApiError(400, 'Owner must be a member of the board');
     }
   }
+
+  await assertStatusNamesAColumnOfThisBoard(taskData.boardId, taskData.status);
+
   const task = await Task.create(taskData);
 
   await task.populate([
@@ -35,6 +70,17 @@ export const getTaskById = async id => {
 };
 
 export const updateTask = async (id, updateData) => {
+  // Only pay for the lookup when the caller is actually changing the column.
+  if (updateData.status !== undefined) {
+    const existing = await Task.findById(id).select('boardId');
+
+    if (!existing) {
+      throw new ApiError(404, 'Task not found');
+    }
+
+    await assertStatusNamesAColumnOfThisBoard(existing.boardId, updateData.status);
+  }
+
   const task = await Task.findByIdAndUpdate(id, updateData, {
     new: true,
     runValidators: true,
@@ -58,6 +104,14 @@ export const deleteTask = async id => {
 };
 
 export const moveTask = async (taskId, newStatus, newOrder) => {
+  const existing = await Task.findById(taskId).select('boardId');
+
+  if (!existing) {
+    throw new ApiError(404, 'Task not found');
+  }
+
+  await assertStatusNamesAColumnOfThisBoard(existing.boardId, newStatus);
+
   const task = await Task.findByIdAndUpdate(taskId, { status: newStatus, order: newOrder }, { new: true })
     .populate('owner', 'firstName lastName avatar')
     .populate('color', 'name value');

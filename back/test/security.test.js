@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import app from '../src/app.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
-import { createTask } from './helpers/task.factory.js';
+import { boardColumns, createTask } from './helpers/task.factory.js';
 import { registerUser } from './helpers/user.factory.js';
 
 // Suite 2: the documented security holes.
@@ -75,12 +75,22 @@ describe('security tripwires', () => {
     // Finding P1-1: PATCH /api/tasks/:id/move now requires board membership
     // via requireTaskBoardRole.
     test('PATCH /api/tasks/:id/move on another users task should be 403', async () => {
-      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: 'todo', order: 0 });
+      const columns = await boardColumns(board._id);
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, {
+        status: columns[0]._id.toString(),
+        order: 0,
+      });
 
+      // The payload has to be a legitimate move for this assertion to mean
+      // anything. Request validation runs before the authorization
+      // middleware, so a malformed body gets a 400 and the outsider never
+      // reaches the check this test exists to prove. It used to send the
+      // literal 'done', which was well formed only because status accepted
+      // any string at the time.
       const res = await request(app)
         .patch(`/api/tasks/${task._id}/move`)
         .set('Authorization', `Bearer ${outsider.token}`)
-        .send({ status: 'done', order: 5 });
+        .send({ status: columns[columns.length - 1]._id.toString(), order: 5 });
 
       expect(res.status).toBe(403);
     });

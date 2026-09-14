@@ -1,12 +1,30 @@
 import request from 'supertest';
 import app from '../../src/app.js';
+import Board from '../../src/models/Board.js';
+
+// The columns of a board, ordered, as the board page sees them. Tests that
+// need to name a specific column (moving a task from the first to the last,
+// say) use this rather than inventing a string.
+export async function boardColumns(boardId) {
+  const board = await Board.findById(boardId).select('template').populate('template', 'columns');
+  const columns = [...(board?.template?.columns ?? [])];
+
+  return columns.sort((a, b) => a.order - b.order);
+}
 
 // Creates a task through the real API. `colorId` must reference an
 // existing ColorPalette document (see seedColorsAndTemplates).
+//
+// status defaults to the board's first column, which is exactly what the
+// real frontend does for a new task (handleAddTask in front/src/pages/Board.tsx).
+// It is an id and not a label: a task whose status names no column of its
+// board is refused by task.service.js.
 export async function createTask(token, boardId, colorId, overrides = {}) {
+  const columns = await boardColumns(boardId);
+
   const payload = {
     title: 'Test Task',
-    status: 'todo',
+    status: columns[0]?._id?.toString(),
     color: colorId,
     ...overrides,
   };
