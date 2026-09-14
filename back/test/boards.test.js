@@ -1,6 +1,7 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import app from '../src/app.js';
+import Task from '../src/models/Task.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
 import { registerUser } from './helpers/user.factory.js';
@@ -111,5 +112,41 @@ describe('boards', () => {
     const taskCheck = await request(app).get(`/api/tasks/${taskId}`).set('Authorization', `Bearer ${owner.token}`);
 
     expect(taskCheck.status).toBe(404);
+  });
+
+  test('delete leaves the board and its tasks intact when the cascade fails', async () => {
+    const board = await createBoard(owner.token, colors.boardColor._id);
+
+    const taskRes = await request(app)
+      .post(`/api/tasks/board/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Task that must survive', status: 'todo', color: colors.taskColor._id.toString() });
+
+    expect(taskRes.status).toBe(201);
+    const taskId = taskRes.body.data._id;
+
+    // The cascade is the second write of the pair. Forcing it to fail is the
+    // only way to observe whether the first write is undone, and it is
+    // exactly the scenario the transaction exists for. Without the
+    // transaction the board is already deleted by this point and the task
+    // outlives it, pointing at a board no query can reach.
+    const deleteMany = vi.spyOn(Task, 'deleteMany').mockRejectedValueOnce(new Error('injected cascade failure'));
+
+    const failedDelete = await request(app)
+      .delete(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`);
+
+    expect(failedDelete.status).toBe(500);
+    expect(deleteMany).toHaveBeenCalled();
+
+    deleteMany.mockRestore();
+
+    const boardCheck = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${owner.token}`);
+
+    expect(boardCheck.status).toBe(200);
+
+    const taskCheck = await request(app).get(`/api/tasks/${taskId}`).set('Authorization', `Bearer ${owner.token}`);
+
+    expect(taskCheck.status).toBe(200);
   });
 });

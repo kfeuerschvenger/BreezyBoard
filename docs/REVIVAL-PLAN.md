@@ -196,6 +196,8 @@ The direct cause of P0-2 is a schema that permits any string in a field that mus
 
 `findByIdAndDelete` then `Task.deleteMany` as two independent operations. If the second fails, tasks are orphaned against a board that no longer exists and nothing ever reclaims them. Note the prerequisite: the default connection string is a standalone MongoDB instance, which does not support multi-document transactions. A replica set is required first, including in the Docker setup.
 
+Fixed in Phase 4. Both writes now run inside one `session.withTransaction`, and the replica set landed in the same change: development, production and the in-memory test harness all run a single node set. The regression test injects a failure into the cascade and asserts the board survives; it was checked against the previous code first, where the board is already gone and the task outlives it. `e2e/verify/integrity.mjs` covers the other half, that a real deployment can run a transaction at all, which no unit test can observe.
+
 **P2-3. Task ordering is stored and then ignored.** File `back/src/services/task.service.js:83-89`.
 
 `getTasksByBoard` sorts by `createdAt` descending. The `order` field that the whole drag-and-drop feature writes is never read back. Reordering has no persistent effect even once P0-3 is fixed.
@@ -327,7 +329,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 3, sliding session | Done | Two clocks, real revocation via tokenVersion, warning toast, draft persistence, verified live |
 | 3, API surface | Done | Dual mount at /api/v1 and /api, opt-in pagination, error code enum, pino with request ids |
 | 3, overall | **Done** | Every P1 finding closed, all 11 tripwires flipped, verified live and in production |
-| 4 onward | Not started | |
+| 4, transactional cascade | Done | Single node replica set in development and production, board delete and its task cascade atomic (P2-2) |
+| 4, remainder | In progress | status constraint, ordering, progress aggregation, drag concurrency |
+| 5 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
 
@@ -351,7 +355,7 @@ Phase 2 sits before the security and integrity work deliberately. Those phases c
 
 ### Phase 0. Reproducible environment. Complete.
 
-Delivered in this pass and described in section 8. One remaining item belongs to Phase 4: converting the MongoDB service to a single-node replica set, which is a prerequisite for transactions.
+Delivered in this pass and described in section 8. The one item that was left for Phase 4, converting the MongoDB service to a single node replica set, has since landed alongside the transactional board delete that needed it.
 
 ### Phase 1. Make the product work. Size: S.
 
@@ -465,7 +469,9 @@ docker compose exec back npm run seed:all
 
 The application is then at `http://localhost:5173`, the API at `http://localhost:5000/api`, and the seeded login is `admin@example.com` with password `admin123`.
 
-Known limitations to address later: MongoDB runs as a standalone instance and must become a single-node replica set before Phase 4, the development Mongo port is published to the host and should not be in any shared environment, Vite file watching over a bind mount on Windows may need polling enabled if hot reload proves unreliable, and there is no `.env` file committed, so the compose defaults are what run today.
+Phase 4 has since changed the MongoDB service in both files. It now runs as a single node replica set called `rs0`, initiated by its own health check on first start, because multi document transactions do not exist on a standalone instance and the board delete cascade needs one. Production additionally generates a keyfile into its own named volume on first start, since enabling authentication on a replica set also requires internal authentication between members, even when there is only one. Deleting `mongo-keyfile` without also deleting `mongo-data` leaves a set that can no longer authenticate to itself.
+
+Known limitations to address later: the development Mongo port is published to the host and should not be in any shared environment, Vite file watching over a bind mount on Windows may need polling enabled if hot reload proves unreliable, and there is no `.env` file committed, so the compose defaults are what run today.
 
 ## 9. Session and authentication hardening
 
