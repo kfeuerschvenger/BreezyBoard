@@ -77,6 +77,45 @@ describe('tasks', () => {
     expect(res.body.data).toHaveLength(2);
   });
 
+  test('list returns tasks in their stored order, not in creation order', async () => {
+    await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Task A', order: 2 });
+    await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Task B', order: 0 });
+    await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Task C', order: 1 });
+
+    const res = await request(app).get(`/api/tasks/board/${board._id}`).set('Authorization', `Bearer ${owner.token}`);
+
+    expect(res.body.data.map(task => task.title)).toEqual(['Task B', 'Task C', 'Task A']);
+  });
+
+  test('a reorder survives being read back', async () => {
+    // The expected arrangement below has to be one that creation order
+    // cannot produce by accident, or the test passes against the broken
+    // sort and proves nothing. Task A is created first and starts second,
+    // so the only way to end up with it first is for `order` to be read.
+    const first = await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Task A', order: 1 });
+    const second = await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Task B', order: 0 });
+
+    // This is what a drag does. The endpoint has always written the new
+    // orders correctly; nothing ever read them back, so reordering a column
+    // looked right until the page was reloaded and then silently undid
+    // itself.
+    const reorder = await request(app)
+      .patch(`/api/tasks/board/${board._id}/orders`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({
+        updates: [
+          { id: first._id, order: 0 },
+          { id: second._id, order: 1 },
+        ],
+      });
+
+    expect(reorder.status).toBe(200);
+
+    const res = await request(app).get(`/api/tasks/board/${board._id}`).set('Authorization', `Bearer ${owner.token}`);
+
+    expect(res.body.data.map(task => task.title)).toEqual(['Task A', 'Task B']);
+  });
+
   test('update a task', async () => {
     const task = await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Original title' });
 
