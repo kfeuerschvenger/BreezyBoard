@@ -9,7 +9,15 @@
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
-    "install:browsers": "playwright install chromium"
+    "install:browsers": "playwright install chromium",
+    "verify:auth": "node verify/authorization.mjs",
+    "verify:session": "node verify/session.mjs",
+    "verify:api": "node verify/api-surface.mjs",
+    "verify:drafts": "node verify/drafts.mjs",
+    "verify:idle": "node verify/idle.mjs expire",
+    "verify:idle-extend": "node verify/idle.mjs extend",
+    "verify:csp": "node verify/csp.mjs",
+    "verify": "npm run verify:auth && npm run verify:session && npm run verify:api && npm run verify:drafts"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0"
