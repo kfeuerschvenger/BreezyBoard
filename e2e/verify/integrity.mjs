@@ -54,11 +54,19 @@ const boardId = board.body.data._id;
 
 const firstColumn = template.columns[0];
 const taskIds = [];
-for (const title of ['First task', 'Second task', 'Third task']) {
+// Created oldest first with the orders deliberately reversed, so that the
+// arrangement the board should show is one that creation order cannot
+// produce by accident.
+for (const [title, order] of [
+  ['First task', 2],
+  ['Second task', 1],
+  ['Third task', 0],
+]) {
   const task = await req('POST', `/tasks/board/${boardId}`, token, {
     title,
     status: firstColumn._id,
     priority: 'medium',
+    order,
     color: taskColors.body.data[0]._id,
   });
   taskIds.push(task.body.data._id);
@@ -66,7 +74,31 @@ for (const title of ['First task', 'Second task', 'Third task']) {
 
 log(`board ${boardId} created with ${taskIds.length} tasks\n`);
 
-log('--- the board delete cascade runs in a transaction ---');
+log('--- task order is read back, not only written ---');
+const listed = await req('GET', `/tasks/board/${boardId}`, token);
+check(
+  'the list comes back in stored order',
+  listed.body.data.map(task => task.title).join(', '),
+  'Third task, Second task, First task'
+);
+
+// Reordering, then reading it back, is the whole acceptance criterion: the
+// endpoint always wrote these correctly and nothing ever read them.
+await req('PATCH', `/tasks/board/${boardId}/orders`, token, {
+  updates: [
+    { id: taskIds[0], order: 0 },
+    { id: taskIds[1], order: 1 },
+    { id: taskIds[2], order: 2 },
+  ],
+});
+const reordered = await req('GET', `/tasks/board/${boardId}`, token);
+check(
+  'a reorder survives a reload',
+  reordered.body.data.map(task => task.title).join(', '),
+  'First task, Second task, Third task'
+);
+
+log('\n--- the board delete cascade runs in a transaction ---');
 // A standalone mongod answers this with 500, because mongoose refuses to
 // open a transaction against a topology that has no oplog. A 200 here is
 // therefore evidence about the deployment, not only about the handler.

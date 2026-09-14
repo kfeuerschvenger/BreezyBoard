@@ -160,10 +160,19 @@ export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
 
   const total = await Task.countDocuments(filter);
 
+  // The whole drag and drop feature writes `order` and this query used to
+  // sort by createdAt, so reordering a column had no effect that survived a
+  // reload. The client sorted by order itself after fetching, which hid the
+  // bug on the board page and left it visible everywhere else, including in
+  // any paginated request: the page boundary was being cut on a different
+  // ordering than the one the caller saw.
+  //
+  // createdAt stays as the tiebreaker, in the direction it used to sort in,
+  // so tasks that genuinely share an order keep the arrangement they had.
   let query = Task.find(filter)
     .populate('owner', 'firstName lastName avatar')
     .populate('color', 'name value')
-    .sort({ createdAt: -1 });
+    .sort({ order: 1, createdAt: -1 });
 
   const hasLimit = typeof limit === 'number';
   const safeOffset = typeof offset === 'number' ? offset : 0;

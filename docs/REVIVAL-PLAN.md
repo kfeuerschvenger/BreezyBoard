@@ -202,6 +202,10 @@ Fixed in Phase 4. Both writes now run inside one `session.withTransaction`, and 
 
 `getTasksByBoard` sorts by `createdAt` descending. The `order` field that the whole drag-and-drop feature writes is never read back. Reordering has no persistent effect even once P0-3 is fixed.
 
+Fixed in Phase 4. The query sorts by `order` ascending with `createdAt` descending kept as the tiebreaker, so tasks that genuinely share an order keep the arrangement they had. The board page had been re-sorting the array itself after fetching, which hid the bug there and left it visible everywhere else, including in any paginated request, where the page boundary was being cut on a different ordering than the one the caller saw.
+
+Worth recording how close one of the regression tests came to being worthless. The first version reordered two tasks and asserted the result, and it passed against the broken sort, because the arrangement it expected happened to be the one creation order already produced. Both tests now expect an arrangement that creation order cannot produce, and both fail against the previous code. The same trap is written into `e2e/verify/integrity.mjs`, where the fixture creates its tasks with deliberately reversed orders for exactly this reason.
+
 **P2-4. Average progress is always zero.** Files `back/src/services/dashboard.service.js:6-8` and `back/src/models/Board.js:57-71`.
 
 Two independent bugs stacked. The dashboard query uses `.lean()`, which strips virtuals, so `board.progress` is `undefined` at the point it is summed. And the virtual itself is declared as an async getter, which Mongoose does not support: it would return a pending Promise rather than a number. The `toJSON` transform never copies it either. This is dead code that should be replaced with an aggregation.
@@ -337,7 +341,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 3, overall | **Done** | Every P1 finding closed, all 11 tripwires flipped, verified live and in production |
 | 4, transactional cascade | Done | Single node replica set in development and production, board delete and its task cascade atomic (P2-2) |
 | 4, status constraint | Done | status refused unless it is ObjectId-shaped and names a column of that board (P2-9) |
-| 4, remainder | In progress | ordering, progress aggregation, drag concurrency, indexes |
+| 4, order is read back | Done | Tasks list in stored order and a reorder survives a reload (P2-3) |
+| 4, remainder | In progress | fractional indexing, progress aggregation, drag concurrency, indexes |
 | 5 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
