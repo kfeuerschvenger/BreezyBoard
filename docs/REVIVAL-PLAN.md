@@ -396,7 +396,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4b, overall | **Done** | Phase 4 resumes against the final schema |
 | 4, fractional indexing | Done | order is a server minted key, /move names neighbours, /orders removed (P2-3, P2-5, and the cross-column drop) |
 | 4, progress aggregation | Done | Board progress, task counts and the dashboard average all computed (P2-4) |
-| 4, remainder | In progress | Drag concurrency, indexes |
+| 4, drag concurrency | Done | In-flight move aborted by the next drag, failures refetch rather than restore (P2-6) |
+| 4, indexes | Done | One compound index on tasks, three on boards, all verified as IXSCAN against the real queries |
+| 4, overall | **Done** | P2-6a stays open, with two ruled-out hypotheses recorded |
 | 5 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -487,6 +489,10 @@ Acceptance: every authorization test written in Phase 2 passes, the exploit in a
 Convert the MongoDB service to a single-node replica set, then wrap board deletion and its task cascade in a transaction. Constrain `status` at the schema level once Phase 1 has settled its representation. Read `order` back in `getTasksByBoard`. Replace the broken `progress` virtual with an aggregation and drop `.lean()` from the dashboard query, or compute progress entirely in the aggregation pipeline. Fix the missing `move` argument. Add an `AbortController` to the service layer and a concurrency guard around drag operations. Add the three missing indexes.
 
 Acceptance: deleting a board leaves no orphaned tasks under an injected failure, dashboard progress reflects real completion, and task order survives a reload.
+
+Done, all three, plus the ordering strategy change from section 11.4 and the schema layer that became Phase 4b.
+
+The indexes deserve a note, because declaring one and having a query use it are different claims. There is one compound index on tasks, `{ boardId, status, order }`, which serves the busiest query in the product end to end: the board page's match, its sort and its projection of `order` all come out of it without touching a document, and it also covers the three narrower lookups the ordering work added. Boards get three separate single-field indexes rather than one compound, because `visibleBoardFilter` is an `$or` over `createdBy` and `members` with `workspaceId` `$and`-ed across it, and MongoDB uses one index per `$or` branch, so a compound index would serve one branch and leave the other scanning. All of them were checked with `explain()` against the real query shapes on the running database, and every one reports `IXSCAN` rather than `COLLSCAN`.
 
 ### Phase 5. Architecture. Size: L.
 
