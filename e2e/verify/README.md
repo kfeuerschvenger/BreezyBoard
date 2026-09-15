@@ -27,6 +27,8 @@ node verify/integrity.mjs
 
 Base URLs default to the local development stack and can be overridden with `E2E_API_URL`, `E2E_FRONT_URL` and `E2E_PROD_URL`.
 
+One practical limit to know about. Registration is rate limited to twenty accounts per hour per address, and these scripts register real ones: a full `npm run verify` pass plus the Playwright suite uses roughly fifteen of them, with `workspaces.mjs` alone accounting for five because the two level model needs that many distinct roles to be worth testing. A second full cycle inside the same hour will therefore start answering 429, and it surfaces as a Playwright failure rather than as anything that says "rate limit". The counter lives in memory, so `docker compose restart back` clears it. Raising the limit to make this go away would remove the protection these scripts exist to confirm.
+
 ## What each one covers, and why it exists
 
 ```mermaid
@@ -38,6 +40,7 @@ graph TD
   I[drafts.mjs] -->|real browser| J[in-progress work survives<br/>losing the page]
   K[csp.mjs] -->|production stack| L[the policy does not<br/>break the app]
   M[integrity.mjs] -->|real database| N[the deployment can<br/>actually run transactions]
+  O[workspaces.mjs] -->|four real accounts| P[two level access,<br/>and the admin exception]
 ```
 
 **`authorization.mjs`** replays the exploit recorded in appendix A of the revival plan. It registers two accounts, has the first create a board and a task, and asserts twelve outcomes. Six are refusals for an outsider, three cover a legitimate member who is not the creator, and three confirm the owner can still do their work.
@@ -70,6 +73,10 @@ Remember to restore the normal window afterwards with `docker compose up -d --fo
 The board delete cascade runs inside a transaction, and transactions exist only on a replica set. That property lives in `docker-compose.yml`, not in any source file, and the unit suite cannot observe it because its own in-memory database is configured separately. Every other request in this application works perfectly against a standalone mongod, so a deployment that quietly lost its replica set would look entirely healthy right up until somebody deleted a board. This script is what notices.
 
 The other half of the guarantee, that a failure partway through the cascade rolls the whole thing back, is covered in `back/test/boards.test.js` by injecting a failure into the cascade. That one needs to reach inside the process, so it cannot live here.
+
+**`workspaces.mjs`** drives four real accounts through the two level access model: workspace membership is a prerequisite for reaching a board, explicit board membership is still required on top of it, and a workspace admin is the single exception who administers every board in their workspace.
+
+It sits next to `authorization.mjs` for the same reason that one does. Half of its assertions are refusals and half are successes, because a model that refused everybody would satisfy every negative assertion ever written. It also checks the two cases that are easy to get subtly wrong: that a board admins can administer is one they can also find in their list, and that adding somebody to a board actually admits them to the workspace, without which the invitation is inert and the person is refused on every request.
 
 **`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. Bring that stack up first:
 

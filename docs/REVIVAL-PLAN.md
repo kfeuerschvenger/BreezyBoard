@@ -220,6 +220,12 @@ Observed while building the end-to-end suite rather than by reading the code. Th
 
 A human pressing and moving generates many more intermediate events than an automated pointer, so this is not a defect a user would hit often. It does mean the interaction has very little margin, and a slow device or a heavy board is exactly where that margin disappears. Adding a distance activation constraint was tried and made the automated case worse, so the fix is not obvious and should be done with the drag rewrite in Phase 4 rather than guessed at now.
 
+Measured during Phase 4b, because it was briefly mistaken for a regression: the core loop spec fails roughly one run in six, and the failure is always the same one, the sensor never announcing the pickup so the `role="status"` live region stays empty. The rate is identical with and without the workspace authorization layer, at 5 passes in 6 either way and with the same durations, so the extra query that layer adds per request is not what causes it.
+
+Two things made it look worse than it is, and both are worth knowing before diagnosing this again. Three consecutive failures is unremarkable at a one-in-six rate, so a handful of runs is not a measurement. And each separate `npx playwright test` invocation reports browser startup inside the test duration, which turns an 8.8 second run into a 16 second one and invites a conclusion about performance that the numbers do not support. Use `--repeat-each` within one invocation to compare.
+
+The `retries: 1` in the Playwright config masks this in ordinary use, which is why it has stayed open.
+
 **P2-6. Drag-and-drop has no concurrency control.** File `front/src/pages/Board.tsx:92-183`.
 
 The optimistic state computation sits outside the try block, no service accepts an `AbortController`, and nothing prevents a second drag starting while the first request is in flight. A late failure from an earlier drag can roll back over a newer already-applied update. This becomes reachable the moment P0-3 is fixed, so it should be fixed in the same pass.
@@ -350,7 +356,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4, order is read back | Done | Tasks list in stored order and a reorder survives a reload (P2-3) |
 | 4, paused | Paused | Every open decision in section 11.2 is now resolved, see section 11.4. The schema layer goes first |
 | 4b, board-owned columns | Done | Columns copied from the template at creation, status validated against the board's own |
-| 4b, workspaces | Next | Workspace collection, personal workspace at registration, two-level membership |
+| 4b, workspaces | Done | Workspace collection, personal workspace at registration, two-level access with an admin exception |
+| 4b, overall | **Done** | Phase 4 resumes against the final schema |
 | 4, remainder | Blocked on 4b | Fractional indexing, progress aggregation, drag concurrency, indexes |
 | 5 onward | Not started | |
 
@@ -830,6 +837,14 @@ The shape: every board belongs to exactly one workspace, with no exceptions, and
 Add a `Workspace` collection with a membership list carrying roles, create a personal workspace on registration, and give `Board` a required `workspaceId`. Extend `resolveBoardRole` to require workspace membership and to grant owner rights to a workspace admin, leaving every route untouched. Copy the template's columns onto the board at creation and move `status` validation onto the board's own columns. Update the board and dashboard queries to scope by workspace.
 
 Acceptance: a new account can create a board without choosing a workspace first, a workspace admin can administer a board they were never added to, a member of the workspace who is not a member of a board still cannot read it, and renaming a column on one board leaves every other board created from the same template untouched.
+
+Done, all four, covered by `back/test/workspaces.test.js` and by `e2e/verify/workspaces.mjs` against a running stack.
+
+Two things came out of building it that were not in the design.
+
+The board listing had to be rewritten to mirror `resolveBoardRole` clause for clause, including the admin exception. A listing that is merely close to the per-board check is worse than one that is obviously wrong: boards appear and then answer 403 when opened, or exist and never appear at all, and neither reads as a rule anyone could state. The dashboard totals use the same filter for the same reason.
+
+Adding somebody to a board now also admits them to its workspace. Without it the invitation is inert: `resolveBoardRole` gives no role to somebody outside the workspace, so they would sit in `Board.members` and be refused on every request, which reads as a bug rather than a policy. The consequence is deliberate and should be revisited when workspace management gets a real interface: a board owner who is only a plain member of the workspace can pull somebody into that workspace by adding them to a board.
 
 ## 12. Component architecture
 

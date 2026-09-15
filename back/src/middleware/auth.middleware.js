@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Board from '../models/Board.js';
 import Task from '../models/Task.js';
+import Workspace from '../models/Workspace.js';
 import ApiError from '../utils/apiError.js';
 import env from '../config/env.js';
 import { ErrorCode } from '../constants/errorCodes.js';
@@ -89,20 +90,59 @@ const ROLE_RANK = {
 };
 
 /**
- * Resolve the caller's role on a board from the board's own `createdBy` and
- * `members` fields. Plain helper, not Express middleware, so it can be
- * reused (or unit tested) without a request/response pair.
+ * Resolve the caller's role in a workspace. Plain helper, not Express
+ * middleware, so it can be reused or unit tested without a request.
  *
- * @param {object} board - a loaded Board document (or plain object with the same shape)
+ * @param {object} workspace - a loaded Workspace document (or plain object with the same shape)
  * @param {string} userId - the id of the user whose role is being resolved
- * @returns {'owner' | 'member' | null}
+ * @returns {'admin' | 'member' | null}
  */
-export const resolveBoardRole = (board, userId) => {
-  if (!board || !userId) {
+export const resolveWorkspaceRole = (workspace, userId) => {
+  if (!workspace || !userId) {
     return null;
   }
 
   const requesterId = userId.toString();
+  const membership = (workspace.members || []).find(member => member.user.toString() === requesterId);
+
+  return membership ? membership.role : null;
+};
+
+/**
+ * Resolve the caller's role on a board. Access is two levels, and both are
+ * decided here so that no route has to know either of them exists.
+ *
+ * Workspace membership is a prerequisite, not a shortcut: belonging to the
+ * workspace is what makes a person eligible for its boards, and they still
+ * have to be added to each board individually. The one exception is a
+ * workspace admin, who administers every board in their workspace whether
+ * or not anyone ever added them to it.
+ *
+ * Plain helper, not Express middleware, so it can be reused or unit tested
+ * without a request/response pair.
+ *
+ * @param {object} board - a loaded Board document (or plain object with the same shape)
+ * @param {string} userId - the id of the user whose role is being resolved
+ * @param {'admin' | 'member' | null} workspaceRole - the caller's role in the board's workspace
+ * @returns {'owner' | 'member' | null}
+ */
+export const resolveBoardRole = (board, userId, workspaceRole) => {
+  if (!board || !userId) {
+    return null;
+  }
+
+  // Outside the workspace there is nothing to resolve, however the board's
+  // own member list reads. This is what stops a stale board membership from
+  // outliving a workspace someone was removed from.
+  if (!workspaceRole) {
+    return null;
+  }
+
+  const requesterId = userId.toString();
+
+  if (workspaceRole === 'admin') {
+    return 'owner';
+  }
 
   if (board.createdBy && board.createdBy.toString() === requesterId) {
     return 'owner';
@@ -113,11 +153,61 @@ export const resolveBoardRole = (board, userId) => {
   return isMember ? 'member' : null;
 };
 
+/**
+ * Load a board's workspace and resolve the caller's role in it. Every board
+ * carries a required `workspaceId`, so a board whose workspace is missing is
+ * a broken invariant rather than a request to refuse politely, and it
+ * resolves to no role at all.
+ *
+ * @param {object} board - a loaded Board document
+ * @param {string} userId
+ * @returns {Promise<'admin' | 'member' | null>}
+ */
+const loadWorkspaceRole = async (board, userId) => {
+  const workspace = await Workspace.findById(board.workspaceId).select('members');
+
+  return resolveWorkspaceRole(workspace, userId);
+};
+
 const meetsMinimumRole = (role, minimumRole) => {
   if (!role) {
     return false;
   }
   return ROLE_RANK[role] >= ROLE_RANK[minimumRole];
+};
+
+const WORKSPACE_ROLE_RANK = {
+  member: 1,
+  admin: 2,
+};
+
+/**
+ * Middleware factory for routes identified by a workspace id in `:id`.
+ *
+ * A workspace that does not exist and a workspace the caller is not in
+ * return the same 403, rather than 404 and 403 respectively. Workspace ids
+ * are handed around in invitations, and answering the two cases differently
+ * turns this route into a way to ask whether an id is real. The board
+ * middleware above still distinguishes them, which is the older behaviour
+ * and out of scope to change here.
+ *
+ * @param {'member' | 'admin'} minimumRole
+ * @returns {import('express').RequestHandler}
+ */
+export const requireWorkspaceRole = minimumRole => async (req, _res, next) => {
+  try {
+    const workspace = await Workspace.findById(req.params.id);
+    const role = resolveWorkspaceRole(workspace, req.user.id);
+
+    if (!role || WORKSPACE_ROLE_RANK[role] < WORKSPACE_ROLE_RANK[minimumRole]) {
+      throw new ApiError(403, 'Not authorized to access this workspace');
+    }
+
+    req.workspace = workspace;
+    next();
+  } catch (error) {
+    next(error);
+  }
 };
 
 const resolveRequestedBoardId = req => req.params.boardId || req.params.id || req.query.boardId;
@@ -140,7 +230,7 @@ export const requireBoardRole = minimumRole => async (req, _res, next) => {
       throw new ApiError(404, 'Board not found');
     }
 
-    const role = resolveBoardRole(board, req.user.id);
+    const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
 
     if (!meetsMinimumRole(role, minimumRole)) {
       throw new ApiError(403, 'Not authorized to access this board');
@@ -184,7 +274,7 @@ export const requireTaskBoardRole = minimumRole => async (req, _res, next) => {
       throw new ApiError(404, 'Board not found');
     }
 
-    const role = resolveBoardRole(board, req.user.id);
+    const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
 
     if (!meetsMinimumRole(role, minimumRole)) {
       throw new ApiError(403, 'Not authorized to access this task');

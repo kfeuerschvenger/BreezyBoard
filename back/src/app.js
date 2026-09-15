@@ -13,6 +13,7 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import taskRoutes from './routes/task.routes.js';
 import templateRoutes from './routes/template.routes.js';
 import userRoutes from './routes/user.routes.js';
+import workspaceRoutes from './routes/workspace.routes.js';
 
 const app = express();
 
@@ -71,6 +72,7 @@ const mountApiRoutes = prefix => {
   app.use(`${prefix}/tasks`, taskRoutes);
   app.use(`${prefix}/templates`, templateRoutes);
   app.use(`${prefix}/users`, userRoutes);
+  app.use(`${prefix}/workspaces`, workspaceRoutes);
 
   app.get(`${prefix}/health`, (_req, res) => {
     res.json({ status: 'ok', message: 'Server is running' });
