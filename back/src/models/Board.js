@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import logger from '../utils/logger.js';
 import { createColumnSchema } from './column.schema.js';
 
 const boardSchema = new mongoose.Schema(
@@ -79,21 +78,16 @@ boardSchema.virtual('memberCount').get(function () {
   return this.members.length;
 });
 
-boardSchema.virtual('progress').get(async function () {
-  try {
-    const tasks = await mongoose.model('Task').find({ boardId: this._id });
-    if (tasks.length === 0) return 0;
-
-    const completedTasks = tasks.filter(
-      task => task.status === 'done' || (task.checklist.length > 0 && task.checklist.every(item => item.completed))
-    ).length;
-
-    return Math.round((completedTasks / tasks.length) * 100);
-  } catch (error) {
-    logger.error({ err: error }, 'Error calculating progress');
-    return 0;
-  }
-});
+// There used to be a `progress` virtual here. It was dead code in three
+// separate ways and is replaced by an aggregation in board.service.js.
+//
+// It was declared as an async getter, which Mongoose does not support, so it
+// would have yielded a pending Promise rather than a number. The dashboard
+// read it through a `.lean()` query, which strips virtuals, so it was
+// undefined before the Promise ever mattered. And its completion test
+// compared `status` to the literal 'done', while status holds a column id,
+// so the comparison could never be true. Average progress was zero by
+// construction, which is finding P2-4.
 
 const Board = mongoose.model('Board', boardSchema);
 

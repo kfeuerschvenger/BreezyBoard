@@ -216,6 +216,16 @@ Worth recording how close one of the regression tests came to being worthless. T
 
 Two independent bugs stacked. The dashboard query uses `.lean()`, which strips virtuals, so `board.progress` is `undefined` at the point it is summed. And the virtual itself is declared as an async getter, which Mongoose does not support: it would return a pending Promise rather than a number. The `toJSON` transform never copies it either. This is dead code that should be replaced with an aggregation.
 
+Fixed in Phase 4. The virtual is gone and one aggregation in `board.service.js` produces both the task total and the completion count per board, used by the dashboard totals and by the board list alike.
+
+It turned out to be three numbers rather than one. The dashboard cards render a task count, a member count and a progress bar, and two of the three were always zero for the same class of reason: `taskCount` is a populate virtual that no query ever populated, so `doc.taskCount` was `undefined` and the `toJSON` transform faithfully copied `undefined`. Only `memberCount` worked, because it is a plain getter. The board list now computes all three explicitly and the transform is no longer load-bearing for it.
+
+A task counts as complete when it sits in its board's last column, or when it carries a checklist with every item ticked. The second rule is what the old virtual intended; the first is what it was trying to say by comparing `status` to the literal `'done'`, which is the second of the two impossible comparisons recorded under P2-9 and is now closed with it.
+
+One detail that is easy to get backwards, and has its own test. An empty checklist satisfies "every item is ticked" vacuously, so the rule has to require at least one item. Written the obvious way it would report every board with no checklists anywhere as a hundred percent done.
+
+Matching every board's done column in a single `$in` is correct rather than merely convenient, and only became correct in Phase 4b: column ids belong to one board now, so a task whose status appears in that set is necessarily in its own board's last column.
+
 **P2-5. `TaskService.move` is called with a missing required argument.** Files `front/src/services/task.service.ts:29` and `front/src/pages/Board.tsx:254`.
 
 `move(taskId, newStatus, newOrder)` declares three required parameters and is called with two, so the backend receives `order: undefined` whenever a task auto-moves to done on checklist completion.
@@ -369,7 +379,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4b, workspaces | Done | Workspace collection, personal workspace at registration, two-level access with an admin exception |
 | 4b, overall | **Done** | Phase 4 resumes against the final schema |
 | 4, fractional indexing | Done | order is a server minted key, /move names neighbours, /orders removed (P2-3, P2-5, and the cross-column drop) |
-| 4, remainder | In progress | Progress aggregation, drag concurrency, indexes |
+| 4, progress aggregation | Done | Board progress, task counts and the dashboard average all computed (P2-4) |
+| 4, remainder | In progress | Drag concurrency, indexes |
 | 5 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
