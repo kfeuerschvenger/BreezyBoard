@@ -89,6 +89,18 @@ boardSchema.virtual('memberCount').get(function () {
 // so the comparison could never be true. Average progress was zero by
 // construction, which is finding P2-4.
 
+// The board list and the dashboard both run visibleBoardFilter, which asks
+// for boards in a set of workspaces that the caller either created or is a
+// member of. These are the three fields that filter answers on.
+//
+// Three separate indexes rather than one compound, because the filter is an
+// $or over createdBy and members with workspaceId $and-ed across it, and
+// Mongo can only use one index per $or branch. A compound index would serve
+// one branch and leave the other scanning.
+boardSchema.index({ workspaceId: 1 });
+boardSchema.index({ createdBy: 1 });
+boardSchema.index({ members: 1 });
+
 const Board = mongoose.model('Board', boardSchema);
 
 export default Board;

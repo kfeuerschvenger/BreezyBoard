@@ -88,6 +88,16 @@ const taskSchema = new mongoose.Schema(
   }
 );
 
+// Every read of a task goes through its board, and the board page reads a
+// whole board sorted by ordering key, so this one index serves the busiest
+// query in the product end to end: the match, the sort and the projection
+// of `order` all come out of it without touching a document.
+//
+// It also covers the three narrower queries the ordering work added: the
+// last key in a column, whether a named neighbour really sits in this column
+// of this board, and the cascade that deletes a board's tasks with it.
+taskSchema.index({ boardId: 1, status: 1, order: 1 });
+
 const Task = mongoose.model('Task', taskSchema);
 
 export default Task;
