@@ -5,9 +5,12 @@ import Board from '../../src/models/Board.js';
 // The columns of a board, ordered, as the board page sees them. Tests that
 // need to name a specific column (moving a task from the first to the last,
 // say) use this rather than inventing a string.
+//
+// These are the board's own columns, copied from its template at creation,
+// so two boards built from one template have different column ids here.
 export async function boardColumns(boardId) {
-  const board = await Board.findById(boardId).select('template').populate('template', 'columns');
-  const columns = [...(board?.template?.columns ?? [])];
+  const board = await Board.findById(boardId).select('columns');
+  const columns = [...(board?.columns ?? [])];
 
   return columns.sort((a, b) => a.order - b.order);
 }

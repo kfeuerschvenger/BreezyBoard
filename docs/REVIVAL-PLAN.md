@@ -246,6 +246,10 @@ There is also a domain problem worth recording, though not worth fixing in Phase
 
 Decided in section 11.4 and scheduled as Phase 4b: columns are copied onto the board at creation, so the template becomes a mould rather than a live reference.
 
+Done. `Board` now carries its own `columns`, copied out of the template when the board is created, and Mongoose assigns them fresh subdocument ids on the way in, which is the whole mechanism: two boards built from one template no longer share a single column id between them. Validating `status` became a single document read as a result. `template` survives as provenance and as the source of the dashboard icon, and was removed from the update whitelist, because repointing a board at another template would now swap an icon and leave every column and every task exactly where they were.
+
+The standing scripts earned their keep here. `authorization.mjs` crashed on the first run after the change, because it was still building a task status out of the template's column ids. That is precisely the behavior the change introduces, caught by a script rather than by a user.
+
 **P2-10. The task drawer discarded what the user typed when the colors arrived.** File `front/src/components/TaskDrawer.tsx:360-403`. Found while writing the component tests, fixed in the same pass.
 
 The effect that resets the form listed `taskColors` among its dependencies. That array starts empty and is replaced once the colors request resolves, so the effect ran a second time after mount and rebuilt the entire `formData` object from `task`. Anything typed before the request came back was overwritten with the values from the task, which for a new task means empty strings.
@@ -345,7 +349,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4, status constraint | Done | status refused unless it is ObjectId-shaped and names a column of that board (P2-9) |
 | 4, order is read back | Done | Tasks list in stored order and a reorder survives a reload (P2-3) |
 | 4, paused | Paused | Every open decision in section 11.2 is now resolved, see section 11.4. The schema layer goes first |
-| 4b, schema layer | Next | Workspaces and board-owned columns. Revises the status validation and precedes the indexes |
+| 4b, board-owned columns | Done | Columns copied from the template at creation, status validated against the board's own |
+| 4b, workspaces | Next | Workspace collection, personal workspace at registration, two-level membership |
 | 4, remainder | Blocked on 4b | Fractional indexing, progress aggregation, drag concurrency, indexes |
 | 5 onward | Not started | |
 

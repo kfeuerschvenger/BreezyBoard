@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import logger from '../utils/logger.js';
+import { createColumnSchema } from './column.schema.js';
 
 const boardSchema = new mongoose.Schema(
   {
@@ -13,10 +14,24 @@ const boardSchema = new mongoose.Schema(
       ref: 'ColorPalette',
       required: true,
     },
+    // Provenance only, and the source of the icon shown on the dashboard.
+    // The columns below were copied out of this template when the board was
+    // created and no longer track it, so pointing a board at a different
+    // template afterwards would change its icon and nothing else. That is
+    // why `template` is not in the update whitelist.
     template: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'BoardTemplate',
       default: null,
+    },
+    // The board's own columns, copied from its template at creation. A task's
+    // `status` holds the id of one of these subdocuments, so these ids are
+    // the board's alone: renaming, adding or removing a column here affects
+    // no other board, which was not true while columns lived on the shared
+    // template.
+    columns: {
+      type: [createColumnSchema()],
+      default: [],
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

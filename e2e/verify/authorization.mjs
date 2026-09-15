@@ -39,12 +39,14 @@ const board = await post(
   victim.token
 );
 const boardId = board.body.data._id;
-// A task's status is the id of a column in the board's template, not its
-// title. Every payload below has to be a legitimate one, because request
-// validation runs before the authorization middleware: a malformed body
-// returns 400 and the attacker never reaches the check these assertions
-// exist to prove.
-const columns = [...template.columns].sort((a, b) => a.order - b.order);
+// A task's status is the id of a column of THIS board, not of the template
+// it was created from. The template's columns are a mould: creating the
+// board copied them and gave the copies fresh ids, so a template column id
+// is not a valid status for any board. Every payload below has to be a
+// legitimate one, because request validation runs before the authorization
+// middleware: a malformed body returns 400 and the attacker never reaches
+// the check these assertions exist to prove.
+const columns = [...board.body.data.columns].sort((a, b) => a.order - b.order);
 const task = await post(
   `/tasks/board/${boardId}`,
   {

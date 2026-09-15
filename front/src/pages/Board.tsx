@@ -70,17 +70,21 @@ const Board = () => {
         const sortedTasks = tasksData.sort((a, b) => a.order - b.order);
         setTasks(sortedTasks);
 
-        // Prepare columns from board template
-        if (boardData.template && typeof boardData.template !== 'string' && boardData.template.columns) {
-          const formattedColumns = boardData.template.columns.map((col: any) => ({
-            id: col._id,
-            _id: col._id,
-            title: col.title,
-            color: col.color?.value || '#64748B',
-            order: col.order,
-          }));
-          setColumns(formattedColumns);
-        }
+        // The board's own columns, not its template's. They were copied out
+        // of the template when the board was created and belong to it since,
+        // which is what lets one board rename a column without renaming it
+        // on every other board built from the same template.
+        const formattedColumns = (boardData.columns ?? [])
+          .map(column => ({
+            id: column._id,
+            _id: column._id,
+            title: column.title,
+            color: typeof column.color === 'string' ? column.color : (column.color?.value ?? '#64748B'),
+            order: column.order,
+          }))
+          .sort((a, b) => a.order - b.order);
+
+        setColumns(formattedColumns);
       } catch (err) {
         console.error('Error loading board data:', err);
         setError('This board could not be loaded. Check your connection and try again.');

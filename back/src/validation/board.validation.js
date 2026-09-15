@@ -27,11 +27,17 @@ export const createBoardSchema = z
 // createdBy/members) is silently stripped from result.data rather than
 // rejected, so the request still reaches requireBoardRole('owner') and is
 // judged on authorization, not on payload shape.
+//
+// `template` is excluded too, and that is a change. Columns are copied onto
+// the board at creation and no longer track the template, so repointing a
+// board at a different one would swap the icon on the dashboard and leave
+// every column and every task status exactly where they were. A field whose
+// only remaining effect is cosmetic, and whose name promises something much
+// larger, is worse than no field.
 export const updateBoardSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').optional(),
   description: z.string().trim().optional(),
   color: objectIdSchema.optional(),
-  template: objectIdSchema.nullable().optional(),
 });
 
 export const addBoardMembersSchema = z
