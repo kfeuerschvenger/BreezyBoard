@@ -202,6 +202,12 @@ Fixed in Phase 4. Both writes now run inside one `session.withTransaction`, and 
 
 `getTasksByBoard` sorts by `createdAt` descending. The `order` field that the whole drag-and-drop feature writes is never read back. Reordering has no persistent effect even once P0-3 is fixed.
 
+Superseded by the move to fractional indexing, recorded below. `order` is now a base 62 key rather than a position, the sort reads it, and `PATCH /tasks/:id/move` names the two neighbours a card was dropped between rather than an absolute number. `PATCH /tasks/board/:boardId/orders` was removed rather than adapted: there is nothing left to renumber.
+
+Three consequences worth stating. A move is one write to one document, whatever the length of the column, where the integer version rewrote every card below the insertion point. The cross-column drop defect recorded in section 11.4 is fixed as a side effect, because a client can finally express "between these two" instead of "one past the maximum". And a client naming a neighbour that has moved since it last fetched gets a 409 carrying `CONFLICT` rather than a 400, which is a distinction it can act on: refetch the board, rather than fix a payload that was never malformed.
+
+The P1-4 security tripwire was rewritten rather than deleted. It guarded the bulk renumbering endpoint against a task id belonging to another board, and that endpoint is gone, but the property survives the move: a client still names other tasks when it moves one, and the neighbour lookup is scoped to the authorized board and target column, so a foreign neighbour is refused and nothing moves.
+
 Fixed in Phase 4. The query sorts by `order` ascending with `createdAt` descending kept as the tiebreaker, so tasks that genuinely share an order keep the arrangement they had. The board page had been re-sorting the array itself after fetching, which hid the bug there and left it visible everywhere else, including in any paginated request, where the page boundary was being cut on a different ordering than the one the caller saw.
 
 Worth recording how close one of the regression tests came to being worthless. The first version reordered two tasks and asserted the result, and it passed against the broken sort, because the arrangement it expected happened to be the one creation order already produced. Both tests now expect an arrangement that creation order cannot produce, and both fail against the previous code. The same trap is written into `e2e/verify/integrity.mjs`, where the fixture creates its tasks with deliberately reversed orders for exactly this reason.
@@ -326,6 +332,10 @@ The consequence is larger than a failing command. It means no production bundle 
 
 This also blocks the `prod` target of the frontend Dockerfile added in section 8, which runs the same command.
 
+A trap discovered in Phase 4 while changing the type of `Task.order`, and worth knowing before anyone trusts a type check in this repository. **`npx tsc --noEmit` in `front/` checks nothing and exits 0 unconditionally.** The root `tsconfig.json` is a solution-style config: it declares `"files": []` and delegates everything to project references, so the command compiles an empty file list and reports success. The real check is `tsc -b`, which is what `npm run build` runs.
+
+This was not theoretical. A test fixture was left holding `order: 0` after the field became a string, `tsc --noEmit` reported clean, and the error only surfaced when the test ran and the page threw `a.order.localeCompare is not a function`. `tsc -b` catches it immediately. Use `npm run build`, or `tsc -b`, and never the bare `--noEmit` form in this project.
+
 Related: 10 or more source files import from `framer-motion`, which is not a declared dependency. Only `motion` is in `package.json`, and the import resolves transitively. It works today by accident.
 
 **P5-8. Seeds are destructive with no guard.** Both seed scripts call `deleteMany()` with no filter and then insert. `users.seed.js` hardcodes six accounts with weak passwords committed in source. Nothing prevents them from being pointed at a populated database.
@@ -358,7 +368,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4b, board-owned columns | Done | Columns copied from the template at creation, status validated against the board's own |
 | 4b, workspaces | Done | Workspace collection, personal workspace at registration, two-level access with an admin exception |
 | 4b, overall | **Done** | Phase 4 resumes against the final schema |
-| 4, remainder | Blocked on 4b | Fractional indexing, progress aggregation, drag concurrency, indexes |
+| 4, fractional indexing | Done | order is a server minted key, /move names neighbours, /orders removed (P2-3, P2-5, and the cross-column drop) |
+| 4, remainder | In progress | Progress aggregation, drag concurrency, indexes |
 | 5 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.

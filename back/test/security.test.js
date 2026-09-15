@@ -78,7 +78,6 @@ describe('security tripwires', () => {
       const columns = await boardColumns(board._id);
       const task = await createTask(owner.token, board._id, colors.taskColor._id, {
         status: columns[0]._id.toString(),
-        order: 0,
       });
 
       // The payload has to be a legitimate move for this assertion to mean
@@ -86,11 +85,12 @@ describe('security tripwires', () => {
       // middleware, so a malformed body gets a 400 and the outsider never
       // reaches the check this test exists to prove. It used to send the
       // literal 'done', which was well formed only because status accepted
-      // any string at the time.
+      // any string at the time, and later an absolute `order`, which the
+      // neighbour-based contract no longer accepts.
       const res = await request(app)
         .patch(`/api/tasks/${task._id}/move`)
         .set('Authorization', `Bearer ${outsider.token}`)
-        .send({ status: columns[columns.length - 1]._id.toString(), order: 5 });
+        .send({ status: columns[columns.length - 1]._id.toString(), afterId: null, beforeId: null });
 
       expect(res.status).toBe(403);
     });
@@ -223,44 +223,56 @@ describe('security tripwires', () => {
     expect(check.body.data.internalNote).toBeUndefined();
   });
 
-  // Finding P1-4: PATCH /api/tasks/board/:boardId/orders now filters
-  // task.service.updateOrders by boardId before writing, so a task id in the
-  // body that does not belong to :boardId is silently skipped instead of
-  // renumbered.
-  test('PATCH /api/tasks/board/:boardId/orders should not renumber tasks from a different board', async () => {
+  // Finding P1-4, carried over to the contract that replaced the endpoint it
+  // was written against.
+  //
+  // The bulk renumbering route these two tests used to drive no longer
+  // exists: ordering is a fractional index and a move writes one document,
+  // so there is nothing left to renumber. The property P1-4 protects is not
+  // gone with it, it only moved. A client still names other tasks when it
+  // moves one, as the neighbours it dropped between, and naming a task from
+  // a board the caller has no business reading must not work.
+  //
+  // task.service.js scopes the neighbour lookup to the authorized board and
+  // the target column, so a foreign neighbour is not found and the move is
+  // refused rather than being quietly placed somewhere arbitrary.
+  test('a move naming a neighbour from a different board is refused', async () => {
     const otherOwnerBoard = await createBoard(outsider.token, colors.boardColor._id, { title: 'Outsider Board' });
-    const otherTask = await createTask(outsider.token, otherOwnerBoard._id, colors.taskColor._id, { order: 5 });
+    const otherTask = await createTask(outsider.token, otherOwnerBoard._id, colors.taskColor._id);
+
+    const task = await createTask(owner.token, board._id, colors.taskColor._id);
+    const columns = await boardColumns(board._id);
+    const before = await request(app).get(`/api/tasks/${task._id}`).set('Authorization', `Bearer ${owner.token}`);
 
     const res = await request(app)
-      .patch(`/api/tasks/board/${board._id}/orders`)
+      .patch(`/api/tasks/${task._id}/move`)
       .set('Authorization', `Bearer ${owner.token}`)
-      .send({ updates: [{ id: otherTask._id, order: 999 }] });
+      .send({ status: columns[0]._id.toString(), afterId: otherTask._id });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('CONFLICT');
 
-    const check = await request(app)
-      .get(`/api/tasks/${otherTask._id}`)
-      .set('Authorization', `Bearer ${outsider.token}`);
+    // Refused means nothing moved, not merely that the response said no.
+    const after = await request(app).get(`/api/tasks/${task._id}`).set('Authorization', `Bearer ${owner.token}`);
 
-    expect(check.body.data.order).toBe(5);
+    expect(after.body.data.order).toBe(before.body.data.order);
   });
 
-  // Positive case for P1-4: renumbering a task that genuinely belongs to
-  // :boardId must still work. Guards against updateOrders filtering out
-  // every task instead of only the out-of-board ones.
-  test('PATCH /api/tasks/board/:boardId/orders still renumbers a task that belongs to the board', async () => {
-    const task = await createTask(owner.token, board._id, colors.taskColor._id, { order: 0 });
+  // Positive case, for the same reason the old one existed: a scoping guard
+  // that refused every neighbour would pass the test above and break the
+  // feature entirely.
+  test('a move naming a neighbour from the same board and column still works', async () => {
+    const columns = await boardColumns(board._id);
+    const first = await createTask(owner.token, board._id, colors.taskColor._id, { title: 'First' });
+    const second = await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Second' });
 
     const res = await request(app)
-      .patch(`/api/tasks/board/${board._id}/orders`)
+      .patch(`/api/tasks/${second._id}/move`)
       .set('Authorization', `Bearer ${owner.token}`)
-      .send({ updates: [{ id: task._id, order: 7 }] });
+      .send({ status: columns[0]._id.toString(), afterId: null, beforeId: first._id });
 
     expect(res.status).toBe(200);
-
-    const check = await request(app).get(`/api/tasks/${task._id}`).set('Authorization', `Bearer ${owner.token}`);
-
-    expect(check.body.data.order).toBe(7);
+    expect(res.body.data.order < first.order).toBe(true);
   });
 
   // Finding P1-6: POST /api/auth/login used to treat an object value for

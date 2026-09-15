@@ -43,19 +43,9 @@ export const deleteTask = async (req, res, next) => {
 
 export const moveTask = async (req, res, next) => {
   try {
-    const { status, order } = req.body;
-    const task = await taskService.moveTask(req.params.id, status, order);
+    const { status, afterId, beforeId } = req.body;
+    const task = await taskService.moveTask(req.params.id, status, { afterId, beforeId });
     responseHandler(res, 200, task);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updateOrders = async (req, res, next) => {
-  try {
-    const { updates } = req.body;
-    await taskService.updateOrders(req.params.boardId, updates);
-    responseHandler(res, 200, { message: 'Orders updated successfully' });
   } catch (error) {
     next(error);
   }

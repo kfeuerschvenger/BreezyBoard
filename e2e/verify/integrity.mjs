@@ -88,49 +88,75 @@ check(
 await req('DELETE', `/boards/${sibling.body.data._id}`, token);
 log('');
 const taskIds = [];
-// Created oldest first with the orders deliberately reversed, so that the
-// arrangement the board should show is one that creation order cannot
-// produce by accident.
-for (const [title, order] of [
-  ['First task', 2],
-  ['Second task', 1],
-  ['Third task', 0],
-]) {
+const keys = {};
+for (const title of ['First task', 'Second task', 'Third task']) {
   const task = await req('POST', `/tasks/board/${boardId}`, token, {
     title,
     status: firstColumn._id,
     priority: 'medium',
-    order,
     color: taskColors.body.data[0]._id,
   });
   taskIds.push(task.body.data._id);
+  keys[title] = task.body.data.order;
 }
 
 log(`board ${boardId} created with ${taskIds.length} tasks\n`);
 
-log('--- task order is read back, not only written ---');
+log('--- task order is a server minted key, read back on every load ---');
 const listed = await req('GET', `/tasks/board/${boardId}`, token);
 check(
-  'the list comes back in stored order',
+  'new tasks land at the bottom, in the order they were made',
   listed.body.data.map(task => task.title).join(', '),
-  'Third task, Second task, First task'
+  'First task, Second task, Third task'
+);
+check(
+  'a client cannot choose its own key',
+  (
+    await req('POST', `/tasks/board/${boardId}`, token, {
+      title: 'Queue jumper',
+      status: firstColumn._id,
+      color: taskColors.body.data[0]._id,
+      order: '0',
+    })
+  ).status,
+  400
 );
 
-// Reordering, then reading it back, is the whole acceptance criterion: the
-// endpoint always wrote these correctly and nothing ever read them.
-await req('PATCH', `/tasks/board/${boardId}/orders`, token, {
-  updates: [
-    { id: taskIds[0], order: 0 },
-    { id: taskIds[1], order: 1 },
-    { id: taskIds[2], order: 2 },
-  ],
+// Drag the last card to the top, then read it back. The arrangement below is
+// one that creation order cannot produce, or this would pass against a list
+// that ignores the key entirely.
+await req('PATCH', `/tasks/${taskIds[2]}/move`, token, {
+  status: firstColumn._id,
+  afterId: null,
+  beforeId: taskIds[0],
 });
 const reordered = await req('GET', `/tasks/board/${boardId}`, token);
 check(
   'a reorder survives a reload',
   reordered.body.data.map(task => task.title).join(', '),
-  'First task, Second task, Third task'
+  'Third task, First task, Second task'
 );
+// The point of a fractional index: the two cards that did not move still
+// carry the keys they were born with. The integer version rewrote every card
+// below the insertion point on every single drag.
+check(
+  'the cards that did not move kept their keys',
+  reordered.body.data.filter(task => ['First task', 'Second task'].includes(task.title)).every(task => task.order === keys[task.title]),
+  true
+);
+// A neighbour that has moved since the client last looked is a conflict the
+// client can recover from by refetching, not a malformed request.
+await req('PATCH', `/tasks/${taskIds[0]}/move`, token, {
+  status: boardColumns[boardColumns.length - 1]._id,
+  afterId: null,
+  beforeId: null,
+});
+const stale = await req('PATCH', `/tasks/${taskIds[1]}/move`, token, {
+  status: firstColumn._id,
+  afterId: taskIds[0],
+});
+check('a move against a stale neighbour is a conflict', stale.status, 409);
+check('and says so with a code the client can switch on', stale.body?.code, 'CONFLICT');
 
 log('\n--- the board delete cascade runs in a transaction ---');
 // A standalone mongod answers this with 500, because mongoose refuses to

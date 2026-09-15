@@ -11,7 +11,7 @@ import type { Board as BoardModel, Task } from '@/models';
 // that side effect never reaches the real, unmocked axios client.
 vi.mock('@/services', () => ({
   BoardService: { getById: vi.fn() },
-  TaskService: { getByBoard: vi.fn(), move: vi.fn(), updateOrders: vi.fn() },
+  TaskService: { getByBoard: vi.fn(), move: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
 }));
@@ -56,7 +56,7 @@ const makeTask = (overrides: Partial<Task>): Task => ({
   owner: '',
   boardId: BOARD_ID,
   checklist: [],
-  order: 0,
+  order: 'a0',
   ...overrides,
 });
 

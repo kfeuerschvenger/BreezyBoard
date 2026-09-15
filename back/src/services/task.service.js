@@ -1,6 +1,9 @@
+import { generateKeyBetween } from 'fractional-indexing';
+
 import Task from '../models/Task.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
+import { ErrorCode } from '../constants/errorCodes.js';
 
 // The columns a task on this board may legally sit in. They are the board's
 // own, copied out of its template when it was created, so this is a single
@@ -35,6 +38,58 @@ const assertStatusNamesAColumnOfThisBoard = async (boardId, status) => {
   }
 };
 
+// The key that puts a task at the bottom of a column.
+const keyAtEndOfColumn = async (boardId, status) => {
+  const last = await Task.findOne({ boardId, status }).sort({ order: -1 }).select('order');
+
+  return generateKeyBetween(last?.order ?? null, null);
+};
+
+/**
+ * The key for a task dropped between two neighbours.
+ *
+ * The client sends the two cards it dropped between rather than a position
+ * or a key of its own, so the server is the only thing that ever mints one
+ * and a stale client cannot write a key that contradicts the column.
+ *
+ * Both neighbours are checked to be in this column of this board, and a
+ * neighbour that has moved since the client last looked is a 409 rather
+ * than a 400. The distinction matters to the client: 409 means "your view
+ * of the column is out of date, fetch it again", which is a thing it can
+ * act on, while 400 means "this request was malformed", which it cannot.
+ */
+const keyBetweenNeighbours = async (boardId, status, afterId, beforeId) => {
+  const neighbourIds = [afterId, beforeId].filter(Boolean);
+  const neighbours = neighbourIds.length
+    ? await Task.find({ _id: { $in: neighbourIds }, boardId, status }).select('order')
+    : [];
+
+  const byId = new Map(neighbours.map(task => [task._id.toString(), task.order]));
+
+  if (neighbourIds.some(id => !byId.has(id.toString()))) {
+    throw new ApiError(
+      409,
+      'A neighbouring task is no longer where the client expected it. Reload the board and try again.',
+      [],
+      ErrorCode.CONFLICT
+    );
+  }
+
+  try {
+    return generateKeyBetween(afterId ? byId.get(afterId.toString()) : null, beforeId ? byId.get(beforeId.toString()) : null);
+  } catch {
+    // generateKeyBetween refuses neighbours that are not in ascending order,
+    // which means the client's picture of the column disagrees with the
+    // database. Same situation, same answer.
+    throw new ApiError(
+      409,
+      'The neighbouring tasks are no longer in the order the client expected. Reload the board and try again.',
+      [],
+      ErrorCode.CONFLICT
+    );
+  }
+};
+
 export const createTask = async taskData => {
   if (!taskData.boardId) {
     throw new ApiError(400, 'boardId is required to create a task');
@@ -52,7 +107,13 @@ export const createTask = async taskData => {
 
   await assertStatusNamesAColumnOfThisBoard(taskData.boardId, taskData.status);
 
-  const task = await Task.create(taskData);
+  // A new task lands at the bottom of its column. The key is minted here and
+  // never accepted from the client, which is why `order` is not in the
+  // create schema.
+  const task = await Task.create({
+    ...taskData,
+    order: await keyAtEndOfColumn(taskData.boardId, taskData.status),
+  });
 
   await task.populate([
     { path: 'owner', select: 'firstName lastName avatar' },
@@ -104,7 +165,19 @@ export const deleteTask = async id => {
   return task;
 };
 
-export const moveTask = async (taskId, newStatus, newOrder) => {
+/**
+ * Move a task to a position in a column, expressed as the two cards it was
+ * dropped between. Either neighbour may be null: no `afterId` means the top
+ * of the column, no `beforeId` means the bottom, neither means the column
+ * was empty.
+ *
+ * This is one write to one document, whatever the size of the column. The
+ * previous contract took an absolute number, which forced the client to
+ * renumber the whole column for a reorder and, for a move between columns,
+ * to compute one past the maximum, which is why a card dropped into the
+ * middle of another column always landed at the bottom of it.
+ */
+export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = null } = {}) => {
   const existing = await Task.findById(taskId).select('boardId');
 
   if (!existing) {
@@ -112,6 +185,8 @@ export const moveTask = async (taskId, newStatus, newOrder) => {
   }
 
   await assertStatusNamesAColumnOfThisBoard(existing.boardId, newStatus);
+
+  const newOrder = await keyBetweenNeighbours(existing.boardId, newStatus, afterId, beforeId);
 
   const task = await Task.findByIdAndUpdate(taskId, { status: newStatus, order: newOrder }, { new: true })
     .populate('owner', 'firstName lastName avatar')
@@ -122,34 +197,6 @@ export const moveTask = async (taskId, newStatus, newOrder) => {
   }
 
   return task;
-};
-
-export const updateOrders = async (boardId, updates) => {
-  if (!Array.isArray(updates) || updates.length === 0) {
-    return;
-  }
-
-  // Only tasks that actually belong to the authorized board (from the URL)
-  // may be renumbered. A task id in the body that belongs to a different
-  // board is silently skipped rather than written: the caller is already
-  // authorized against boardId by the route middleware, so this is a data
-  // scoping guard, not a second authorization boundary.
-  const requestedIds = updates.map(update => update.id);
-  const scopedTasks = await Task.find({ _id: { $in: requestedIds }, boardId }).select('_id');
-  const scopedIds = new Set(scopedTasks.map(task => task._id.toString()));
-
-  const bulkOps = updates
-    .filter(update => scopedIds.has(update.id.toString()))
-    .map(update => ({
-      updateOne: {
-        filter: { _id: update.id, boardId },
-        update: { order: update.order },
-      },
-    }));
-
-  if (bulkOps.length > 0) {
-    await Task.bulkWrite(bulkOps);
-  }
 };
 
 // Pagination is opt-in: `limit` undefined means "return everything", exactly
