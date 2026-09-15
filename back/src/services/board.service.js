@@ -193,6 +193,85 @@ export const visibleBoardFilter = async userId => {
   };
 };
 
+/** The column a board treats as done: the last one, by order. */
+const doneColumnOf = board => [...(board.columns ?? [])].sort((a, b) => a.order - b.order).at(-1);
+
+/**
+ * Task totals and completion for a set of boards, in one aggregation.
+ *
+ * The dashboard renders three numbers per board and every one of them was
+ * always zero. `taskCount` is a populate virtual that nothing ever
+ * populated, `progress` was a broken virtual read through a `.lean()` query
+ * that strips virtuals anyway, and `memberCount` only worked because it is a
+ * plain getter. Finding P2-4.
+ *
+ * A task counts as complete when it sits in its board's last column, or when
+ * it has a checklist and every item on it is ticked. That second rule is
+ * what the old virtual intended; the first is what it meant to express by
+ * comparing `status` to the literal 'done', which could never match because
+ * status holds a column id.
+ *
+ * Matching every board's done column in one `$in` is correct rather than
+ * merely convenient, and only became so in Phase 4b: column ids belong to a
+ * single board now, so a task whose status is in that set is necessarily in
+ * its own board's last column and not some other board's.
+ *
+ * @param {Array<{_id: any, columns?: Array<object>}>} boards
+ * @returns {Promise<Map<string, {total: number, completed: number, progress: number}>>}
+ */
+export const summariseBoardTasks = async boards => {
+  const empty = new Map();
+
+  if (boards.length === 0) {
+    return empty;
+  }
+
+  const doneColumnIds = boards
+    .map(doneColumnOf)
+    .filter(Boolean)
+    .map(column => column._id.toString());
+
+  const rows = await Task.aggregate([
+    { $match: { boardId: { $in: boards.map(board => board._id) } } },
+    {
+      $group: {
+        _id: '$boardId',
+        total: { $sum: 1 },
+        completed: {
+          $sum: {
+            $cond: [
+              {
+                $or: [
+                  { $in: ['$status', doneColumnIds] },
+                  {
+                    $and: [
+                      { $gt: [{ $size: { $ifNull: ['$checklist', []] } }, 0] },
+                      { $allElementsTrue: { $map: { input: '$checklist', as: 'item', in: '$$item.completed' } } },
+                    ],
+                  },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  return new Map(
+    rows.map(row => [
+      row._id.toString(),
+      {
+        total: row.total,
+        completed: row.completed,
+        progress: row.total === 0 ? 0 : Math.round((row.completed / row.total) * 100),
+      },
+    ])
+  );
+};
+
 export const getUserBoards = async (userId, { limit, offset } = {}) => {
   const filter = await visibleBoardFilter(userId);
 
@@ -214,11 +293,27 @@ export const getUserBoards = async (userId, { limit, offset } = {}) => {
     query = query.skip(safeOffset).limit(limit);
   }
 
-  const boards = await query;
+  // Plain objects rather than documents, because the three counts below are
+  // computed here and attached. They used to come from the toJSON transform,
+  // which is how they stayed wrong: two of the three were virtuals that no
+  // query ever filled in.
+  const boards = await query.lean();
+  const summaries = await summariseBoardTasks(boards);
+
+  const withCounts = boards.map(board => {
+    const summary = summaries.get(board._id.toString());
+
+    return {
+      ...board,
+      taskCount: summary?.total ?? 0,
+      memberCount: (board.members ?? []).length,
+      progress: summary?.progress ?? 0,
+    };
+  });
 
   const pagination = hasLimit ? { total, limit, offset: safeOffset } : { total };
 
-  return { boards, pagination };
+  return { boards: withCounts, pagination };
 };
 
 export const addBoardMembers = async (boardId, members) => {
