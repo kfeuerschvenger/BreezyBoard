@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
 import Task from '../models/Task.js';
+import Workspace from '../models/Workspace.js';
 import ApiError from '../utils/apiError.js';
 
 // Columns are copied out of the template rather than referenced, so that the
@@ -28,6 +29,37 @@ const copyColumnsFromTemplate = async templateId => {
   }));
 };
 
+// A board always belongs to exactly one workspace. A client that names one
+// must be a member of it; a client that names none gets the caller's
+// personal workspace, which is what keeps the common case free of a concept
+// the user never asked about.
+const resolveWorkspaceId = async (requestedWorkspaceId, userId) => {
+  if (requestedWorkspaceId) {
+    const workspace = await Workspace.findOne({ _id: requestedWorkspaceId, 'members.user': userId }).select('_id');
+
+    // Deliberately indistinguishable from a workspace that does not exist.
+    // A different answer for the two cases would let anyone enumerate
+    // workspace ids by watching which ones come back 403 and which 404.
+    if (!workspace) {
+      throw new ApiError(403, 'Not authorized to create a board in this workspace');
+    }
+
+    return workspace._id;
+  }
+
+  const personal = await Workspace.findOne({ createdBy: userId, isPersonal: true }).select('_id');
+
+  // Registration creates this in the same transaction as the account, so
+  // reaching here means the invariant broke rather than the request being
+  // wrong. Saying so plainly beats a generic failure in board creation,
+  // which is where it would otherwise surface and be misdiagnosed.
+  if (!personal) {
+    throw new ApiError(500, 'This account has no personal workspace, which should be impossible');
+  }
+
+  return personal._id;
+};
+
 export const createBoard = async (boardData, userId) => {
   // Ensures that the creator is included in the members
   const members = boardData.members || [];
@@ -37,6 +69,7 @@ export const createBoard = async (boardData, userId) => {
 
   const board = await Board.create({
     ...boardData,
+    workspaceId: await resolveWorkspaceId(boardData.workspaceId, userId),
     createdBy: userId,
     members: members,
     columns: await copyColumnsFromTemplate(boardData.template),

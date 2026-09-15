@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import app from '../src/app.js';
 import Board from '../src/models/Board.js';
 import Task from '../src/models/Task.js';
+import Workspace from '../src/models/Workspace.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
 import { boardColumns, createTask } from './helpers/task.factory.js';
@@ -92,6 +93,60 @@ describe('boards', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.title).toBe('Updated Title');
+  });
+
+  test('registration creates a personal workspace and a board lands in it', async () => {
+    const personal = await Workspace.findOne({ createdBy: owner.user.id ?? owner.user._id, isPersonal: true });
+
+    expect(personal).not.toBeNull();
+    expect(personal.members).toHaveLength(1);
+    expect(personal.members[0].role).toBe('admin');
+
+    // The frontend sends no workspaceId, so this is the path every board
+    // creation takes today.
+    const board = await createBoard(owner.token, colors.boardColor._id);
+    const stored = await Board.findById(board._id).select('workspaceId');
+
+    expect(stored.workspaceId.toString()).toBe(personal._id.toString());
+  });
+
+  test('create refuses a workspace the caller does not belong to', async () => {
+    const stranger = await registerUser();
+    const theirs = await Workspace.findOne({ createdBy: stranger.user.id ?? stranger.user._id, isPersonal: true });
+
+    const res = await request(app)
+      .post('/api/boards')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({
+        title: 'Board in someone elses workspace',
+        color: colors.boardColor._id.toString(),
+        workspaceId: theirs._id.toString(),
+      });
+
+    expect(res.status).toBe(403);
+  });
+
+  test('create succeeds in a workspace the caller belongs to', async () => {
+    const shared = await Workspace.create({
+      name: 'Shared',
+      createdBy: owner.user.id ?? owner.user._id,
+      members: [{ user: owner.user.id ?? owner.user._id, role: 'admin' }],
+    });
+
+    const res = await request(app)
+      .post('/api/boards')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({
+        title: 'Board in a shared workspace',
+        color: colors.boardColor._id.toString(),
+        workspaceId: shared._id.toString(),
+      });
+
+    expect(res.status).toBe(201);
+
+    const stored = await Board.findById(res.body.data._id).select('workspaceId');
+
+    expect(stored.workspaceId.toString()).toBe(shared._id.toString());
   });
 
   test('a board owns its columns, copied from its template', async () => {

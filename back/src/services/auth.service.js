@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
+import Workspace from '../models/Workspace.js';
 import env from '../config/env.js';
 import ApiError from '../utils/apiError.js';
 
@@ -85,13 +87,46 @@ export const registerUser = async userData => {
   const salt = await bcrypt.genSalt(env.SALT);
   const hashedPassword = await bcrypt.hash(password, salt);
 
-  // Create new user
-  const user = await User.create({
-    firstName,
-    lastName,
-    email,
-    password: hashedPassword,
-  });
+  // The account and its personal workspace are created together or not at
+  // all. Every board belongs to a workspace, so a user who exists without
+  // one can log in and then cannot do anything: the failure would look like
+  // a bug in board creation rather than a half-finished registration. The
+  // replica set that Phase 4 introduced for the board delete cascade is what
+  // makes this possible.
+  const session = await mongoose.startSession();
+  let user = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const [created] = await User.create(
+        [
+          {
+            firstName,
+            lastName,
+            email,
+            password: hashedPassword,
+          },
+        ],
+        { session }
+      );
+
+      user = created;
+
+      await Workspace.create(
+        [
+          {
+            name: 'Personal',
+            createdBy: user._id,
+            members: [{ user: user._id, role: 'admin' }],
+            isPersonal: true,
+          },
+        ],
+        { session }
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
 
   // A brand new session: sessionStartedAt is stamped now and never moves
   // again for the life of this session.
