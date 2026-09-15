@@ -242,9 +242,25 @@ Two things made it look worse than it is, and both are worth knowing before diag
 
 The `retries: 1` in the Playwright config masks this in ordinary use, which is why it has stayed open.
 
+**Still open after Phase 4, and two hypotheses are now ruled out.** Both were tried, measured and reverted rather than shipped, and both are recorded here so nobody spends the afternoon on them again.
+
+The first was `whileTap={{ scale: 0.98 }}` on the card's outer `motion.div`, which contains the drag handle. It looked compelling: pressing the handle scales the card and moves the handle out from under the cursor at the exact moment the sensor is waiting for a pointer move on it, and it would have explained why a distance constraint made things worse. Removing it measured 5 passes in 8, against a baseline of 5 in 6. No improvement.
+
+The second was `whileHover={{ scale: 1.02 }}`, on the theory that the spec measures the handle's bounding box before moving the pointer there, so it presses at coordinates taken before the card grew. Removing both animations measured 3 passes in 8. No improvement either, and if anything worse.
+
+So it is neither animation. What remains untested is whether this is a product defect at all or a defect in the spec's pointer choreography, and answering that needs a measurement method better than eight runs on a laptop that has been running Docker all afternoon. The honest state is: the mechanism is not understood, the fix is still not obvious, and guessing at it is what this entry has now cost twice.
+
 **P2-6. Drag-and-drop has no concurrency control.** File `front/src/pages/Board.tsx:92-183`.
 
 The optimistic state computation sits outside the try block, no service accepts an `AbortController`, and nothing prevents a second drag starting while the first request is in flight. A late failure from an earlier drag can roll back over a newer already-applied update. This becomes reachable the moment P0-3 is fixed, so it should be fixed in the same pass.
+
+Fixed in Phase 4. A ref holds the move currently in flight and a second drag aborts it rather than racing it, and an aborted move returns without touching state at all, since the newer drag owns the board by then. That is precisely the rollback-over-a-newer-update this finding describes.
+
+Any other failure, including the 409 the server now sends when the neighbours have moved, refetches the board rather than restoring a snapshot. Restoring is wrong for the same reason the original defect is wrong: a snapshot taken before the drag may by now be older than changes that did land.
+
+The arrangement logic came out of the page into `front/src/features/board/arrangeColumn.ts`, which is both the first piece of the feature-sliced structure in section 12 and the only way this was going to be tested. Driving a real dnd-kit drag under jsdom is not practical; a pure function that decides where a card lands and which neighbours that implies is thirteen cheap tests, including the cross-column case that used to always land at the bottom.
+
+One gap stated plainly rather than left implied: the abort guard itself has no automated test. Its correctness rests on a three-line early return and on the end-to-end suite exercising the happy path. Covering it properly needs the drag driven at the component level, which is Phase 5 work.
 
 **P2-7. `SALT` was never coerced to a number.** File `back/src/config/env.js:11`. Fixed during this pass.
 
