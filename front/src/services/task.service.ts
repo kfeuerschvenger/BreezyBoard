@@ -44,12 +44,20 @@ export const TaskService = {
   // A 409 from this call means the neighbours have moved since this client
   // last fetched the board, which is a thing the caller can act on by
   // refetching, unlike a 400.
-  async move(taskId: string, newStatus: string, between: TaskNeighbours = {}): Promise<Task> {
-    const response = await api.patch(`/tasks/${taskId}/move`, {
-      status: newStatus,
-      afterId: between.afterId ?? null,
-      beforeId: between.beforeId ?? null,
-    });
+  //
+  // `signal` lets a caller abandon a move that a newer one has overtaken.
+  // Without it a slow first request can resolve after a second one and
+  // undo it, which is the drag concurrency defect, P2-6.
+  async move(taskId: string, newStatus: string, between: TaskNeighbours = {}, signal?: AbortSignal): Promise<Task> {
+    const response = await api.patch(
+      `/tasks/${taskId}/move`,
+      {
+        status: newStatus,
+        afterId: between.afterId ?? null,
+        beforeId: between.beforeId ?? null,
+      },
+      { signal }
+    );
     return response.data.data;
   },
 

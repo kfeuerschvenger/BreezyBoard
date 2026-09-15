@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Board as BoardModel, Task } from '@/models';
 import { BoardService, TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
+import { arrangeColumn, byOrder, neighboursOf } from '@/features/board/arrangeColumn';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
   closestCorners,
@@ -13,7 +14,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import Column from '../components/Column';
@@ -30,46 +31,6 @@ interface ColumnData {
   order: number;
 }
 
-const byOrder = (a: Task, b: Task) => a.order.localeCompare(b.order);
-
-/**
- * The target column as it will read once the drag is released, plus where in
- * it the dragged card ended up.
- *
- * Returns null when the drop changes nothing, so the caller can skip the
- * request entirely rather than ask the server to move a card onto itself.
- */
-const arrangeColumn = (
-  tasks: Task[],
-  active: Task,
-  targetColumnId: string,
-  overTask: Task | undefined
-): { column: Task[]; position: number } | null => {
-  const current = tasks.filter(task => task.status === targetColumnId).sort(byOrder);
-
-  if (active.status === targetColumnId) {
-    const from = current.findIndex(task => task._id === active._id);
-    const to = overTask ? current.findIndex(task => task._id === overTask._id) : current.length - 1;
-
-    if (from === -1 || to === -1 || from === to) {
-      return null;
-    }
-
-    const column = arrayMove(current, from, to);
-    return { column, position: to };
-  }
-
-  // Coming from another column: land where the card being hovered sits and
-  // push it down, or at the bottom when the drop was on the column itself.
-  const overIndex = overTask ? current.findIndex(task => task._id === overTask._id) : -1;
-  const position = overIndex === -1 ? current.length : overIndex;
-  const column = [...current];
-
-  column.splice(position, 0, { ...active, status: targetColumnId });
-
-  return { column, position };
-};
-
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
@@ -81,6 +42,15 @@ const Board = () => {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // The move request currently in flight, if any. A second drag started
+  // before the first one answers aborts it rather than racing it: without
+  // this, a slow first request can resolve after a second one and roll its
+  // own stale snapshot back over an update the user has already seen
+  // applied. That is finding P2-6.
+  const inFlightMove = useRef<AbortController | null>(null);
+
+  useEffect(() => () => inFlightMove.current?.abort(), []);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -180,27 +150,53 @@ const Board = () => {
       return;
     }
 
-    const { column, position } = arranged;
-    const previous = tasks;
+    const { column } = arranged;
+
+    inFlightMove.current?.abort();
+    const controller = new AbortController();
+    inFlightMove.current = controller;
 
     setTasks(prev => [...prev.filter(task => task.status !== targetColumnId && task._id !== activeTask._id), ...column]);
+    setActiveTask(null);
 
     try {
-      const moved = await TaskService.move(activeTask._id, targetColumnId, {
-        afterId: position > 0 ? column[position - 1]._id : null,
-        beforeId: position < column.length - 1 ? column[position + 1]._id : null,
-      });
+      const moved = await TaskService.move(activeTask._id, targetColumnId, neighboursOf(arranged), controller.signal);
 
       // The server owns the ordering key, so the card is replaced with what
       // it actually wrote rather than left holding the placeholder used for
       // the optimistic render.
       setTasks(prev => prev.map(task => (task._id === moved._id ? moved : task)));
     } catch (error) {
-      setTasks(previous);
-      console.error('Error moving task:', error);
-    }
+      // A move this client abandoned because a newer one replaced it. The
+      // newer one owns the board's state now, so touching it here is exactly
+      // the rollback-over-a-newer-update this guard exists to prevent.
+      if (controller.signal.aborted) {
+        return;
+      }
 
-    setActiveTask(null);
+      // Anything else, including the 409 the server sends when the
+      // neighbours have moved, is answered by asking the server what the
+      // board actually looks like. Restoring a snapshot taken before the
+      // drag would be wrong for the same reason: by now it may be older
+      // than changes that did land.
+      console.error('Error moving task:', error);
+      await refreshTasks();
+    } finally {
+      if (inFlightMove.current === controller) {
+        inFlightMove.current = null;
+      }
+    }
+  };
+
+  const refreshTasks = async () => {
+    if (!boardId) return;
+
+    try {
+      const tasksData = await TaskService.getByBoard(boardId);
+      setTasks([...tasksData].sort(byOrder));
+    } catch (error) {
+      console.error('Error reloading tasks:', error);
+    }
   };
 
   const handleTaskClick = (task: Task) => {
