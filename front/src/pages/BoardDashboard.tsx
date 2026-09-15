@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Users, Calendar, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
-import * as Icons from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
 import { BoardService, DashboardService } from '@/services';
 import { resolveColorValue, resolveColorValueSync } from '@/utils/colorUtils';
 import type { Board, User } from '@/models';
+import { resolveIcon } from '@/shared/lib/lucideIcons';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
 
@@ -326,11 +326,14 @@ const BoardDashboard: React.FC = () => {
         {/* Boards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {boards.map((board, index) => {
-            const id = (board as any)._id ?? (board as any).id ?? `temp-${Date.now()}-${index}`;
-            const templateObj = (board as any).template;
-            const iconName = (templateObj && (templateObj.iconName ?? templateObj.icon)) || null;
-            const IconFromTemplate = (iconName && (Icons as any)[iconName]) || Icons.Folder;
-            const colorHex = boardColors[id] ?? resolveColorValueSync((board as any).color, '#64748B');
+            // `_id` is required on the model and the API always sends it.
+            // The fallback this replaced ended in `temp-${Date.now()}`,
+            // which produced a different React key on every render and
+            // defeated reconciliation for the whole grid. Finding P2-8.
+            const id = board._id;
+            const template = typeof board.template === 'object' ? board.template : null;
+            const IconFromTemplate = resolveIcon(template?.iconName);
+            const colorHex = boardColors[id] ?? resolveColorValueSync(board.color, '#64748B');
 
             const safeBoard = {
               id,

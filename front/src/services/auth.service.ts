@@ -14,7 +14,9 @@ export const AuthService = {
       throw new Error('Passwords do not match');
     }
 
-    const { confirmPassword: _confirmPassword, ...data } = credentials;
+    // confirmPassword is a client-side check only and must never be sent.
+    const { confirmPassword, ...data } = credentials;
+    void confirmPassword;
     const response = await api.post('/auth/register', data);
     return response.data.data;
   },

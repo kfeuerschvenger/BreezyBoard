@@ -58,11 +58,9 @@ const UserAvatar: React.FC = () => {
   const handleLogout = useCallback(async () => {
     closeDropdown();
     try {
-      // If AuthService.logout returns a promise, await it; otherwise nothing happens.
-      const maybePromise: any = AuthService.logout();
-      if (maybePromise && typeof maybePromise.then === 'function') {
-        await maybePromise;
-      }
+      // await is safe whether or not logout returns a promise, so the
+      // runtime thenable check this replaced was guarding against nothing.
+      await AuthService.logout();
     } catch (err) {
       console.error('Logout failed', err);
     } finally {

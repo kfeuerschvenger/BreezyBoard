@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as Icons from 'lucide-react';
 import { X } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { resolveIcon } from '@/shared/lib/lucideIcons';
 import { TemplateService, ColorService } from '@/services';
 import type { Template, Color } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
@@ -14,13 +13,6 @@ interface BoardFormData {
   color: string;
   template: string;
 }
-
-// Only the actual icon components from the lucide-react namespace are kept here.
-// This excludes helpers such as createLucideIcon, which is a plain function and
-// is not a valid JSX element type.
-const iconComponents: Record<string, LucideIcon> = Object.fromEntries(
-  Object.entries(Icons).filter((entry): entry is [string, LucideIcon] => typeof entry[1] === 'object')
-);
 
 // Component props
 interface CreateBoardModalProps {
@@ -258,8 +250,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {templates.map(template => {
                     // Resolve icon component
-                    const IconComponent =
-                      (template.iconName ? iconComponents[template.iconName] : undefined) ?? Icons.Folder;
+                    const IconComponent = resolveIcon(template.iconName);
 
                     const templateKey = template._id ?? template.name;
 

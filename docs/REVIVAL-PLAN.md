@@ -399,7 +399,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4, drag concurrency | Done | In-flight move aborted by the next drag, failures refetch rather than restore (P2-6) |
 | 4, indexes | Done | One compound index on tasks, three on boards, all verified as IXSCAN against the real queries |
 | 4, overall | **Done** | P2-6a stays open, with two ruled-out hypotheses recorded |
-| 5 onward | Not started | |
+| 5a, accessibility gate | Done | jsx-a11y plus layer rules, vitest-axe on every primitive, an axe ratchet over six live surfaces |
+| 5, remainder | In progress | Design tokens, then the component migration onto the primitives |
+| 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
 
@@ -765,6 +767,18 @@ Accessibility that is not enforced regresses on the next pull request. Three lay
 The end-to-end layer matters most here, because the three defects in section 5.1 were all invisible to static analysis. An axe scan with the task drawer open would have flagged the unlabeled dialog immediately.
 
 Definition of done for any component from here on: zero axe violations, operable by keyboard alone, visible focus ring, correct role and accessible name, and renders correctly at 390px, 768px and 1440px.
+
+**All three layers are in, as of Phase 5a.** The lint layer runs `eslint-plugin-jsx-a11y` plus the dependency-direction rules from section 12.3 written as `no-restricted-imports`. The component layer registers `vitest-axe` globally and covers every primitive. The end to end layer is `e2e/verify/accessibility.mjs`, driving six surfaces including two with a dialog open.
+
+Two of the three are ratchets rather than clean passes, and that is deliberate. The lint layer holds three accessibility rules at warn inside `src/components` and `src/pages`, the directories Phase 5c rewrites anyway, while the same rules are errors in `shared/`, `features/` and `app/`, where all new code lives. The end to end layer records the violation count per surface and fails on anything above it. Neither can get worse, and neither demanded that a linter's installation also rewrite the drag handle. A gate that failed on all the existing debt at once would be switched off within a week.
+
+The gate justified itself three times on the day it went in.
+
+It confirmed the prediction two paragraphs above, word for word: the task drawer reports `aria-dialog-name`, an unlabelled dialog, which nothing else in this repository had ever noticed.
+
+It found a defect no component could have fixed. `index.html` carried `user-scalable=no`, which stops a person pinching to zoom, fails WCAG 1.4.4, and disables the browser's own remedy for every other accessibility problem in the application. One line, and `meta-viewport` cleared from all six surfaces at once.
+
+And it nearly lied. The first measurement reported eleven contrast violations on the login page and four on the dashboard. Every one was an artefact of scanning during the entrance animation: framer-motion animates opacity from zero by writing inline styles, and axe computes contrast against whatever opacity it happens to find, so the count moved between 0, 3 and 11 across consecutive runs of an identical page. The script now waits for animations to settle, after which the count is zero and stays there. A ratchet built on a number that flaps is worse than no ratchet, because the first false red teaches everyone to ignore it. The contrast concern in P4-5 is about icon colours, which is WCAG 1.4.11 and a rule axe does not run by default, so it is neither confirmed nor refuted by any of this.
 
 ### 10.3 WCAG 2.2 criteria that specifically apply to this product
 

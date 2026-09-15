@@ -399,7 +399,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     let ownerId = '';
     if (task.owner) {
       if (typeof task.owner === 'object') {
-        ownerId = (task.owner as any)._id ?? '';
+        ownerId = task.owner._id ?? '';
       } else {
         ownerId = task.owner;
       }
