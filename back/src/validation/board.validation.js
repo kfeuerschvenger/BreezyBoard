@@ -10,12 +10,19 @@ export const idParamSchema = z
 // board.service.js createBoard reads title/description/color/template from
 // the body and adds createdBy/members itself. members can also be supplied
 // up front (it defaults to an empty array plus the creator otherwise).
+//
+// workspaceId is optional and omitting it is the normal case: the service
+// falls back to the caller's personal workspace, so the existing frontend,
+// which knows nothing about workspaces, keeps working unchanged. A supplied
+// value is checked against the caller's membership in the service, never
+// trusted from here.
 export const createBoardSchema = z
   .object({
     title: z.string().trim().min(1, 'Title is required'),
     description: z.string().trim().optional(),
     color: objectIdSchema,
     template: objectIdSchema.nullable().optional(),
+    workspaceId: objectIdSchema.optional(),
     members: z.array(objectIdSchema).optional(),
   })
   .strict();

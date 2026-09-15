@@ -33,6 +33,15 @@ const boardSchema = new mongoose.Schema(
       type: [createColumnSchema()],
       default: [],
     },
+    // Required, with no exceptions and no null case. Every account gets a
+    // personal workspace at registration, so a board always has one to
+    // belong to and no query anywhere needs a branch for boards that belong
+    // to nothing.
+    workspaceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
