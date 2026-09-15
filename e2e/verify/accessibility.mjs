@@ -1,0 +1,159 @@
+// The end to end layer of the accessibility gate, section 10.2 of the
+// revival plan.
+//
+// It matters more than the other two layers because the defects it catches
+// are the ones static analysis structurally cannot see. The unlabelled
+// dialog below is the exact case the plan predicted: "an axe scan with the
+// task drawer open would have flagged the unlabeled dialog immediately". It
+// does, and nothing else in this repository does.
+//
+// This is a ratchet rather than a pass/fail. The application has real
+// accessibility debt, all of it already written up as P4-3 and P4-5, and a
+// gate that simply failed on all of it would be switched off within a week.
+// Instead each surface carries the count that was measured when the gate
+// went in, and the script fails on anything above it. The numbers can only
+// go down. When one reaches zero, delete its line rather than leaving a
+// zero behind, so the table shrinks as the debt does.
+
+import { chromium } from 'playwright';
+import { AxeBuilder } from '@axe-core/playwright';
+
+const FRONT = process.env.E2E_FRONT_URL ?? 'http://localhost:5173';
+const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
+
+/**
+ * Violating elements per rule, per surface, as measured on 2026-09-15.
+ *
+ * Lower is the only direction allowed. A rule absent from a surface means
+ * zero, so introducing a new one fails even though no number changed.
+ */
+const BASELINE = {
+  login: { 'button-name': 1, 'heading-order': 1 },
+  register: { 'heading-order': 1 },
+  dashboard: { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
+  'dashboard, create board modal open': { region: 10, 'heading-order': 2, 'button-name': 1 },
+  board: { 'landmark-one-main': 1, region: 1 },
+  'board, task drawer open': { 'aria-dialog-name': 1, region: 1 },
+};
+
+// There is deliberately no colour-contrast entry anywhere above. The first
+// measurement reported eleven on the login page and four on the dashboard,
+// and every one of them turned out to be an artefact of scanning during the
+// entrance animation, which `settle` below now waits out. On the settled
+// page axe finds none. The contrast concern recorded in P4-5 is about icon
+// colours, which is WCAG 1.4.11 and a rule axe does not run by default, so
+// it is neither confirmed nor refuted by this script.
+
+const log = (...a) => console.log(...a);
+const results = [];
+
+const user = {
+  firstName: 'Axe',
+  lastName: 'Gate',
+  email: `axe-${Date.now()}@example.test`,
+  password: 'AxeGate1',
+};
+
+const browser = await chromium.launch();
+// AxeBuilder refuses a page created straight off the browser and wants an
+// explicit context, so the viewport is set on the context instead.
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const page = await context.newPage();
+
+const register = await page.request.post(`${API}/auth/register`, { data: user });
+if (!register.ok()) {
+  console.error(`registration failed with ${register.status()}.`);
+  console.error('Registration is rate limited to twenty an hour. Run: docker compose restart back');
+  await browser.close();
+  process.exit(1);
+}
+
+/**
+ * Wait for the entrance animations to finish before measuring.
+ *
+ * Without this the contrast count for the login page moved between 0, 3 and
+ * 11 across consecutive runs of the identical page. framer-motion animates
+ * opacity from zero by writing inline styles from requestAnimationFrame, and
+ * axe computes contrast against whatever opacity it finds, so scanning
+ * mid-transition measures a page that exists for about half a second and is
+ * never what anybody sees. A ratchet built on a number that flaps is worse
+ * than no ratchet, because the first false red teaches everyone to ignore
+ * it.
+ */
+const settle = async () => {
+  await page.waitForLoadState('networkidle').catch(() => {});
+  await page.waitForTimeout(900);
+};
+
+const scan = async surface => {
+  await settle();
+  const violations = (await new AxeBuilder({ page }).analyze()).violations;
+  const counted = Object.fromEntries(violations.map(v => [v.id, v.nodes.length]));
+  const allowed = BASELINE[surface] ?? {};
+  const rules = new Set([...Object.keys(counted), ...Object.keys(allowed)]);
+
+  log(`\n--- ${surface} ---`);
+
+  for (const rule of [...rules].sort()) {
+    const found = counted[rule] ?? 0;
+    const budget = allowed[rule] ?? 0;
+    const ok = found <= budget;
+    results.push(ok);
+
+    if (found === budget) {
+      log(`${ok ? 'PASS' : 'FAIL'}  ${rule}  -> ${found} (budget ${budget})`);
+    } else if (found < budget) {
+      log(`PASS  ${rule}  -> ${found}, down from ${budget}. Lower the baseline in this file.`);
+    } else {
+      const detail = violations.find(v => v.id === rule);
+      log(`FAIL  ${rule}  -> ${found}, above the budget of ${budget}  :: ${detail?.help ?? ''}`);
+      for (const node of detail?.nodes.slice(0, 3) ?? []) {
+        log(`        ${node.html.slice(0, 120)}`);
+      }
+    }
+  }
+
+  if (rules.size === 0) {
+    log('PASS  no violations at all');
+    results.push(true);
+  }
+};
+
+await page.goto(`${FRONT}/login`);
+await page.waitForSelector('form');
+await scan('login');
+
+await page.goto(`${FRONT}/register`);
+await page.waitForSelector('form').catch(() => {});
+await scan('register');
+
+// Sign in through the interface, so the session under test is a real one.
+await page.goto(`${FRONT}/login`);
+const form = page.locator('form').first();
+await form.getByLabel('Email address', { exact: true }).fill(user.email);
+await form.getByLabel('Password', { exact: true }).fill(user.password);
+await form.getByRole('button', { name: /sign in/i }).click();
+await page.getByText('My Boards').waitFor();
+await scan('dashboard');
+
+await page.getByRole('button', { name: /create board/i }).first().click();
+await page.waitForTimeout(400);
+await scan('dashboard, create board modal open');
+
+const boardName = `Axe Board ${Date.now()}`;
+await page.getByLabel(/board name/i).or(page.locator('input').first()).fill(boardName);
+await page.getByRole('button', { name: /^create board$/i }).last().click();
+await page.getByText(boardName).first().click();
+await page.waitForURL(/\/board\/[a-f0-9]{24}$/);
+await page.waitForTimeout(400);
+await scan('board');
+
+await page.getByRole('button', { name: /add task/i }).first().click();
+await page.waitForTimeout(400);
+await scan('board, task drawer open');
+
+await browser.close();
+
+const failed = results.filter(r => !r).length;
+log(`\n${results.length - failed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);

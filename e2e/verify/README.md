@@ -41,6 +41,7 @@ graph TD
   K[csp.mjs] -->|production stack| L[the policy does not<br/>break the app]
   M[integrity.mjs] -->|real database| N[the deployment can<br/>actually run transactions]
   O[workspaces.mjs] -->|four real accounts| P[two level access,<br/>and the admin exception]
+  Q[accessibility.mjs] -->|axe on a real page| R[a ratchet that only<br/>ever goes down]
 ```
 
 **`authorization.mjs`** replays the exploit recorded in appendix A of the revival plan. It registers two accounts, has the first create a board and a task, and asserts twelve outcomes. Six are refusals for an outsider, three cover a legitimate member who is not the creator, and three confirm the owner can still do their work.
@@ -77,6 +78,14 @@ The other half of the guarantee, that a failure partway through the cascade roll
 **`workspaces.mjs`** drives four real accounts through the two level access model: workspace membership is a prerequisite for reaching a board, explicit board membership is still required on top of it, and a workspace admin is the single exception who administers every board in their workspace.
 
 It sits next to `authorization.mjs` for the same reason that one does. Half of its assertions are refusals and half are successes, because a model that refused everybody would satisfy every negative assertion ever written. It also checks the two cases that are easy to get subtly wrong: that a board admins can administer is one they can also find in their list, and that adding somebody to a board actually admits them to the workspace, without which the invitation is inert and the person is refused on every request.
+
+**`accessibility.mjs`** is the end to end layer of the accessibility gate, and it is the layer that matters most, because what it catches is what static analysis structurally cannot see. It drives six surfaces, including two with a dialog open, and runs axe against each.
+
+It is a ratchet rather than a pass. Each surface carries the violation count measured when the gate went in, and the script fails on anything above it. Numbers may only go down, and a rule that reaches zero has its line deleted rather than left at zero, so the table shrinks as the debt does. A gate that failed on all the existing debt at once would be switched off within a week; one that cannot get worse is one people keep.
+
+It earned its keep before it was even finished. The first measurement reported eleven contrast violations on the login page and four on the dashboard, and every one was an artefact of scanning during the entrance animation: framer-motion animates opacity from zero by writing inline styles, and axe computes contrast against whatever opacity it finds. The count moved between 0, 3 and 11 across consecutive runs of an identical page. The script now waits for animations to settle first, after which the count is zero, consistently. A ratchet built on a number that flaps is worse than no ratchet, because the first false red teaches everyone to ignore it.
+
+It also confirmed the prediction in section 10.2 of the revival plan, word for word: the task drawer reports `aria-dialog-name`, an unlabelled dialog, which no lint rule and no unit test in this repository had ever noticed.
 
 **`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. Bring that stack up first:
 

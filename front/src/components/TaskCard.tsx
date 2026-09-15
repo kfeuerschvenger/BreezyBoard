@@ -98,7 +98,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isDragging = false }
 
   // Owner name resolution (owner can be an object or an id)
   const ownerName = useMemo(() => {
-    const owner = task.owner as any;
+    const owner = task.owner;
     if (owner && typeof owner === 'object') {
       return `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim();
     }
