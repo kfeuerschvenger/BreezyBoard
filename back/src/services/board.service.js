@@ -4,6 +4,8 @@ import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
 import Task from '../models/Task.js';
 import Workspace from '../models/Workspace.js';
+import { resolveWorkspaceRole } from '../middleware/auth.middleware.js';
+import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
 
 // Columns are copied out of the template rather than referenced, so that the
@@ -154,8 +156,45 @@ export const deleteBoard = async id => {
 // as before this parameter existed. `pagination` is always returned
 // alongside the boards so a client can discover `total` either way; only
 // whether `boards` itself is truncated depends on `limit` being present.
+/**
+ * The boards this user may read, as a Mongo filter.
+ *
+ * It mirrors `resolveBoardRole` clause for clause on purpose. A listing that
+ * is merely close to the per-board check is worse than one that is wrong in
+ * an obvious way: boards appear in the list and then answer 403 when opened,
+ * or exist and never appear at all, and neither reads as an access rule.
+ *
+ * Workspace membership gates everything, which is why it is an `$and` rather
+ * than another `$or` branch. Being in `Board.members` after being removed
+ * from the workspace grants nothing, in the listing exactly as in the check.
+ *
+ * @param {string} userId
+ * @returns {Promise<object>} a filter for Board.find
+ */
+export const visibleBoardFilter = async userId => {
+  const workspaces = await Workspace.find({ 'members.user': userId }).select('members');
+
+  const memberOf = [];
+  const adminOf = [];
+
+  for (const workspace of workspaces) {
+    memberOf.push(workspace._id);
+
+    if (resolveWorkspaceRole(workspace, userId) === 'admin') {
+      adminOf.push(workspace._id);
+    }
+  }
+
+  return {
+    $and: [
+      { workspaceId: { $in: memberOf } },
+      { $or: [{ createdBy: userId }, { members: userId }, { workspaceId: { $in: adminOf } }] },
+    ],
+  };
+};
+
 export const getUserBoards = async (userId, { limit, offset } = {}) => {
-  const filter = { $or: [{ createdBy: userId }, { members: userId }] };
+  const filter = await visibleBoardFilter(userId);
 
   const total = await Board.countDocuments(filter);
 
@@ -183,6 +222,19 @@ export const getUserBoards = async (userId, { limit, offset } = {}) => {
 };
 
 export const addBoardMembers = async (boardId, members) => {
+  const target = await Board.findById(boardId).select('workspaceId');
+
+  if (!target) {
+    throw new ApiError(404, 'Board not found');
+  }
+
+  // Board membership is inert without workspace membership: resolveBoardRole
+  // gives no role at all to somebody outside the workspace, so they would
+  // land in Board.members and still be refused on every request. See
+  // ensureWorkspaceMembership for why this grants rather than refuses, and
+  // what to revisit once workspace management has a real interface.
+  await ensureWorkspaceMembership(target.workspaceId, members);
+
   const board = await Board.findByIdAndUpdate(boardId, { $addToSet: { members: { $each: members } } }, { new: true })
     .populate('members', 'firstName lastName email role department avatar')
     .populate('color', 'name value')

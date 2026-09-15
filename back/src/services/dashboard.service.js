@@ -1,11 +1,12 @@
 import Board from '../models/Board.js';
 import Task from '../models/Task.js';
+import { visibleBoardFilter } from './board.service.js';
 
 export const getDashboardStats = async userId => {
-  // Obtener todos los boards del usuario
-  const boards = await Board.find({
-    $or: [{ createdBy: userId }, { members: userId }],
-  }).lean();
+  // The same boards the board list shows, by the same rule. Counting boards
+  // the user cannot open would make every total on the dashboard disagree
+  // with the page it summarizes.
+  const boards = await Board.find(await visibleBoardFilter(userId)).lean();
 
   // Calcular estadísticas
   const totalBoards = boards.length;
