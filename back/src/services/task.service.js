@@ -2,17 +2,18 @@ import Task from '../models/Task.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
 
-// The columns a task on this board may legally sit in. They live on the
-// BoardTemplate the board was created from, one collection away, which is
-// why this cannot be a schema enum.
+// The columns a task on this board may legally sit in. They are the board's
+// own, copied out of its template when it was created, so this is a single
+// document read. It still cannot be a schema enum: the valid set differs for
+// every board and Mongoose has no way to say that.
 const loadColumnIds = async boardId => {
-  const board = await Board.findById(boardId).select('template').populate('template', 'columns');
+  const board = await Board.findById(boardId).select('columns');
 
   if (!board) {
     throw new ApiError(404, 'Board not found');
   }
 
-  return (board.template?.columns ?? []).map(column => column._id.toString());
+  return board.columns.map(column => column._id.toString());
 };
 
 // A well-formed id that belongs to a different board is still wrong, and it

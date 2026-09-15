@@ -52,7 +52,41 @@ const board = await req('POST', '/boards', token, {
 });
 const boardId = board.body.data._id;
 
-const firstColumn = template.columns[0];
+// The board's own columns, not the template's. Creating the board copied
+// them out of the template with fresh ids, so a template column id is not a
+// valid status for any board.
+const boardColumns = [...board.body.data.columns].sort((a, b) => a.order - b.order);
+const firstColumn = boardColumns[0];
+
+log('--- a board owns its columns ---');
+const sibling = await req('POST', '/boards', token, {
+  title: 'Sibling board',
+  description: 'built from the same template',
+  color: boardColors.body.data[0]._id,
+  template: template._id,
+});
+const siblingColumnIds = sibling.body.data.columns.map(column => column._id);
+check(
+  'two boards from one template share no column id',
+  boardColumns.some(column => siblingColumnIds.includes(column._id)),
+  false
+);
+// Rejected because it names a column of the sibling board, not of this one.
+// While columns lived on the shared template the two were the same id and
+// this request would have been accepted.
+check(
+  'a sibling board column is not a valid status here',
+  (
+    await req('POST', `/tasks/board/${boardId}`, token, {
+      title: 'Misfiled task',
+      status: siblingColumnIds[0],
+      color: taskColors.body.data[0]._id,
+    })
+  ).status,
+  400
+);
+await req('DELETE', `/boards/${sibling.body.data._id}`, token);
+log('');
 const taskIds = [];
 // Created oldest first with the orders deliberately reversed, so that the
 // arrangement the board should show is one that creation order cannot

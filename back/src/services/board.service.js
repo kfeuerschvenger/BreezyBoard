@@ -1,8 +1,32 @@
 import mongoose from 'mongoose';
 
 import Board from '../models/Board.js';
+import BoardTemplate from '../models/BoardTemplate.js';
 import Task from '../models/Task.js';
 import ApiError from '../utils/apiError.js';
+
+// Columns are copied out of the template rather than referenced, so that the
+// board owns its column ids. Mongoose assigns fresh subdocument ids on the
+// way in, which is exactly the effect wanted: two boards created from one
+// template no longer share column ids, and renaming a column on one leaves
+// the other alone.
+const copyColumnsFromTemplate = async templateId => {
+  if (!templateId) {
+    return [];
+  }
+
+  const template = await BoardTemplate.findById(templateId).select('columns');
+
+  if (!template) {
+    throw new ApiError(404, 'Board template not found');
+  }
+
+  return template.columns.map(column => ({
+    title: column.title,
+    color: column.color,
+    order: column.order,
+  }));
+};
 
 export const createBoard = async (boardData, userId) => {
   // Ensures that the creator is included in the members
@@ -15,18 +39,13 @@ export const createBoard = async (boardData, userId) => {
     ...boardData,
     createdBy: userId,
     members: members,
+    columns: await copyColumnsFromTemplate(boardData.template),
   });
 
   await board.populate([
     { path: 'color', select: 'name value' },
-    {
-      path: 'template',
-      select: 'name iconName columns',
-      populate: {
-        path: 'columns.color',
-        select: 'name value',
-      },
-    },
+    { path: 'columns.color', select: 'name value' },
+    { path: 'template', select: 'name iconName' },
   ]);
 
   return board;
@@ -35,14 +54,8 @@ export const createBoard = async (boardData, userId) => {
 export const getBoardById = async id => {
   const board = await Board.findById(id)
     .populate('color', 'name value')
-    .populate({
-      path: 'template',
-      select: 'name iconName columns',
-      populate: {
-        path: 'columns.color',
-        select: 'name value',
-      },
-    });
+    .populate('columns.color', 'name value')
+    .populate('template', 'name iconName');
 
   if (!board) {
     throw new ApiError(404, 'Board not found');
@@ -58,14 +71,8 @@ export const updateBoard = async (id, updateData) => {
   })
     .populate('members', 'firstName lastName email')
     .populate('color', 'name value')
-    .populate({
-      path: 'template',
-      select: 'name iconName columns',
-      populate: {
-        path: 'columns.color',
-        select: 'name value',
-      },
-    });
+    .populate('columns.color', 'name value')
+    .populate('template', 'name iconName');
 
   if (!board) {
     throw new ApiError(404, 'Board not found');
@@ -146,14 +153,8 @@ export const addBoardMembers = async (boardId, members) => {
   const board = await Board.findByIdAndUpdate(boardId, { $addToSet: { members: { $each: members } } }, { new: true })
     .populate('members', 'firstName lastName email role department avatar')
     .populate('color', 'name value')
-    .populate({
-      path: 'template',
-      select: 'name iconName columns',
-      populate: {
-        path: 'columns.color',
-        select: 'name value',
-      },
-    });
+    .populate('columns.color', 'name value')
+    .populate('template', 'name iconName');
 
   if (!board) {
     throw new ApiError(404, 'Board not found');

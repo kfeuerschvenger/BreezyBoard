@@ -47,18 +47,18 @@ describe('tasks', () => {
   });
 
   test('create refuses a well formed column id belonging to another board', async () => {
-    const otherTemplate = await BoardTemplate.create({
-      name: 'Another Template',
-      description: 'Columns that belong to a different board',
-      columns: [{ title: 'Elsewhere', color: colors.columnColor._id, order: 0 }],
-    });
+    // Built from the same template on purpose. While columns lived on the
+    // template these two boards shared column ids, so this status would have
+    // been indistinguishable from a legitimate one.
+    const sibling = await createBoard(owner.token, colors.boardColor._id, { title: 'Sibling Board' });
+    const siblingColumns = await boardColumns(sibling._id);
 
     const res = await request(app)
       .post(`/api/tasks/board/${board._id}`)
       .set('Authorization', `Bearer ${owner.token}`)
       .send({
         title: 'Misfiled task',
-        status: otherTemplate.columns[0]._id.toString(),
+        status: siblingColumns[0]._id.toString(),
         color: colors.taskColor._id.toString(),
       });
 

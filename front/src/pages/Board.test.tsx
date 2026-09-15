@@ -28,15 +28,16 @@ const board: BoardModel = {
   title: 'Launch Plan',
   description: '',
   color: '#3B82F6',
+  columns: [
+    { _id: 'col-todo', title: 'To Do', color: { _id: 'c1', value: '#3B82F6' }, order: 0 },
+    { _id: 'col-done', title: 'Done', color: { _id: 'c2', value: '#22C55E' }, order: 1 },
+  ],
   template: {
     _id: 'template-1',
     name: 'Default',
     description: '',
     iconName: 'layout',
-    columns: [
-      { _id: 'col-todo', title: 'To Do', color: { _id: 'c1', value: '#3B82F6' }, order: 0 },
-      { _id: 'col-done', title: 'Done', color: { _id: 'c2', value: '#22C55E' }, order: 1 },
-    ],
+    columns: [],
   },
   createdBy: 'user-1',
   members: [],
