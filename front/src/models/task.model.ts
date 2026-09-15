@@ -10,7 +10,10 @@ export interface Task {
   owner: User | string;
   boardId: string;
   checklist: ChecklistItem[];
-  order: number;
+  // A fractional index minted by the server, not a position. It sorts
+  // lexicographically, so comparing two of them is a string comparison and
+  // never arithmetic.
+  order: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -78,8 +78,13 @@ check(
 check('DELETE /tasks/:id     as outsider', (await req('DELETE', `/tasks/${taskId}`, attacker.token)).status, 403);
 check(
   'PATCH /tasks/:id/move as outsider',
-  (await req('PATCH', `/tasks/${taskId}/move`, attacker.token, { status: columns[columns.length - 1]._id, order: 0 }))
-    .status,
+  (
+    await req('PATCH', `/tasks/${taskId}/move`, attacker.token, {
+      status: columns[columns.length - 1]._id,
+      afterId: null,
+      beforeId: null,
+    })
+  ).status,
   403
 );
 check(

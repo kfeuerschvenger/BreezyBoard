@@ -31,7 +31,9 @@ const checklistItemInputSchema = z.object({
 });
 
 // task.service.js createTask reads title/description/status/priority/color/
-// owner/boardId/checklist/order from the body. boardId is accepted here
+// owner/boardId/checklist from the body. `order` is absent on purpose: the
+// ordering key is a fractional index minted server side, so a client has no
+// way to propose one. boardId is accepted here
 // only because the real frontend (TaskDrawer.tsx) echoes it back in the
 // create payload; task.controller.js createTask always overwrites it with
 // req.params.boardId before calling the service, so a client-supplied value
@@ -52,7 +54,6 @@ export const createTaskSchema = z
     color: objectIdSchema,
     owner: objectIdSchema.optional(),
     boardId: objectIdSchema.optional(),
-    order: z.number().optional(),
     checklist: z.array(checklistItemInputSchema).optional(),
   })
   .strict();
@@ -60,7 +61,8 @@ export const createTaskSchema = z
 // Whitelist for PUT /api/tasks/:id. boardId, order, _id and timestamps are
 // intentionally excluded: boardId is the P1-3 mass-assignment fix (a client
 // can no longer relocate a task into another board through this route), and
-// order/status changes go through the dedicated move/orders endpoints.
+// `order` is never client-supplied anywhere, since the ordering key is
+// minted by the server from the neighbours a move names.
 // Deliberately NOT .strict(): an unexpected field (boardId included) is
 // silently stripped from result.data instead of rejected, so the update
 // still succeeds (200) with the extra field simply gone rather than the
@@ -75,23 +77,16 @@ export const updateTaskSchema = z.object({
   checklist: z.array(checklistItemInputSchema).optional(),
 });
 
+// A move is expressed as the two cards the task was dropped between, not as
+// a position. Both are nullable and both may be absent: no afterId means the
+// top of the column, no beforeId means the bottom, neither means the column
+// was empty. The server mints the ordering key from them, so there is
+// deliberately no way for a client to send one.
 export const moveTaskSchema = z
   .object({
     status: objectIdSchema,
-    order: z.number(),
-  })
-  .strict();
-
-const orderUpdateEntrySchema = z
-  .object({
-    id: objectIdSchema,
-    order: z.number(),
-  })
-  .strict();
-
-export const updateOrdersSchema = z
-  .object({
-    updates: z.array(orderUpdateEntrySchema).min(1, 'At least one update is required'),
+    afterId: objectIdSchema.nullable().optional(),
+    beforeId: objectIdSchema.nullable().optional(),
   })
   .strict();
 

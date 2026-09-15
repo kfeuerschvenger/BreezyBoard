@@ -64,9 +64,23 @@ const taskSchema = new mongoose.Schema(
       required: true,
     },
     checklist: [checklistItemSchema],
+    // A fractional index, not a position. It is a base 62 key chosen to sort
+    // lexicographically between the keys of the two tasks it was dropped
+    // between, which means moving one card writes exactly one document.
+    //
+    // The integer version had to renumber every task below the insertion
+    // point on every drag, which is N writes for one gesture and a race the
+    // moment two people reorder at once: both renumber from their own view
+    // of the column and the later write silently discards the earlier one.
+    //
+    // The alphabet is 0-9A-Za-z, whose ASCII order is its own order, so a
+    // plain Mongo sort on this field is the correct sort with no collation
+    // to configure. Keys are generated server side only, in
+    // task.service.js: a client sends the two neighbours it dropped between
+    // and never a key of its own.
     order: {
-      type: Number,
-      default: 0,
+      type: String,
+      required: true,
     },
   },
   {

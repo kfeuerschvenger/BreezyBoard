@@ -1,6 +1,12 @@
 import api from './api.service';
 import type { Task, ChecklistItem } from '@/models';
 
+/** The two cards a task was dropped between. Null at either end of a column. */
+export interface TaskNeighbours {
+  afterId?: string | null;
+  beforeId?: string | null;
+}
+
 export const TaskService = {
   async getByBoard(boardId: string): Promise<Task[]> {
     const response = await api.get(`/tasks/board/${boardId}`);
@@ -30,19 +36,21 @@ export const TaskService = {
     await api.delete(`/tasks/${id}`);
   },
 
-  // newOrder is optional: some callers only change status and leave order untouched
-  // (the backend ignores an undefined order field on the update).
-  async move(taskId: string, newStatus: string, newOrder?: number): Promise<Task> {
-    const payload = {
+  // A move names the two cards the task was dropped between, not a position.
+  // The server derives the ordering key from them, so it is the only thing
+  // that ever writes one. Either neighbour may be null: no `afterId` means
+  // the top of the column, no `beforeId` means the bottom.
+  //
+  // A 409 from this call means the neighbours have moved since this client
+  // last fetched the board, which is a thing the caller can act on by
+  // refetching, unlike a 400.
+  async move(taskId: string, newStatus: string, between: TaskNeighbours = {}): Promise<Task> {
+    const response = await api.patch(`/tasks/${taskId}/move`, {
       status: newStatus,
-      order: newOrder,
-    };
-    const response = await api.patch(`/tasks/${taskId}/move`, payload);
+      afterId: between.afterId ?? null,
+      beforeId: between.beforeId ?? null,
+    });
     return response.data.data;
-  },
-
-  async updateOrders(boardId: string, updates: Array<{ id: string; order: number }>): Promise<void> {
-    await api.patch(`/tasks/board/${boardId}/orders`, { updates });
   },
 
   async updateChecklistItem(taskId: string, itemId: string, data: Partial<ChecklistItem>): Promise<Task> {

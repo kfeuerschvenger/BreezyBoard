@@ -10,7 +10,6 @@ import {
   idParamSchema,
   moveTaskSchema,
   updateChecklistItemSchema,
-  updateOrdersSchema,
   updateTaskSchema,
 } from '../validation/task.validation.js';
 
@@ -31,12 +30,6 @@ router.post(
   validate({ params: boardIdParamSchema, body: createTaskSchema }),
   requireBoardRole('member'),
   TaskController.createTask
-);
-router.patch(
-  '/board/:boardId/orders',
-  validate({ params: boardIdParamSchema, body: updateOrdersSchema }),
-  requireBoardRole('member'),
-  TaskController.updateOrders
 );
 
 // Individual task routes

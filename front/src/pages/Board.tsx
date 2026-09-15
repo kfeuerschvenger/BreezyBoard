@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Board as BoardModel, Task } from '@/models';
 import { BoardService, TaskService } from '@/services';
+import type { TaskNeighbours } from '@/services/task.service';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
   closestCorners,
@@ -28,6 +29,46 @@ interface ColumnData {
   color: string;
   order: number;
 }
+
+const byOrder = (a: Task, b: Task) => a.order.localeCompare(b.order);
+
+/**
+ * The target column as it will read once the drag is released, plus where in
+ * it the dragged card ended up.
+ *
+ * Returns null when the drop changes nothing, so the caller can skip the
+ * request entirely rather than ask the server to move a card onto itself.
+ */
+const arrangeColumn = (
+  tasks: Task[],
+  active: Task,
+  targetColumnId: string,
+  overTask: Task | undefined
+): { column: Task[]; position: number } | null => {
+  const current = tasks.filter(task => task.status === targetColumnId).sort(byOrder);
+
+  if (active.status === targetColumnId) {
+    const from = current.findIndex(task => task._id === active._id);
+    const to = overTask ? current.findIndex(task => task._id === overTask._id) : current.length - 1;
+
+    if (from === -1 || to === -1 || from === to) {
+      return null;
+    }
+
+    const column = arrayMove(current, from, to);
+    return { column, position: to };
+  }
+
+  // Coming from another column: land where the card being hovered sits and
+  // push it down, or at the bottom when the drop was on the column itself.
+  const overIndex = overTask ? current.findIndex(task => task._id === overTask._id) : -1;
+  const position = overIndex === -1 ? current.length : overIndex;
+  const column = [...current];
+
+  column.splice(position, 0, { ...active, status: targetColumnId });
+
+  return { column, position };
+};
 
 const Board = () => {
   const navigate = useNavigate();
@@ -67,8 +108,7 @@ const Board = () => {
 
         // Get board tasks and sort by order
         const tasksData = await TaskService.getByBoard(boardId);
-        const sortedTasks = tasksData.sort((a, b) => a.order - b.order);
-        setTasks(sortedTasks);
+        setTasks([...tasksData].sort(byOrder));
 
         // The board's own columns, not its template's. They were copied out
         // of the template when the board was created and belong to it since,
@@ -125,70 +165,39 @@ const Board = () => {
       return;
     }
 
-    // If moving to a different column
-    if (activeTask.status !== targetColumnId) {
-      const originalStatus = activeTask.status;
+    // Build the column exactly as it will look after the drop, then read the
+    // dropped card's neighbours out of it. One arrangement drives both the
+    // optimistic render and the request, so the two cannot disagree.
+    //
+    // This is also what fixes the cross-column drop. The previous version
+    // computed one past the maximum order of the target column, so a card
+    // dropped halfway down another column always landed at the bottom of it,
+    // wherever it was released.
+    const arranged = arrangeColumn(tasks, activeTask, targetColumnId, overTask);
 
-      // Get tasks in target column to determine new order
-      const targetColumnTasks = tasks.filter(task => task.status === targetColumnId);
-      const newOrder = targetColumnTasks.length > 0 ? Math.max(...targetColumnTasks.map(t => t.order)) + 1 : 0;
-
-      // Optimistic UI update
-      setTasks(prev =>
-        prev.map(task => (task._id === activeTask._id ? { ...task, status: targetColumnId, order: newOrder } : task))
-      );
-
-      try {
-        await TaskService.move(activeTask._id, targetColumnId, newOrder);
-      } catch (error) {
-        // Revert on error
-        setTasks(prev =>
-          prev.map(task =>
-            task._id === activeTask._id ? { ...task, status: originalStatus, order: activeTask.order } : task
-          )
-        );
-        console.error('Error moving task:', error);
-      }
+    if (!arranged) {
+      setActiveTask(null);
+      return;
     }
-    // If reordering within the same column
-    else if (overTask && activeTask._id !== overTask._id) {
-      // Get all tasks in the current column
-      const columnTasks = tasks.filter(task => task.status === targetColumnId).sort((a, b) => a.order - b.order);
 
-      // Find indices
-      const oldIndex = columnTasks.findIndex(task => task._id === activeTask._id);
-      const newIndex = columnTasks.findIndex(task => task._id === overTask._id);
+    const { column, position } = arranged;
+    const previous = tasks;
 
-      if (oldIndex !== newIndex) {
-        // Reorder tasks
-        const reorderedTasks = arrayMove(columnTasks, oldIndex, newIndex);
+    setTasks(prev => [...prev.filter(task => task.status !== targetColumnId && task._id !== activeTask._id), ...column]);
 
-        // Update orders
-        const updatedTasks = reorderedTasks.map((task, index) => ({
-          ...task,
-          order: index,
-        }));
+    try {
+      const moved = await TaskService.move(activeTask._id, targetColumnId, {
+        afterId: position > 0 ? column[position - 1]._id : null,
+        beforeId: position < column.length - 1 ? column[position + 1]._id : null,
+      });
 
-        // Update state with reordered tasks
-        setTasks(prev => {
-          const otherTasks = prev.filter(task => task.status !== targetColumnId);
-          return [...otherTasks, ...updatedTasks];
-        });
-
-        try {
-          // Update orders in backend
-          await TaskService.updateOrders(
-            boardId!,
-            updatedTasks.map(task => ({ id: task._id, order: task.order }))
-          );
-        } catch (error) {
-          // Revert on error
-          const tasksData = await TaskService.getByBoard(boardId!);
-          const sortedTasks = tasksData.sort((a, b) => a.order - b.order);
-          setTasks(sortedTasks);
-          console.error('Error updating task orders:', error);
-        }
-      }
+      // The server owns the ordering key, so the card is replaced with what
+      // it actually wrote rather than left holding the placeholder used for
+      // the optimistic render.
+      setTasks(prev => prev.map(task => (task._id === moved._id ? moved : task)));
+    } catch (error) {
+      setTasks(previous);
+      console.error('Error moving task:', error);
     }
 
     setActiveTask(null);
@@ -232,9 +241,12 @@ const Board = () => {
         const doneColumn = columns.reduce((max, col) => (col.order > max.order ? col : max), columns[0]);
 
         if (doneColumn && result.status !== doneColumn.id) {
-          const doneTasks = tasks.filter(task => task.status === doneColumn.id);
-          const nextOrder = doneTasks.length > 0 ? Math.max(...doneTasks.map(t => t.order)) + 1 : 0;
-          await handleTaskMove(result._id, doneColumn.id, nextOrder);
+          // Completing a checklist sends the task to the bottom of the last
+          // column, which is the only neighbour that needs naming.
+          const doneTasks = tasks.filter(task => task.status === doneColumn.id).sort(byOrder);
+          await handleTaskMove(result._id, doneColumn.id, {
+            afterId: doneTasks.length > 0 ? doneTasks[doneTasks.length - 1]._id : null,
+          });
         }
       }
 
@@ -264,10 +276,10 @@ const Board = () => {
     setDrawerOpen(true);
   };
 
-  const handleTaskMove = async (taskId: string, newStatus: string, newOrder?: number) => {
+  const handleTaskMove = async (taskId: string, newStatus: string, between: TaskNeighbours = {}) => {
     try {
-      await TaskService.move(taskId, newStatus, newOrder);
-      setTasks(prev => prev.map(task => (task._id === taskId ? { ...task, status: newStatus } : task)));
+      const moved = await TaskService.move(taskId, newStatus, between);
+      setTasks(prev => prev.map(task => (task._id === taskId ? moved : task)));
     } catch (error) {
       console.error('Error moving task:', error);
     }
