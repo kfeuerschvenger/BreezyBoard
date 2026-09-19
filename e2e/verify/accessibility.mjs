@@ -38,7 +38,11 @@ const BASELINE = {
   // left of both is the dashboard behind the dialog rather than the dialog.
   'dashboard, create board modal open': { region: 6, 'heading-order': 1 },
   board: { 'landmark-one-main': 1, region: 1 },
-  'board, task drawer open': { 'aria-dialog-name': 1, region: 1 },
+  // aria-dialog-name was 1 here and its line is gone rather than sitting at
+  // zero. It was the violation section 10.2 predicted this gate would find,
+  // word for word, and it closed when the task drawer moved onto the shared
+  // Drawer, whose dialog is labelled by its own title.
+  'board, task drawer open': { region: 1 },
 };
 
 // There is deliberately no colour-contrast entry anywhere above. The first

@@ -55,11 +55,11 @@ const getSaveButton = () => screen.getByRole('button', { name: 'Save Changes' })
 // file pins it. The helper stays because tests that need a color to click
 // have to wait for one to exist anyway.
 const waitForColorsLoaded = async () => {
-  const button = await screen.findByRole('button', { name: 'Blue' });
+  const swatch = await screen.findByRole('radio', { name: 'Blue' });
   await act(async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
   });
-  return button;
+  return swatch;
 };
 
 const renderDrawer = (onSave = vi.fn()) => {
@@ -69,7 +69,7 @@ const renderDrawer = (onSave = vi.fn()) => {
 };
 
 const selectOwner = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
-  const ownerSearch = screen.getByLabelText('Search team members');
+  const ownerSearch = screen.getByLabelText(/Owner/);
   await user.type(ownerSearch, name);
   // The suggestion list is behind a 220ms debounce on a real timer, stacked on
   // top of the colour settle above. The default 5s was close enough to the edge
@@ -99,7 +99,7 @@ describe('TaskDrawer submit gating', () => {
 
     await user.type(getTitleInput(), 'Ship the release notes');
     await user.type(getDescriptionInput(), 'Write and publish the notes for this cycle.');
-    await user.click(screen.getByRole('button', { name: 'Blue' }));
+    await user.click(screen.getByRole('radio', { name: 'Blue' }));
 
     expect(getSaveButton()).toBeDisabled();
 
@@ -123,7 +123,7 @@ describe('TaskDrawer submit gating', () => {
 
     await user.type(getTitleInput(), 'Ship the release notes');
     await user.type(getDescriptionInput(), 'Write and publish the notes for this cycle.');
-    await user.click(screen.getByRole('button', { name: 'Blue' }));
+    await user.click(screen.getByRole('radio', { name: 'Blue' }));
     await selectOwner(user, 'Ada');
     await waitFor(() => expect(getSaveButton()).toBeEnabled());
 
@@ -140,7 +140,7 @@ describe('TaskDrawer submit gating', () => {
 
     await user.type(getTitleInput(), 'Ship the release notes');
     await user.type(getDescriptionInput(), 'Write and publish the notes for this cycle.');
-    await user.click(screen.getByRole('button', { name: 'Blue' }));
+    await user.click(screen.getByRole('radio', { name: 'Blue' }));
     await selectOwner(user, 'Ada');
     await waitFor(() => expect(getSaveButton()).toBeEnabled());
 
@@ -189,7 +189,7 @@ describe('TaskDrawer form state versus the async color fetch', () => {
       releaseColors(COLORS);
       await new Promise(resolve => setTimeout(resolve, 50));
     });
-    await screen.findByRole('button', { name: 'Blue' });
+    await screen.findByRole('radio', { name: 'Blue' });
 
     expect(getTitleInput()).toHaveValue('Typed before the colors arrived');
     expect(getDescriptionInput()).toHaveValue('And so was this');
@@ -217,9 +217,12 @@ describe('TaskDrawer form state versus the async color fetch', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    // The raw hex resolves to the matching swatch rather than being kept as is.
-    const red = await screen.findByRole('button', { name: 'Red' });
-    expect(red.className).toContain('ring-2');
+    // The raw hex resolves to the matching swatch rather than being kept as
+    // is. Asserted on the control's own state rather than on a CSS class,
+    // which is both sturdier and what a user of assistive technology is
+    // actually told.
+    const red = await screen.findByRole('radio', { name: 'Red' });
+    expect(red).toBeChecked();
   });
 });
 
@@ -265,7 +268,7 @@ describe('TaskDrawer draft persistence', () => {
 
     await user.type(getTitleInput(), 'Ship the release notes');
     await user.type(getDescriptionInput(), 'Write and publish the notes for this cycle.');
-    await user.click(screen.getByRole('button', { name: 'Blue' }));
+    await user.click(screen.getByRole('radio', { name: 'Blue' }));
     await selectOwner(user, 'Ada');
     await waitFor(() => expect(getSaveButton()).toBeEnabled());
 

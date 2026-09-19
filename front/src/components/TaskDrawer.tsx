@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Trash2, User, Palette, Flag, GripVertical } from 'lucide-react';
 import { ColorService, UserService } from '@/services';
 import type { User as UserModel, Task } from '@/models';
@@ -15,8 +14,26 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDraft } from '@/shared/hooks/useDraft';
+import { Button, Drawer, Field, Input, Textarea } from '@/shared/ui';
+import type { FieldControlProps } from '@/shared/ui';
+
+// The legend of a group carries the same weight as a Field's label, so the
+// three grouped controls below read as part of the same form.
+const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-heading';
+
+// Selection expressed with real radio inputs inside labels, hidden from
+// sight but not from the accessibility tree: arrow keys move within the
+// group, the group is announced as a group and the legend names it, all from
+// the browser. The same shape as the two pickers in CreateBoardModal.
+const SWATCH_CLASSES =
+  'w-8 h-8 rounded-full border-2 transition-transform cursor-pointer inline-block ' +
+  'border-gray-300 hover:border-gray-400 has-[:checked]:border-gray-900 has-[:checked]:scale-110 ' +
+  'has-[:checked]:ring-2 has-[:checked]:ring-blue-500 ' +
+  'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
 
 interface UserSearchInputProps {
+  /** Supplied by the Field that labels this control: id, aria-invalid, aria-describedby. */
+  controlProps?: FieldControlProps;
   value: string;
   onChange: (value: string) => void;
   members: UserModel[];
@@ -103,7 +120,7 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onU
 // ----------------------
 // User search component
 // ----------------------
-const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, members }) => {
+const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, members, controlProps }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState<UserModel[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -234,7 +251,7 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
           onChange={e => handleInputChange(e.target.value)}
           placeholder="Search team members..."
           className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          aria-label="Search team members"
+          {...controlProps}
         />
         {selectedUser && (
           <button
@@ -594,198 +611,163 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
   const drawerTitle = task?._id ? 'Edit Task' : 'Create New Task';
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
-            onClick={onClose}
-          />
+    <Drawer open={open} onClose={onClose} title={drawerTitle}>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <Field label="Title" required error={errors.title}>
+          {props => (
+            <Input
+              {...props}
+              type="text"
+              value={formData.title}
+              onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
+              hasError={Boolean(errors.title)}
+              placeholder="Enter task title"
+            />
+          )}
+        </Field>
 
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-xl z-50 overflow-y-auto"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900 font-heading">{drawerTitle}</h2>
-                <button
-                  onClick={onClose}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                  aria-label="Close"
-                >
-                  <X size={20} />
-                </button>
-              </div>
+        <Field label="Description" required error={errors.description}>
+          {props => (
+            <Textarea
+              {...props}
+              value={formData.description}
+              onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              rows={3}
+              hasError={Boolean(errors.description)}
+              placeholder="Enter task description"
+              className="font-body"
+            />
+          )}
+        </Field>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-heading">Title *</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.title ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter task title"
-                    aria-required
-                  />
-                  {errors.title && <p className="mt-1 text-sm text-red-600">{errors.title}</p>}
-                </div>
+        <Field label="Owner" required error={errors.owner} icon={<User size={16} className="text-gray-400" />}>
+          {props => (
+            <UserSearchInput
+              value={formData.owner}
+              onChange={handleOwnerChange}
+              members={boardMembers}
+              controlProps={props}
+            />
+          )}
+        </Field>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-heading">Description *</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    rows={3}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-body ${
-                      errors.description ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter task description"
-                  />
-                  {errors.description && <p className="mt-1 text-sm text-red-600">{errors.description}</p>}
-                </div>
+        <fieldset>
+          <legend className={LEGEND_CLASSES}>
+            <Flag size={16} className="inline mr-1" aria-hidden="true" />
+            Priority
+          </legend>
+          <div className="flex gap-2">
+            {priorities.map(priority => (
+              <label
+                key={priority.value}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer bg-gray-100 text-gray-600 hover:bg-gray-200 has-[:checked]:${priority.color} has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500`}
+              >
+                <input
+                  type="radio"
+                  name="priority"
+                  value={priority.value}
+                  className="sr-only"
+                  checked={formData.priority === priority.value}
+                  onChange={() =>
+                    setFormData(prev => ({ ...prev, priority: priority.value as 'low' | 'medium' | 'high' }))
+                  }
+                />
+                {priority.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-heading">
-                    <User size={16} className="inline mr-1" />
-                    Owner *
-                  </label>
-                  <UserSearchInput value={formData.owner} onChange={handleOwnerChange} members={boardMembers} />
-                  {errors.owner && <p className="mt-1 text-sm text-red-600">{errors.owner}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-heading">
-                    <Flag size={16} className="inline mr-1" />
-                    Priority
-                  </label>
-                  <div className="flex gap-2">
-                    {priorities.map(priority => (
-                      <button
-                        key={priority.value}
-                        type="button"
-                        onClick={() =>
-                          setFormData(prev => ({ ...prev, priority: priority.value as 'low' | 'medium' | 'high' }))
-                        }
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                          formData.priority === priority.value
-                            ? priority.color
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {priority.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2 font-heading">
-                    <Palette size={16} className="inline mr-1" />
-                    Color *
-                  </label>
-                  {isLoadingColors ? (
-                    <div className="flex justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        {taskColors.map(color => (
-                          <button
-                            key={color._id}
-                            type="button"
-                            onClick={() => setFormData(prev => ({ ...prev, color: color._id }))}
-                            className={`w-8 h-8 rounded-full border-2 transition-transform cursor-pointer ${
-                              formData.color === color._id
-                                ? 'border-gray-900 scale-110 ring-2 ring-blue-500'
-                                : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                            style={{ backgroundColor: color.value }}
-                            aria-label={color.name ?? color.value}
-                          />
-                        ))}
-                      </div>
-                      {errors.color && <p className="mt-1 text-sm text-red-600">{errors.color}</p>}
-                    </>
-                  )}
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="block text-sm font-medium text-gray-700 font-heading">Checklist</label>
-                    <button
-                      type="button"
-                      onClick={handleChecklistAdd}
-                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      <Plus size={16} />
-                      Add Item
-                    </button>
-                  </div>
-
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChecklistReorder}>
-                    <SortableContext
-                      items={formData.checklist.map(item => item.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="space-y-2">
-                        {formData.checklist.map(item => (
-                          <SortableChecklistItem
-                            key={item.id}
-                            item={item}
-                            onUpdate={handleChecklistUpdate}
-                            onDelete={handleChecklistDelete}
-                          />
-                        ))}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                </div>
-
-                {submitError && (
-                  <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-                    {submitError}
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    disabled={!isFormValid() || isSubmitting}
-                    className={`flex-1 py-2 px-4 rounded-lg transition-colors font-medium cursor-pointer ${
-                      !isFormValid() || isSubmitting
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {isSubmitting ? 'Saving...' : 'Save Changes'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+        <fieldset>
+          <legend className={LEGEND_CLASSES}>
+            <Palette size={16} className="inline mr-1" aria-hidden="true" />
+            Color *
+          </legend>
+          {isLoadingColors ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {taskColors.map(color => (
+                  <label
+                    key={color._id}
+                    className={SWATCH_CLASSES}
+                    style={{ backgroundColor: color.value }}
+                  >
+                    <input
+                      type="radio"
+                      name="color"
+                      value={color._id}
+                      className="sr-only"
+                      checked={formData.color === color._id}
+                      onChange={() => setFormData(prev => ({ ...prev, color: color._id }))}
+                    />
+                    {/* The swatch is a block of colour and nothing else, so
+                        the name has to be supplied here or the control is
+                        announced as "radio" with no indication of which. */}
+                    <span className="sr-only">{color.name ?? color.value}</span>
+                  </label>
+                ))}
+              </div>
+              {errors.color && (
+                <p role="alert" className="mt-1 text-sm text-red-600">
+                  {errors.color}
+                </p>
+              )}
+            </>
+          )}
+        </fieldset>
+
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            {/* A heading rather than a label: it names a section, not a
+                control, which is what made it one of the six orphan labels
+                the gate was holding. h3 because the drawer title is an h2. */}
+            <h3 className="text-sm font-medium text-gray-700 font-heading">Checklist</h3>
+            <button
+              type="button"
+              onClick={handleChecklistAdd}
+              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+            >
+              <Plus size={16} aria-hidden="true" />
+              Add Item
+            </button>
+          </div>
+
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChecklistReorder}>
+            <SortableContext items={formData.checklist.map(item => item.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {formData.checklist.map(item => (
+                  <SortableChecklistItem
+                    key={item.id}
+                    item={item}
+                    onUpdate={handleChecklistUpdate}
+                    onDelete={handleChecklistDelete}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </div>
+
+        {submitError && (
+          <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-4">
+          <Button type="submit" disabled={!isFormValid() || isSubmitting} className="flex-1 justify-center">
+            {isSubmitting ? 'Saving...' : 'Save Changes'}
+          </Button>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Drawer>
   );
 };
 
