@@ -413,7 +413,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4, overall | **Done** | P2-6a stays open, with two ruled-out hypotheses recorded |
 | 5a, accessibility gate | Done | jsx-a11y plus layer rules, vitest-axe on every primitive, an axe ratchet over six live surfaces |
 | 5a, design tokens | Done | Inter actually bound, font-heading and font-body stop being no-ops (P4-1) |
-| 5, remainder | In progress | The component migration onto the primitives |
+| 5c, create board modal | Done | On Modal, Field and React Hook Form. Labels 10 to 6, button-name cleared, region 10 to 6 |
+| 5, remainder | In progress | Task drawer, the remaining modals, the pages, and a server state layer |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1051,6 +1052,22 @@ A page should read as composition and nothing else: route params in, hooks for d
 | `Register.tsx` | 26 | Unchanged |
 
 The reduction is not deletion, it is relocation. The `handleDragEnd` block in `Board.tsx:92-183` is 91 lines of business logic in a page component, and it is also finding P2-6, the drag concurrency problem. Moving it into `useTaskDragAndDrop` is what makes it testable, which is what makes P2-6 fixable with confidence.
+
+### 12.6b Migration notes
+
+What the first component migration actually taught, recorded as it happens rather than as a retrospective.
+
+**`CreateBoardModal`, onto `Modal`, `Field` and React Hook Form.** Ten characterization tests went in first, against the implementation that was already there, which is what the sequencing below argues for and is the only reason the rest of this entry is short. Its draft persistence is three effects whose ordering is load bearing and documented only in comments; a rewrite that quietly lost one would have looked entirely fine.
+
+The two selection grids became `fieldset` and `legend` around real radio inputs, hidden with `sr-only` and styled through `has-[:checked]:`. That is less code than the button grid it replaced, and it buys keyboard operation, grouping and naming from the browser rather than from anything written here. Two of the ten `label-has-associated-control` warnings were those grids.
+
+The close control moved into `Modal` and `Drawer` as an `IconButton`, whose type demands an `aria-label`. That closes `button-name` for every modal at once rather than four times.
+
+**A regression the unit tests missed and the end to end suite caught.** The first version replaced two effects with a single `reset()` of computed values, which reads as a simplification and is one, except that the effect fires when an async fetch resolves. A fast typist is mid-word by then, and the reset threw their typing away. Every test in the new file waited politely for the data before typing, so all ten stayed green; the Playwright core loop did not wait, and failed. The fix is that anything already in the form wins over both the restored draft and the defaults. It is the same defect as P2-10 in a new place, which is worth stating plainly: the pattern is not "this component was careless", it is "state derived from an async value must be merged, never replaced".
+
+**A day lost to a warning already written down.** Several of the failures chased after that fix were the front container serving the previous build. The Vite hot reload caveat in the working notes says to restart it before believing a browser result, and it cost a full debugging cycle when it was written. It cost another one here, having been read.
+
+**Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 
 ### 12.7 Sequencing
 

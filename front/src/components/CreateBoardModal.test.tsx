@@ -102,6 +102,10 @@ describe('CreateBoardModal', () => {
     await waitFor(() => expect(titleBox()).toBeInTheDocument());
     await user.type(titleBox(), 'Launch plan');
     await user.type(screen.getByPlaceholderText(/describe/i), 'Everything for the launch');
+    // The gate only opens once the colour and template lists have landed,
+    // since the schema requires both. Clicking before then is a silent no-op
+    // that reads afterwards as "the parent was never called".
+    await waitFor(() => expect(submit()).toBeEnabled());
     await user.click(submit());
 
     expect(onCreateBoard).toHaveBeenCalledTimes(1);
@@ -139,6 +143,42 @@ describe('CreateBoardModal', () => {
       color: 'color-green',
       template: 'template-sprint',
     });
+  });
+
+  it('does not discard a name typed before the colours and templates arrive', async () => {
+    // The defaults land on an async transition, so a fast typist is already
+    // mid-word when they do. The implementation this replaced merged them
+    // into the existing state; a wholesale reset throws the typing away, and
+    // that is the same class of defect as P2-10, where the colour fetch
+    // resolving late rebuilt the whole form and wiped what was in it.
+    //
+    // Caught by the end to end suite rather than here, because every other
+    // test in this file politely waits for the data first. This one does not.
+    let resolveColors: (colors: Color[]) => void = () => {};
+    mockedColorService.getByType.mockReturnValue(
+      new Promise<Color[]>(resolve => {
+        resolveColors = resolve;
+      })
+    );
+
+    const user = userEvent.setup();
+    const { onCreateBoard } = open();
+
+    await user.type(titleBox(), 'Typed while loading');
+
+    resolveColors(COLORS);
+
+    await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+
+    expect(titleBox()).toHaveValue('Typed while loading');
+    // The submit gate has to re-open by itself once the data lands. The
+    // validation that ran while the user was typing saw an empty colour and
+    // template and closed it, and nothing will type again to reopen it.
+    await waitFor(() => expect(submit()).toBeEnabled());
+
+    await user.click(submit());
+
+    expect(onCreateBoard.mock.calls[0][0]).toMatchObject({ title: 'Typed while loading' });
   });
 
   describe('draft persistence', () => {
@@ -199,6 +239,7 @@ describe('CreateBoardModal', () => {
 
       await waitFor(() => expect(titleBox()).toBeInTheDocument());
       await user.type(titleBox(), 'Launch plan');
+      await waitFor(() => expect(submit()).toBeEnabled());
       await user.click(submit());
 
       // The parent closes the modal on success and leaves it open on

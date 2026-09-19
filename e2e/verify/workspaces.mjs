@@ -29,13 +29,31 @@ const check = (label, got, expected) => {
 };
 
 const stamp = Date.now();
+// Registration is rate limited to twenty accounts an hour per address, and
+// these scripts create real ones. Without this the limit surfaces as
+// "Cannot read properties of undefined", which sends whoever hit it looking
+// for a bug in the API instead of at the clock.
+const assertRegistered = response => {
+  if (response.status === 429) {
+    console.error('Registration is rate limited (429). Run: docker compose restart back');
+    process.exit(1);
+  }
+  if (!response.body?.data?.token) {
+    console.error(`Registration failed with ${response.status}: ${JSON.stringify(response.body)}`);
+    process.exit(1);
+  }
+  return response;
+};
+
 const mk = async tag => {
-  const r = await req('POST', '/auth/register', null, {
-    firstName: tag,
-    lastName: 'User',
-    email: `${tag}-${stamp}@example.test`,
-    password: 'Passw0rd1',
-  });
+  const r = assertRegistered(
+    await req('POST', '/auth/register', null, {
+      firstName: tag,
+      lastName: 'User',
+      email: `${tag}-${stamp}@example.test`,
+      password: 'Passw0rd1',
+    })
+  );
   return { token: r.body.data.token, id: r.body.data.user?._id ?? r.body.data.user?.id };
 };
 
