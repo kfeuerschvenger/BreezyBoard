@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { X } from 'lucide-react';
+import { IconButton } from './IconButton';
 
 export type ModalSize = 'sm' | 'md' | 'lg';
 
@@ -82,6 +84,16 @@ export function Modal({
                 </h2>
                 {subtitle && <p className="text-sm text-gray-600 font-body mt-1">{subtitle}</p>}
               </div>
+              {/* An icon-only close is the one control every existing modal
+                  shell has and every one of them renders as a bare button
+                  with nothing but an X inside, which axe reports as
+                  button-name: a control a screen reader announces as
+                  "button" and nothing else. IconButton demands an
+                  aria-label in its own type, so putting it here makes that
+                  impossible to get wrong in any modal from now on. */}
+              <IconButton type="button" aria-label="Close" onClick={onClose}>
+                <X size={20} className="text-gray-500" aria-hidden="true" />
+              </IconButton>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">{children}</div>

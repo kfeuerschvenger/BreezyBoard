@@ -31,7 +31,12 @@ const BASELINE = {
   login: { 'button-name': 1, 'heading-order': 1 },
   register: { 'heading-order': 1 },
   dashboard: { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
-  'dashboard, create board modal open': { region: 10, 'heading-order': 2, 'button-name': 1 },
+  // button-name was 1 here and its line is gone rather than sitting at zero:
+  // the create board modal now uses the shared Modal, whose close control is
+  // an IconButton that cannot be rendered without a label. region fell from
+  // 10 to 6 and heading-order from 2 to 1 in the same change, and what is
+  // left of both is the dashboard behind the dialog rather than the dialog.
+  'dashboard, create board modal open': { region: 6, 'heading-order': 1 },
   board: { 'landmark-one-main': 1, region: 1 },
   'board, task drawer open': { 'aria-dialog-name': 1, region: 1 },
 };
