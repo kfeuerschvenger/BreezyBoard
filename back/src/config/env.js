@@ -52,6 +52,23 @@ const parseDurationMs = (name, raw, fallbackMs) => {
   return parsed;
 };
 
+// A whole positive count, with a warning and the default rather than a throw
+// when it is nonsense, matching how the duration windows above behave.
+const parseCount = (name, raw, fallback) => {
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    logger.warn(`[env] ${name} is not a positive whole number. Using the default of ${fallback}.`);
+    return fallback;
+  }
+
+  return parsed;
+};
+
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
@@ -76,6 +93,13 @@ const env = {
   // hard cap measured from sessionStartedAt, which is never rewritten.
   JWT_INACTIVITY_TTL_MS: parseDurationMs('JWT_INACTIVITY_TTL_MS', process.env.JWT_INACTIVITY_TTL_MS, FIFTEEN_MINUTES_MS),
   JWT_ABSOLUTE_TTL_MS: parseDurationMs('JWT_ABSOLUTE_TTL_MS', process.env.JWT_ABSOLUTE_TTL_MS, FOUR_HOURS_MS),
+
+  // Accounts a single address may register in an hour. The default is the
+  // production value, so a deployment that sets nothing is strict; only
+  // docker-compose.yml raises it, for the standing scripts. See
+  // rateLimit.middleware.js for why this one is tunable and the login
+  // limiter beside it is not.
+  REGISTRATION_LIMIT_PER_HOUR: parseCount('REGISTRATION_LIMIT_PER_HOUR', process.env.REGISTRATION_LIMIT_PER_HOUR, 20),
 };
 
 if (isProduction && env.CORS_ORIGINS.length === 0) {
