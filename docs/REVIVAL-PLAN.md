@@ -326,6 +326,12 @@ The interface is competent and completely generic. It reads as default Tailwind:
 
 **P4-1. The typography system does not exist.** `font-heading` and `font-body` are applied across eight files and roughly thirty-five call sites. There is no `@theme` block, no `tailwind.config` file, and `index.css` is two lines. Under Tailwind 4 an undefined utility is a silent no-op, so every one of those classes does nothing and the entire application renders in the default sans stack. Inter is imported and then never actually bound to anything.
 
+Fixed in Phase 5a. `index.css` now carries an `@theme` block binding both role tokens to Inter, plus a `body` rule so that the far larger number of elements carrying neither class also get it; without that, declaring the two tokens alone would have produced an application in two different typefaces.
+
+Both roles resolve to the same family, which is the faithful fix rather than a shortcut. Inter is the only family the application loads, and the two names record a distinction the design already makes in weight. Introducing a separate display face later is one line here instead of forty edits.
+
+Verified the way the finding was found, on a rendered page rather than in the stylesheet: `e2e/verify/design-tokens.mjs` reads the computed font family off the running application. Against the previous stylesheet all three of its assertions fail, and the middle one reports the symptom in as many words, that the `font-heading` utility is silently ignored.
+
 **P4-2. The board is not a board.** Columns are laid out as `grid-cols-1 md:grid-cols-2 lg:grid-cols-4`, so they wrap into rows rather than scrolling horizontally, which stops being a Kanban board at five columns. Each column is pinned to a 600px minimum height with no internal scroll, so on the screenshot from the running application three empty columns occupy the full viewport height while holding nothing, and a busy column will instead grow the page indefinitely.
 
 **P4-3. Accessibility gaps, ranked.** Drag and drop is unusable by keyboard even after P0-3 (see P0-4), and the droppable columns carry no role or label so a screen reader is told nothing. `FormInput.tsx:17` renders a label with no `htmlFor` and threads no `id`, which makes every field in the registration flow an unassociated label and input pair. The owner suggestions in `TaskDrawer` are plain divs with click handlers, unreachable by keyboard, while the near-identical list in `AddMemberModal` does it correctly. The entire priority badge on a task card is `aria-hidden`, hiding real information rather than a decorative icon. No modal traps focus, none restore focus to the trigger on close, `CreateBoardModal` has no dialog role at all, and `SuccessModal` auto-dismisses after two seconds with no way to pause it. `eslint-plugin-jsx-a11y` is not installed, so none of this is caught automatically.
@@ -333,6 +339,12 @@ The interface is competent and completely generic. It reads as default Tailwind:
 **P4-4. Responsive coverage is thin.** Responsive prefixes appear in four files. There are none in `Column`, `TaskCard`, `TaskDrawer`, `AddMemberModal`, `PageHeader`, `LegalModal`, `SuccessModal`, `RegisterForm` or `FormInput`. The registration name row is a fixed two-column grid with no mobile fallback.
 
 **P4-5. Missing feedback and states.** An empty column renders as blank whitespace with no message. A failed save looks exactly like an idle form. The submit button in the task drawer is disabled with no indication of which field is missing, which is the anti-pattern that made P0-1 invisible for a year. Contrast risk on `text-gray-400` icons and `gray-500` on `gray-200` avatar initials, both below the 4.5 to 1 minimum.
+
+The contrast half is now measured rather than estimated, by `e2e/verify/design-tokens.mjs` against a real element on the running application: `text-gray-400` comes out at **2.6 to 1** against the surface behind it. That fails 1.4.3 for text at 4.5 to 1 and also fails 1.4.11 for the meaningful parts of an icon at 3 to 1, so it is worse than the finding claimed rather than better.
+
+It is reported rather than asserted, deliberately. The colour appears thirty five times across ten files, used for both text and icons, and the right replacement differs per call site: a decorative chevron and a piece of secondary text want different answers. A global swap would be a design change made blind. It belongs with the component migration, and the number is recorded here so that work starts from a measurement.
+
+One trap worth recording, because the first version of that script fell into it and reported 8.31 to 1, which would have closed the finding wrongly. Tailwind 4 states its palette in oklch, so a computed colour reads as `oklch(0.707 0.022 261.325)`. A parser that pulls three numbers out and treats them as channels of 0 to 255, which is what almost every contrast snippet on the internet does, produces a confident and meaningless answer. The script paints the colour onto a one pixel canvas and reads the bytes back instead, which is exact for any colour space the browser accepts.
 
 **P4-6. Product gaps visible from the UI.** No 404 page, unknown routes silently redirect to the dashboard. The forgot-password link points at `/login`. There is no way to edit or delete a board from the board view, and no member management there either. The footer uses emoji as decoration.
 
@@ -400,7 +412,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 4, indexes | Done | One compound index on tasks, three on boards, all verified as IXSCAN against the real queries |
 | 4, overall | **Done** | P2-6a stays open, with two ruled-out hypotheses recorded |
 | 5a, accessibility gate | Done | jsx-a11y plus layer rules, vitest-axe on every primitive, an axe ratchet over six live surfaces |
-| 5, remainder | In progress | Design tokens, then the component migration onto the primitives |
+| 5a, design tokens | Done | Inter actually bound, font-heading and font-body stop being no-ops (P4-1) |
+| 5, remainder | In progress | The component migration onto the primitives |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
