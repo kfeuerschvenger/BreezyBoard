@@ -39,7 +39,11 @@ test.describe('board core loop', () => {
 
       await page.getByPlaceholder('Enter task title').fill('Core loop task');
       await page.getByPlaceholder('Enter task description').fill('Created by the end to end suite');
-      await page.locator('button[aria-label="Coral"]').click();
+      // The radio itself is sr-only, so what a person clicks is the label
+      // wrapping it, which is the visible swatch. Targeting the input
+      // directly asks Playwright to click a one pixel clipped element and it
+      // correctly refuses.
+      await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
       await page.getByPlaceholder('Search team members...').fill(authedUser.firstName);
       await page.getByText(authedUser.email).last().click();
 
@@ -135,7 +139,7 @@ test.describe('board core loop', () => {
     await page.getByRole('button', { name: /add task/i }).first().click();
     await page.getByPlaceholder('Enter task title').fill('Keyboard task');
     await page.getByPlaceholder('Enter task description').fill('Reachable without a mouse');
-    await page.locator('button[aria-label="Coral"]').click();
+    await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
     await page.getByPlaceholder('Search team members...').fill(authedUser.firstName);
     await page.getByText(authedUser.email).last().click();
     await page.getByRole('button', { name: /save changes/i }).click();

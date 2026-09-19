@@ -414,7 +414,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5a, accessibility gate | Done | jsx-a11y plus layer rules, vitest-axe on every primitive, an axe ratchet over six live surfaces |
 | 5a, design tokens | Done | Inter actually bound, font-heading and font-body stop being no-ops (P4-1) |
 | 5c, create board modal | Done | On Modal, Field and React Hook Form. Labels 10 to 6, button-name cleared, region 10 to 6 |
-| 5, remainder | In progress | Task drawer, the remaining modals, the pages, and a server state layer |
+| 5c, task drawer | Done | On Drawer and Field. Orphan labels 6 to 0 application wide, aria-dialog-name cleared |
+| 5, remainder | In progress | The owner combobox, the remaining modals, the pages, and a server state layer |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1066,6 +1067,14 @@ The close control moved into `Modal` and `Drawer` as an `IconButton`, whose type
 **A regression the unit tests missed and the end to end suite caught.** The first version replaced two effects with a single `reset()` of computed values, which reads as a simplification and is one, except that the effect fires when an async fetch resolves. A fast typist is mid-word by then, and the reset threw their typing away. Every test in the new file waited politely for the data before typing, so all ten stayed green; the Playwright core loop did not wait, and failed. The fix is that anything already in the form wins over both the restored draft and the defaults. It is the same defect as P2-10 in a new place, which is worth stating plainly: the pattern is not "this component was careless", it is "state derived from an async value must be merged, never replaced".
 
 **A day lost to a warning already written down.** Several of the failures chased after that fix were the front container serving the previous build. The Vite hot reload caveat in the working notes says to restart it before believing a browser result, and it cost a full debugging cycle when it was written. It cost another one here, having been read.
+
+**`TaskDrawer`, onto `Drawer`, `Field` and grouped radios.** The biggest component in the application and the one carrying the most debt: six of the ten orphan labels, and the `aria-dialog-name` violation. Both are closed. The drawer's dialog is now labelled by its own title, which is the violation section 10.2 predicted this gate would find, word for word, and the label warnings are at zero across the whole application.
+
+The nine tests that were already here did the work the characterization tests did for the modal, so none had to be written. What they needed was query changes, not assertion changes, and one assertion genuinely improved on the way: the selected colour used to be asserted by looking for `ring-2` in a class string, and is now asserted with `toBeChecked`, which is both sturdier and what a screen reader actually reports.
+
+Its validation state machine was deliberately left alone. `isFormValid` and the `errors` object are where P0-1 lived, and mixing a shell swap with a rewrite of the thing that broke for a year would make both harder to judge. React Hook Form can come later on its own.
+
+**A visually hidden radio is clicked by its label, not by itself.** Three end to end selectors broke on this and the error is worth knowing: Playwright resolves `getByRole('radio')` to the `sr-only` input, which is a clipped one pixel box, and refuses to click it because the container intercepts the pointer. That refusal is correct, and so is the markup: a real person clicks the swatch, which is the label. `page.locator('label', { has: page.getByRole('radio', { name }) })` is the faithful simulation. Reaching for `check({ force: true })` instead would have passed while proving nothing about whether a person can click it.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 

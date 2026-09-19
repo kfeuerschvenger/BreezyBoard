@@ -59,7 +59,7 @@ check('the title survived losing the page', title === 'Half written task', title
 check('the description survived losing the page', description === SENTENCE, description);
 
 // Finish the task properly, then confirm the draft is not left behind.
-await page.locator('button[aria-label="Coral"]').click();
+await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
 await page.getByPlaceholder('Search team members...').fill('Draft');
 await page.waitForTimeout(1600);
 await page.getByText(user.email).last().click();
