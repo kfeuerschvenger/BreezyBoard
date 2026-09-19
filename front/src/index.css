@@ -1,2 +1,35 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
+
+/*
+ * The design token layer, section 12.2 of the revival plan.
+ *
+ * `font-heading` and `font-body` are applied across eight files and roughly
+ * forty call sites, and until this block existed every one of them did
+ * nothing at all. Under Tailwind 4 there is no config file and no implicit
+ * theme: a utility whose token is not declared here simply does not exist,
+ * and an unknown class is a silent no-op rather than an error. So Inter was
+ * imported on the line above, never bound to anything, and the entire
+ * application rendered in the default sans stack. That is finding P4-1, and
+ * it was confirmed by reading the computed font off a running production
+ * page rather than by reading the code.
+ *
+ * Both roles resolve to Inter today, which is the faithful fix rather than a
+ * shortcut: it is the only family the application loads, and the two names
+ * record a distinction the design already makes in weight. Introducing a
+ * separate display face later is one line here instead of forty edits.
+ */
+@theme {
+  --font-heading: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/*
+ * Inter for everything that does not say otherwise. Without this the
+ * hundreds of elements carrying neither `font-heading` nor `font-body`
+ * would keep rendering in the default stack, so binding the two tokens
+ * alone would have produced an application in two different typefaces.
+ */
+body {
+  font-family: var(--font-body);
+}
