@@ -27,7 +27,11 @@ node verify/integrity.mjs
 
 Base URLs default to the local development stack and can be overridden with `E2E_API_URL`, `E2E_FRONT_URL` and `E2E_PROD_URL`.
 
-One practical limit to know about. Registration is rate limited to twenty accounts per hour per address, and these scripts register real ones: a full `npm run verify` pass plus the Playwright suite uses roughly fifteen of them, with `workspaces.mjs` alone accounting for five because the two level model needs that many distinct roles to be worth testing. A second full cycle inside the same hour will therefore start answering 429, and it surfaces as a Playwright failure rather than as anything that says "rate limit". The counter lives in memory, so `docker compose restart back` clears it. Raising the limit to make this go away would remove the protection these scripts exist to confirm.
+One practical limit, now mostly out of the way. These scripts register real accounts: a full `npm run verify` pass plus the Playwright suite uses roughly fifteen, with `workspaces.mjs` alone accounting for five because the two level model needs that many distinct roles to be worth testing. Against the production budget of twenty an hour, a second cycle inside the same hour starts answering 429, and it used to surface as a browser test timing out rather than as anything that says "rate limit". That was diagnosed as a product defect more than once.
+
+`docker-compose.yml` now raises `REGISTRATION_LIMIT_PER_HOUR` to 500 for development. `docker-compose.prod.yml` deliberately does not set it, so production keeps the strict default of twenty from `back/src/config/env.js`. The login limiter next to it is untouched and not configurable at all: that one bounds credential stuffing, and the difference is the point rather than an oversight.
+
+The counter still lives in memory, so `docker compose restart back` clears it if a limit is ever hit, and each registering script now says so plainly instead of failing on an undefined token.
 
 ## What each one covers, and why it exists
 

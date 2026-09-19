@@ -31,9 +31,23 @@ export const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
 });
 
-/** Registration, limited per address to slow bulk account creation. */
+/**
+ * Registration, limited per address to slow bulk account creation.
+ *
+ * Configurable, unlike the login limiter above, and the distinction is the
+ * point rather than an inconsistency. That one bounds credential stuffing
+ * and has no business being tuned; this one bounds spam signups, and the
+ * standing verification scripts create real accounts, so twenty an hour is
+ * a budget a single full run plus the end to end suite very nearly spends.
+ * Exceeding it surfaces as a browser test timing out, which reads as a
+ * product defect and has repeatedly been diagnosed as one.
+ *
+ * The default is the production value, so a deployment that sets nothing
+ * gets the strict limit. docker-compose.yml raises it for development only,
+ * and docker-compose.prod.yml deliberately does not mention it.
+ */
 export const registrationLimiter = rateLimit({
   ...shared,
   windowMs: 60 * 60 * 1000,
-  limit: 20,
+  limit: env.REGISTRATION_LIMIT_PER_HOUR,
 });

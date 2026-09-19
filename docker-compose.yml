@@ -65,6 +65,13 @@ services:
       # defaults, not a required setting.
       JWT_INACTIVITY_TTL_MS: ${JWT_INACTIVITY_TTL_MS:-900000}
       JWT_ABSOLUTE_TTL_MS: ${JWT_ABSOLUTE_TTL_MS:-14400000}
+      # Development only. The standing scripts in e2e/verify register real
+      # accounts, and a full run plus the browser suite very nearly spends
+      # the production budget of twenty an hour, after which the limit
+      # surfaces as a browser test timing out and reads as a product defect.
+      # docker-compose.prod.yml deliberately does not set this, so production
+      # keeps the strict default from back/src/config/env.js.
+      REGISTRATION_LIMIT_PER_HOUR: ${REGISTRATION_LIMIT_PER_HOUR:-500}
       DOTENV_CONFIG_QUIET: "true"
     ports:
       - "${BACK_PORT:-5000}:5000"
