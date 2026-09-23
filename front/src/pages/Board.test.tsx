@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import { renderWithQuery } from '@/test/renderWithQuery';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Board from './Board';
 import { BoardService, TaskService, ColorService, UserService } from '@/services';
@@ -61,7 +62,7 @@ const makeTask = (overrides: Partial<Task>): Task => ({
 });
 
 const renderBoard = () =>
-  render(
+  renderWithQuery(
     <MemoryRouter initialEntries={[`/board/${BOARD_ID}`]}>
       <Routes>
         <Route path="/board/:boardId" element={<Board />} />

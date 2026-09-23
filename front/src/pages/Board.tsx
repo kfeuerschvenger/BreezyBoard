@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Board as BoardModel, Task } from '@/models';
-import { BoardService, TaskService } from '@/services';
+import type { Task } from '@/models';
+import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
 import { arrangeColumn, byOrder, neighboursOf } from '@/features/board/arrangeColumn';
+import { useBoard, useBoardTasks, useTaskCacheWriter } from '@/features/tasks/queries';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
   closestCorners,
@@ -34,14 +35,40 @@ interface ColumnData {
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [currentBoard, setCurrentBoard] = useState<BoardModel | null>(null);
-  const [columns, setColumns] = useState<ColumnData[]>([]);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const boardQuery = useBoard(boardId);
+  const tasksQuery = useBoardTasks(boardId);
+  const taskCache = useTaskCacheWriter(boardId);
+
+  const currentBoard = boardQuery.data ?? null;
+  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  const isLoading = Boolean(boardId) && (boardQuery.isPending || tasksQuery.isPending);
+  const error = !boardId
+    ? 'No board was specified in the address.'
+    : boardQuery.isError || tasksQuery.isError
+      ? 'This board could not be loaded. Check your connection and try again.'
+      : null;
+
+  // The board's own columns, not its template's. They were copied out of the
+  // template when the board was created and belong to it since, which is
+  // what lets one board rename a column without renaming it on every other
+  // board built from the same template.
+  const columns: ColumnData[] = useMemo(
+    () =>
+      (currentBoard?.columns ?? [])
+        .map(column => ({
+          id: column._id,
+          _id: column._id,
+          title: column.title,
+          color: typeof column.color === 'string' ? column.color : (column.color?.value ?? '#64748B'),
+          order: column.order,
+        }))
+        .sort((a, b) => a.order - b.order),
+    [currentBoard]
+  );
 
   // The move request currently in flight, if any. A second drag started
   // before the first one answers aborts it rather than racing it: without
@@ -58,53 +85,6 @@ const Board = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  useEffect(() => {
-    // Without this guard the page keeps the initial isLoading value and spins forever.
-    if (!boardId) {
-      setIsLoading(false);
-      setError('No board was specified in the address.');
-      return;
-    }
-
-    const fetchBoardData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Get current board
-        const boardData = await BoardService.getById(boardId);
-        setCurrentBoard(boardData);
-
-        // Get board tasks and sort by order
-        const tasksData = await TaskService.getByBoard(boardId);
-        setTasks([...tasksData].sort(byOrder));
-
-        // The board's own columns, not its template's. They were copied out
-        // of the template when the board was created and belong to it since,
-        // which is what lets one board rename a column without renaming it
-        // on every other board built from the same template.
-        const formattedColumns = (boardData.columns ?? [])
-          .map(column => ({
-            id: column._id,
-            _id: column._id,
-            title: column.title,
-            color: typeof column.color === 'string' ? column.color : (column.color?.value ?? '#64748B'),
-            order: column.order,
-          }))
-          .sort((a, b) => a.order - b.order);
-
-        setColumns(formattedColumns);
-      } catch (err) {
-        console.error('Error loading board data:', err);
-        setError('This board could not be loaded. Check your connection and try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchBoardData();
-  }, [boardId]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -156,7 +136,14 @@ const Board = () => {
     const controller = new AbortController();
     inFlightMove.current = controller;
 
-    setTasks(prev => [...prev.filter(task => task.status !== targetColumnId && task._id !== activeTask._id), ...column]);
+    // Straight into the query cache rather than into component state. This
+    // is the external write path the data layer exists for: the same one a
+    // server-sent event would use, exercised every time somebody drags a
+    // card.
+    taskCache.write([
+      ...tasks.filter(task => task.status !== targetColumnId && task._id !== activeTask._id),
+      ...column,
+    ]);
     setActiveTask(null);
 
     try {
@@ -165,7 +152,7 @@ const Board = () => {
       // The server owns the ordering key, so the card is replaced with what
       // it actually wrote rather than left holding the placeholder used for
       // the optimistic render.
-      setTasks(prev => prev.map(task => (task._id === moved._id ? moved : task)));
+      taskCache.replace(moved);
     } catch (error) {
       // A move this client abandoned because a newer one replaced it. The
       // newer one owns the board's state now, so touching it here is exactly
@@ -180,22 +167,11 @@ const Board = () => {
       // drag would be wrong for the same reason: by now it may be older
       // than changes that did land.
       console.error('Error moving task:', error);
-      await refreshTasks();
+      await taskCache.refetch();
     } finally {
       if (inFlightMove.current === controller) {
         inFlightMove.current = null;
       }
-    }
-  };
-
-  const refreshTasks = async () => {
-    if (!boardId) return;
-
-    try {
-      const tasksData = await TaskService.getByBoard(boardId);
-      setTasks([...tasksData].sort(byOrder));
-    } catch (error) {
-      console.error('Error reloading tasks:', error);
     }
   };
 
@@ -219,13 +195,11 @@ const Board = () => {
         result = await TaskService.create(boardId, taskData);
       }
 
-      setTasks(prev => {
-        if (taskData._id) {
-          return prev.map(t => (t._id === taskData._id ? result : t));
-        } else {
-          return [...prev, result];
-        }
-      });
+      if (taskData._id) {
+        taskCache.replace(result);
+      } else {
+        taskCache.write([...(taskCache.read() ?? []), result]);
+      }
 
       // Only move to done if there are checklist items AND all are completed
       const hasChecklist = result.checklist && result.checklist.length > 0;
@@ -275,7 +249,7 @@ const Board = () => {
   const handleTaskMove = async (taskId: string, newStatus: string, between: TaskNeighbours = {}) => {
     try {
       const moved = await TaskService.move(taskId, newStatus, between);
-      setTasks(prev => prev.map(task => (task._id === taskId ? moved : task)));
+      taskCache.replace(moved);
     } catch (error) {
       console.error('Error moving task:', error);
     }
