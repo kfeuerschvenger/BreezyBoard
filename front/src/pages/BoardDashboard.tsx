@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Users, Calendar, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
 import { BoardService, DashboardService } from '@/services';
@@ -24,7 +24,6 @@ const safeFormatDate = (dateString?: string) => {
 };
 
 const BoardDashboard: React.FC = () => {
-  const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedBoardForMembers, setSelectedBoardForMembers] = useState<Board | null>(null);
@@ -140,8 +139,6 @@ const BoardDashboard: React.FC = () => {
     return () => window.removeEventListener('click', onClick);
   }, []);
 
-  const handleBoardClick = (boardId: string) => navigate(`/board/${boardId}`);
-
   const handleCreateBoard = async (newBoard: Pick<Board, 'title' | 'description' | 'color' | 'template'>) => {
     try {
       await BoardService.create(newBoard);
@@ -153,13 +150,15 @@ const BoardDashboard: React.FC = () => {
     }
   };
 
-  const handleToggleMenu = (e: React.MouseEvent, boardId: string) => {
-    e.stopPropagation();
+  // None of these stop propagation any more. They used to, because the whole
+  // card was a click handler that would navigate away underneath them; the
+  // card is a container now and the navigation lives in a link, so there is
+  // nothing left to stop.
+  const handleToggleMenu = (boardId: string) => {
     setOpenMenuId(prev => (prev === boardId ? null : boardId));
   };
 
-  const handleDeleteBoard = async (e: React.MouseEvent, boardId: string) => {
-    e.stopPropagation();
+  const handleDeleteBoard = async (boardId: string) => {
     const ok = window.confirm('Are you sure you want to delete this board? This action cannot be undone.');
     if (!ok) return;
     try {
@@ -173,8 +172,7 @@ const BoardDashboard: React.FC = () => {
     }
   };
 
-  const handleOpenAddMember = (boardId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleOpenAddMember = (boardId: string) => {
     const board = boards.find(b => b._id === boardId) ?? null;
     setSelectedBoardForMembers(board);
     setShowAddMemberModal(true);
@@ -355,36 +353,50 @@ const BoardDashboard: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.08 }}
-                onClick={() => handleBoardClick(safeBoard.id)}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer group overflow-visible relative"
-                aria-label={`Board: ${safeBoard.title}`}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') handleBoardClick(safeBoard.id);
-                }}
+                // Not a button any more. It used to be role="button" with a
+                // tabIndex and a key handler, wrapping the options button and
+                // the menu inside it, which is interactive content nested in
+                // an interactive element: invalid, and it is what put the two
+                // stopPropagation handlers below in the markup that the
+                // accessibility lint was reporting.
+                //
+                // The card is now a plain container and the board title is a
+                // real link whose hit area is stretched over the whole card
+                // by a pseudo element. A mouse keeps the large target, the
+                // keyboard gets one link per card instead of a button holding
+                // buttons, and nothing needs to stop a parent handler from
+                // firing because there is no parent handler.
+                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300 group overflow-visible relative"
               >
                 {/* Header */}
                 <div className="p-6 border-b border-gray-100">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       {/* Icon colored with the board color */}
-                      <div className="flex items-center justify-center p-1 rounded" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-center p-1 rounded">
                         <IconFromTemplate size={22} style={{ color: safeBoard.color }} aria-hidden="true" />
                       </div>
                       <h3 className="font-semibold text-gray-900 font-heading group-hover:text-blue-600 transition-colors">
-                        {safeBoard.title}
+                        {/* after:absolute after:inset-0 is what stretches this
+                            link over the card. Everything else that is
+                            clickable sits above it on z-10. */}
+                        <Link
+                          to={`/board/${safeBoard.id}`}
+                          className="after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                        >
+                          {safeBoard.title}
+                        </Link>
                       </h3>
                     </div>
 
                     {/* Options + Add member */}
                     <div className="flex items-center gap-2">
-                      <div className="relative">
+                      <div className="relative z-10">
                         <button
                           data-board-menu-btn
-                          onClick={e => handleToggleMenu(e, id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                          aria-label="Board options"
+                          onClick={() => handleToggleMenu(id)}
+                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+                          aria-label={`Options for ${safeBoard.title}`}
                         >
                           <MoreHorizontal size={16} className="text-gray-400" />
                         </button>
@@ -392,11 +404,10 @@ const BoardDashboard: React.FC = () => {
                         {isMenuOpen && (
                           <div
                             data-board-menu
-                            onClick={e => e.stopPropagation()}
                             className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
                           >
                             <button
-                              onClick={e => handleOpenAddMember(id, e)}
+                              onClick={() => handleOpenAddMember(id)}
                               className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
                             >
                               <Users size={14} />
@@ -404,7 +415,7 @@ const BoardDashboard: React.FC = () => {
                             </button>
 
                             <button
-                              onClick={e => handleDeleteBoard(e, id)}
+                              onClick={() => handleDeleteBoard(id)}
                               disabled={isDeleting}
                               className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
                             >
