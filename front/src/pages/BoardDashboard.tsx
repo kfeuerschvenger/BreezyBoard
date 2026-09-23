@@ -1,10 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Users, Calendar, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
-import { BoardService, DashboardService } from '@/services';
+import {
+  useAddBoardMembers,
+  useBoards,
+  useCreateBoard,
+  useDashboardStats,
+  useDeleteBoard,
+} from '@/features/boards/queries';
 import { resolveColorValue, resolveColorValueSync } from '@/utils/colorUtils';
 import type { Board, User } from '@/models';
 import { resolveIcon } from '@/shared/lib/lucideIcons';
@@ -28,44 +34,36 @@ const BoardDashboard: React.FC = () => {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedBoardForMembers, setSelectedBoardForMembers] = useState<Board | null>(null);
 
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Only failures the page causes itself. A failed read is reported by the
+  // query below rather than kept in a second piece of state that has to be
+  // cleared by hand.
+  const [writeError, setWriteError] = useState<string | null>(null);
 
-  const [stats, setStats] = useState({
+  const boardsQuery = useBoards();
+  const statsQuery = useDashboardStats();
+
+  // Memoised because the empty fallback would otherwise be a new array on
+  // every render, and the colour resolving effect below depends on it: a
+  // fresh identity each time makes that effect run forever.
+  const boards = useMemo(() => boardsQuery.data ?? [], [boardsQuery.data]);
+  const isLoading = boardsQuery.isPending || statsQuery.isPending;
+  const error = writeError ?? (boardsQuery.isError || statsQuery.isError ? 'Failed to load data. Please try again later.' : null);
+
+  const stats = statsQuery.data ?? {
     totalBoards: 0,
     totalMembers: 0,
     totalTasks: 0,
     avgProgress: 0,
-  });
+  };
+
+  const createBoard = useCreateBoard();
+  const deleteBoard = useDeleteBoard();
+  const addBoardMembers = useAddBoardMembers();
 
   // map boardId -> colorHex
   const [boardColors, setBoardColors] = useState<Record<string, string>>({});
-
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Obtener datos en paralelo
-      const [boardsData, statsData] = await Promise.all([BoardService.getAll(), DashboardService.getStats()]);
-
-      setBoards(boardsData || []);
-      setStats(statsData);
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Failed to load data. Please try again later.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   // Pre-resolve colors for all boards when boards change
   useEffect(() => {
@@ -111,12 +109,10 @@ const BoardDashboard: React.FC = () => {
     };
   }, [boards]);
 
-  // Actualizar datos después de operaciones
-  const refreshData = async () => {
-    const [boardsData, statsData] = await Promise.all([BoardService.getAll(), DashboardService.getStats()]);
-    setBoards(boardsData || []);
-    setStats(statsData);
-  };
+  // There is no refreshData any more. Every write below invalidates the two
+  // keys it affects and the cache refetches them, which is the same thing
+  // said once in features/boards/queries.ts instead of at four call sites,
+  // and is also what runs when the window regains focus.
 
   // close menu on Escape
   useEffect(() => {
@@ -141,12 +137,12 @@ const BoardDashboard: React.FC = () => {
 
   const handleCreateBoard = async (newBoard: Pick<Board, 'title' | 'description' | 'color' | 'template'>) => {
     try {
-      await BoardService.create(newBoard);
-      await refreshData();
+      await createBoard.mutateAsync(newBoard);
+      setWriteError(null);
       setShowCreateModal(false);
     } catch (err) {
       console.error('Error creating board:', err);
-      setError('Failed to create board. Please try again.');
+      setWriteError('Failed to create board. Please try again.');
     }
   };
 
@@ -162,11 +158,11 @@ const BoardDashboard: React.FC = () => {
     const ok = window.confirm('Are you sure you want to delete this board? This action cannot be undone.');
     if (!ok) return;
     try {
-      await BoardService.delete(boardId);
-      await refreshData();
+      await deleteBoard.mutateAsync(boardId);
+      setWriteError(null);
     } catch (err) {
       console.error('Error deleting board:', err);
-      setError('Failed to delete board. Please try again.');
+      setWriteError('Failed to delete board. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -186,11 +182,11 @@ const BoardDashboard: React.FC = () => {
     const memberIds = members.map(m => m._id);
 
     try {
-      await BoardService.addMembers(boardId, memberIds);
-      await refreshData();
+      await addBoardMembers.mutateAsync({ boardId, memberIds });
+      setWriteError(null);
     } catch (error) {
       console.error('Error adding members:', error);
-      setError('Failed to add members. Please try again.');
+      setWriteError('Failed to add members. Please try again.');
     } finally {
       setShowAddMemberModal(false);
       setSelectedBoardForMembers(null);

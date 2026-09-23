@@ -417,7 +417,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, task drawer | Done | On Drawer and Field. Orphan labels 6 to 0 application wide, aria-dialog-name cleared |
 | 5c, owner combobox | Done | Keyboard operable suggestion list with the combobox pattern (P4-3) |
 | 5c, dashboard cards | Done | Cards are containers with a stretched title link. Gate warnings 4 to 2, all on TaskCard |
-| 5, remainder | In progress | The remaining modals, the pages, and a server state layer |
+| 5c, server state | Started | TanStack Query with refetch on focus, dashboard migrated, idle invariant confirmed intact |
+| 5, remainder | In progress | The board page and profile onto queries, the remaining modals |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1091,6 +1092,16 @@ The card is a plain container now, and the board title is a real link whose hit 
 That stretch is also the risk, and it is invisible to the component suite: jsdom has no layout, so it has no opinion about which element a pointer actually lands on. An overlay covering the card is exactly what would swallow the click meant for the options button. There is now an end to end test for it, which fails against the previous markup.
 
 **`TaskCard` is deliberately left alone.** The same two warnings remain on it and the same fix would apply, except that it is the drag card, P2-6a is still open on it, and a stretched hit area is precisely the kind of change that would alter pointer timing on an interaction whose margin is already too small. Guessing at that component has cost two attempts already. It belongs with the drag work, not here.
+
+**The server state layer.** TanStack Query, with `refetchOnWindowFocus`, a thirty second `staleTime` and retries off. That is the decision from section 11.4 made concrete: no transport, revalidate when somebody comes back to the tab, and a cache whose write path does not have to be a fetch. `queryClient.setQueryData` is that write path, so a Server-Sent Events stream later writes through it and no page changes.
+
+Query keys live in one object in `features/boards/queries.ts` rather than being spelled out per call site. Typing a key differently at one of four call sites shows up as a list that quietly fails to refresh, which looks exactly like having no cache at all and is much harder to find.
+
+`BoardDashboard` migrated first, as the page with the most fetching. Its hand-rolled `refreshData`, called from four handlers, is gone: each write invalidates the two keys it affects, said once. The read error state went with it, since a query already knows whether it failed; the page keeps a separate piece of state only for failures it causes itself.
+
+Retries are off deliberately. The pages have real error states now, and a silent triple retry is how a broken endpoint comes to look like a slow one.
+
+**And the check that mattered most cost nothing, because it was already written.** Every authenticated request renews the session token, so anything that polls quietly turns a fifteen minute inactivity window into a session that never ends. That is the collision section 9.7 warned about, and it is why the transport decision was taken seriously. Focus is a human action rather than a timer: a window nobody touches never regains focus and so never refetches. `idle.mjs` asserts zero API calls across an idle period, and it still reports exactly zero, all the way to the sign-out at expiry. The script written in Phase 3 to protect a property nothing enforces is what proves this design does not break it.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 
