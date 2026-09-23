@@ -418,7 +418,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, owner combobox | Done | Keyboard operable suggestion list with the combobox pattern (P4-3) |
 | 5c, dashboard cards | Done | Cards are containers with a stretched title link. Gate warnings 4 to 2, all on TaskCard |
 | 5c, server state | Started | TanStack Query with refetch on focus, dashboard migrated, idle invariant confirmed intact |
-| 5, remainder | In progress | The board page and profile onto queries, the remaining modals |
+| 5c, board page onto queries | Done | Fetching effect gone, optimistic drag writes through the cache, P2-6 guard intact |
+| 5, remainder | In progress | Profile onto queries, the remaining modals |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1102,6 +1103,12 @@ Query keys live in one object in `features/boards/queries.ts` rather than being 
 Retries are off deliberately. The pages have real error states now, and a silent triple retry is how a broken endpoint comes to look like a slow one.
 
 **And the check that mattered most cost nothing, because it was already written.** Every authenticated request renews the session token, so anything that polls quietly turns a fifteen minute inactivity window into a session that never ends. That is the collision section 9.7 warned about, and it is why the transport decision was taken seriously. Focus is a human action rather than a timer: a window nobody touches never regains focus and so never refetches. `idle.mjs` asserts zero API calls across an idle period, and it still reports exactly zero, all the way to the sign-out at expiry. The script written in Phase 3 to protect a property nothing enforces is what proves this design does not break it.
+
+**The board page followed, and the drag proved the design.** Its fetching effect is gone and the optimistic drag update now writes through  rather than into component state. That is the external write path the whole decision rested on, exercised every time somebody drags a card, which means it is covered by the existing end to end suite rather than only by intention. A server-sent event would use the same entry point.
+
+The concurrency guard from P2-6 survived intact, deliberately. The abort ref stayed imperative rather than being pushed into a mutation hook, because aborting a superseded request is not something the mutation API expresses well and the behaviour had already been verified. Failures still refetch rather than restoring a snapshot, which is now one call instead of a hand-rolled reload function.
+
+A test helper came out of it, , with a fresh client per call. A shared one carries a previous test's data into the next, which reads as a test that passes alone and fails in the suite, or worse, passes for the wrong reason.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 
