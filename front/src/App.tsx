@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 
 import Footer from '@/components/Footer';
+import { QueryClientProvider } from '@tanstack/react-query';
+
+import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { Board, Home, Login, Profile, Register } from '@/pages';
@@ -60,16 +63,22 @@ const AppRoutes = () => {
   );
 };
 
+// Created once, outside the component, so a re-render never throws the whole
+// cache away.
+const queryClient = createQueryClient();
+
 const App = () => {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-          <AppRoutes />
-          <Footer />
-        </div>
-      </Router>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <Router>
+          <div className="min-h-screen bg-gray-50 flex flex-col">
+            <AppRoutes />
+            <Footer />
+          </div>
+        </Router>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 };
 
