@@ -30,7 +30,7 @@ await page.waitForSelector('text=My Boards');
 const boardName = `Draft Board ${Date.now()}`;
 await page.getByRole('button', { name: /create board/i }).first().click();
 await page.waitForTimeout(900);
-await page.locator('input').first().fill(boardName);
+await page.getByLabel(/board name/i).fill(boardName);
 await page.getByRole('button', { name: /^create board$/i }).last().click();
 await page.waitForTimeout(2500);
 await page.getByText(boardName).first().click();

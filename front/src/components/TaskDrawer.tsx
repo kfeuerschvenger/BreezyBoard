@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { X, Plus, Trash2, User, Palette, Flag, GripVertical } from 'lucide-react';
 import { ColorService, UserService } from '@/services';
 import type { User as UserModel, Task } from '@/models';
@@ -126,6 +126,11 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
   const [isSearching, setIsSearching] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserModel | null>(null);
   const debounceRef = useRef<number | null>(null);
+  // Which suggestion the keyboard is on. -1 means none, which is also the
+  // state a mouse user is always in.
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const listboxId = useId();
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
 
   // Initialize selected user when value (owner id) or members change
   useEffect(() => {
@@ -214,6 +219,49 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
     };
   }, [searchTerm, members, selectedUser]);
 
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [suggestions]);
+
+  /**
+   * Keyboard operation for the suggestion list.
+   *
+   * The list used to be a stack of divs with click handlers, reachable by
+   * mouse alone: finding 44 and 15 of them is what P4-3 records, and the
+   * near-identical list in AddMemberModal already did this correctly, which
+   * is the usual sign that the pattern was known and this one was missed.
+   *
+   * Down and up move the highlight, Enter takes it, Escape dismisses the
+   * list without clearing what was typed. Enter is only intercepted while a
+   * suggestion is highlighted, so it still submits the form otherwise.
+   */
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (suggestions.length === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex(previous => (previous + 1) % suggestions.length);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex(previous => (previous <= 0 ? suggestions.length - 1 : previous - 1));
+      return;
+    }
+
+    if (event.key === 'Enter' && activeIndex >= 0) {
+      event.preventDefault();
+      handleSelectUser(suggestions[activeIndex]);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSuggestions([]);
+    }
+  };
+
   const handleInputChange = (inputValue: string) => {
     if (selectedUser) {
       const fullName = `${selectedUser.firstName} ${selectedUser.lastName}`.trim();
@@ -251,6 +299,12 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
           onChange={e => handleInputChange(e.target.value)}
           placeholder="Search team members..."
           className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          role="combobox"
+          aria-expanded={suggestions.length > 0}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
+          onKeyDown={handleKeyDown}
           {...controlProps}
         />
         {selectedUser && (
@@ -266,12 +320,36 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
       </div>
 
       {suggestions.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {suggestions.map(user => (
-            <div
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label="Matching team members"
+          className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+        >
+          {suggestions.map((user, index) => (
+            // The option carries the click handler and the role, and the
+            // input keeps the focus throughout, which is what the combobox
+            // pattern asks for: aria-activedescendant above points here
+            // rather than focus moving into the list.
+            //
+            // The rule below wants a keyboard handler on whatever is
+            // clickable, and following it here would make the component
+            // worse. Options in a combobox are never focused, so a key
+            // handler on one could not fire; the keyboard lives on the input
+            // and is covered by its own tests. This is the rule failing to
+            // see a pattern rather than the pattern being wrong, which is
+            // the only reason worth silencing one for.
+            // eslint-disable-next-line jsx-a11y/click-events-have-key-events
+            <li
               key={user._id}
-              className="p-3 hover:bg-gray-100 cursor-pointer flex items-center gap-3"
+              id={optionId(index)}
+              role="option"
+              aria-selected={index === activeIndex}
+              className={`p-3 cursor-pointer flex items-center gap-3 ${
+                index === activeIndex ? 'bg-blue-50' : 'hover:bg-gray-100'
+              }`}
               onClick={() => handleSelectUser(user)}
+              onMouseEnter={() => setActiveIndex(index)}
             >
               <SimpleUserAvatar user={user} size="sm" />
               <div>
@@ -280,9 +358,9 @@ const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, memb
                 </p>
                 <p className="text-sm text-gray-600">{user.email}</p>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {isSearching && (

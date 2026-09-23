@@ -282,3 +282,98 @@ describe('TaskDrawer draft persistence', () => {
     expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
   });
 });
+
+describe('TaskDrawer owner suggestions, by keyboard alone', () => {
+  beforeEach(() => {
+    mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  // The suggestion list used to be a stack of divs with click handlers,
+  // reachable by mouse and by nothing else, which is what P4-3 records. The
+  // near-identical list in AddMemberModal already did this correctly, which
+  // is usually the sign that the pattern was known and this one was missed.
+  const openSuggestions = async (user: ReturnType<typeof userEvent.setup>, query = 'Ada') => {
+    renderDrawer();
+    await waitForColorsLoaded();
+
+    const combobox = screen.getByLabelText(/Owner/);
+    // Two characters minimum: the component treats anything shorter as
+    // not yet a search, so typing one shows nothing and the wait below
+    // would time out on a component that is working correctly.
+    await user.type(combobox, query);
+    await screen.findAllByRole('option', {}, { timeout: 15_000 });
+
+    return combobox;
+  };
+
+  it('announces itself as a combobox that owns the list', async () => {
+    const user = userEvent.setup();
+    const combobox = await openSuggestions(user);
+
+    expect(combobox).toHaveAttribute('role', 'combobox');
+    expect(combobox).toHaveAttribute('aria-expanded', 'true');
+    expect(combobox).toHaveAttribute('aria-controls', screen.getByRole('listbox').id);
+  });
+
+  it('moves the highlight with the arrow keys without moving focus off the input', async () => {
+    const user = userEvent.setup();
+    const combobox = await openSuggestions(user);
+
+    await user.keyboard('{ArrowDown}');
+
+    const [first] = screen.getAllByRole('option');
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    // The combobox pattern keeps focus on the input throughout and points at
+    // the highlighted option instead. Moving focus into the list would take
+    // the typing away from the person using it.
+    expect(combobox).toHaveFocus();
+    expect(combobox).toHaveAttribute('aria-activedescendant', first.id);
+  });
+
+  it('wraps around at the ends rather than dead ending', async () => {
+    const user = userEvent.setup();
+    // Matches both seeded members, since lovelACe and grACe both contain it.
+    // Ada alone matches one, and a wrap test over a list of one proves
+    // nothing whichever way it goes.
+    await openSuggestions(user, 'ac');
+
+    const options = screen.getAllByRole('option');
+    expect(options.length).toBeGreaterThan(1);
+
+    await user.keyboard('{ArrowUp}');
+    expect(options[options.length - 1]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('selects the highlighted suggestion with Enter', async () => {
+    const user = userEvent.setup();
+    const combobox = await openSuggestions(user);
+
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(combobox).toHaveValue('Ada Lovelace');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('leaves Enter alone when no suggestion is highlighted, so the form can still submit', async () => {
+    const user = userEvent.setup();
+    const combobox = await openSuggestions(user);
+
+    await user.keyboard('{Enter}');
+
+    // Nothing was chosen, so the typed text stands and the list is untouched.
+    expect(combobox).toHaveValue('Ada');
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('dismisses the list with Escape without discarding what was typed', async () => {
+    const user = userEvent.setup();
+    const combobox = await openSuggestions(user);
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(combobox).toHaveValue('Ada');
+  });
+});

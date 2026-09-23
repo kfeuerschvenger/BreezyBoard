@@ -150,7 +150,7 @@ await page.waitForTimeout(400);
 await scan('dashboard, create board modal open');
 
 const boardName = `Axe Board ${Date.now()}`;
-await page.getByLabel(/board name/i).or(page.locator('input').first()).fill(boardName);
+await page.getByLabel(/board name/i).fill(boardName);
 await page.getByRole('button', { name: /^create board$/i }).last().click();
 await page.getByText(boardName).first().click();
 await page.waitForURL(/\/board\/[a-f0-9]{24}$/);

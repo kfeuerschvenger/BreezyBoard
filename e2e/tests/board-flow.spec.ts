@@ -16,7 +16,7 @@ test.describe('board core loop', () => {
     await test.step('create a board', async () => {
       const boardName = `E2E Board ${Date.now()}`;
       await page.getByRole('button', { name: /create board/i }).first().click();
-      await page.getByLabel(/board name/i).or(page.locator('input').first()).fill(boardName);
+      await page.getByLabel(/board name/i).fill(boardName);
       await page.getByRole('button', { name: /^create board$/i }).last().click();
 
       await expect(page.getByText(boardName)).toBeVisible();
@@ -132,7 +132,7 @@ test.describe('board core loop', () => {
     await logInThroughTheUi(page, authedUser);
     const boardName = `E2E Keyboard ${Date.now()}`;
     await page.getByRole('button', { name: /create board/i }).first().click();
-    await page.locator('input').first().fill(boardName);
+    await page.getByLabel(/board name/i).fill(boardName);
     await page.getByRole('button', { name: /^create board$/i }).last().click();
     await page.getByText(boardName).first().click();
 
