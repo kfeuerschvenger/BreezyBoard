@@ -416,7 +416,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, create board modal | Done | On Modal, Field and React Hook Form. Labels 10 to 6, button-name cleared, region 10 to 6 |
 | 5c, task drawer | Done | On Drawer and Field. Orphan labels 6 to 0 application wide, aria-dialog-name cleared |
 | 5c, owner combobox | Done | Keyboard operable suggestion list with the combobox pattern (P4-3) |
-| 5, remainder | In progress | The dashboard cards, the remaining modals, the pages, and a server state layer |
+| 5c, dashboard cards | Done | Cards are containers with a stretched title link. Gate warnings 4 to 2, all on TaskCard |
+| 5, remainder | In progress | The remaining modals, the pages, and a server state layer |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1082,6 +1083,14 @@ Its validation state machine was deliberately left alone. `isFormValid` and the 
 One `eslint-plugin-jsx-a11y` rule is disabled on exactly one line for it, with the reason written next to it. `click-events-have-key-events` wants a key handler on whatever is clickable, and an option in a combobox is never focused, so a handler there could not fire. Following the rule would make the component worse. That is the only kind of reason worth silencing one for, and the alternative, restructuring until a rule is satisfied, is how components end up with keyboard handlers nothing can reach.
 
 **A fragile end to end locator, made dangerous by the fix for the thing it was working around.** Several intermittent failures in this phase were `page.getByLabel(/board name/i).or(page.locator('input').first())`, the fallback dating from when that label was not associated with anything. It was still there after `Field` gave the field a real label, and the symptom was the create button staying disabled forever, which reads as a product defect and was diagnosed as one twice, once wrongly attributed to the development container serving a stale build. Removing the fallback, at all four sites, removed the failures. The mechanism is inferred rather than proved: the fill was landing somewhere other than the title. The lesson stands either way, that a workaround outlives the problem it was written for and gets more dangerous as the code around it improves.
+
+**The board cards stopped being buttons.** The last two accessibility warnings on the dashboard were `div`s whose only `onClick` was `stopPropagation`, and chasing them found the reason they existed: the whole card was `role="button"` with a `tabIndex` and a key handler, wrapping the options button and its menu. Interactive content nested inside an interactive element is invalid, screen readers flatten it, and every control inside then needs to stop the parent from firing.
+
+The card is a plain container now, and the board title is a real link whose hit area is stretched over the card by an `after:absolute after:inset-0` pseudo element. A mouse keeps the large target, the keyboard gets one link per card instead of a button holding buttons, three `stopPropagation` calls and the imperative `navigate` disappeared, and the options button sits above the stretch on `z-10`.
+
+That stretch is also the risk, and it is invisible to the component suite: jsdom has no layout, so it has no opinion about which element a pointer actually lands on. An overlay covering the card is exactly what would swallow the click meant for the options button. There is now an end to end test for it, which fails against the previous markup.
+
+**`TaskCard` is deliberately left alone.** The same two warnings remain on it and the same fix would apply, except that it is the drag card, P2-6a is still open on it, and a stretched hit area is precisely the kind of change that would alter pointer timing on an interaction whose margin is already too small. Guessing at that component has cost two attempts already. It belongs with the drag work, not here.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 

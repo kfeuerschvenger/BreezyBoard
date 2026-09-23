@@ -159,4 +159,48 @@ test.describe('board core loop', () => {
 
     expect(pageErrors, 'activating the keyboard sensor must not throw').toEqual([]);
   });
+
+  /**
+   * The board card used to be role="button" with a click handler, wrapping
+   * the options button and its menu, which is interactive content nested
+   * inside an interactive element. It is a plain container now, with the
+   * board title as a real link whose hit area is stretched over the whole
+   * card by a pseudo element.
+   *
+   * That stretch is the risk this test exists for. An overlay covering the
+   * card is exactly what would swallow the click meant for the options
+   * button, and nothing in the component suite can see it: jsdom has no
+   * layout, so it has no opinion about which element a pointer lands on.
+   */
+  test('the board card is operable by mouse and by keyboard, and the two do not fight', async ({
+    page,
+    authedUser,
+  }) => {
+    await logInThroughTheUi(page, authedUser);
+
+    const boardName = `Card E2E ${Date.now()}`;
+    await page.getByRole('button', { name: /create board/i }).first().click();
+    await page.getByLabel(/board name/i).fill(boardName);
+    await page.getByRole('button', { name: /^create board$/i }).last().click();
+    await expect(page.getByText(boardName)).toBeVisible();
+
+    await test.step('the options button stays above the stretched link', async () => {
+      await page.getByRole('button', { name: `Options for ${boardName}` }).click();
+
+      // Landing on the link instead would have navigated away.
+      await expect(page).not.toHaveURL(/\/board\/[a-f0-9]{24}$/);
+      await expect(page.getByRole('button', { name: /add member/i })).toBeVisible();
+
+      await page.keyboard.press('Escape');
+      await page.mouse.click(5, 5);
+    });
+
+    await test.step('the title opens the board from the keyboard alone', async () => {
+      const title = page.getByRole('link', { name: boardName });
+      await title.focus();
+      await expect(title).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page).toHaveURL(/\/board\/[a-f0-9]{24}$/);
+    });
+  });
 });
