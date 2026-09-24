@@ -44,6 +44,9 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   const [templates, setTemplates] = useState<Template[]>([]);
   const [boardColors, setBoardColors] = useState<Color[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // Bumped to ask the fetch below to run again.
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const {
     register,
@@ -87,15 +90,24 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
         ]);
         setTemplates(templatesData ?? []);
         setBoardColors(colorsData ?? []);
+        setLoadFailed(false);
       } catch (error) {
+        // This used to log and say nothing else, which produced the worst
+        // possible failure: the colour and template lists stayed empty, the
+        // schema requires both, and so the create button was disabled
+        // forever with no indication of why. The form looked ordinary and
+        // was permanently dead. It showed up twice as an intermittent test
+        // failure reading "the submit button never became enabled", and was
+        // twice diagnosed as a timing problem before anybody looked here.
         console.error('Error loading data:', error);
+        setLoadFailed(true);
       } finally {
         setIsLoading(false);
       }
     };
 
     if (open) fetchData();
-  }, [open]);
+  }, [open, loadAttempt]);
 
   // Defaults and restore in one effect rather than two, which is the one
   // real simplification the form library buys here. They used to be
@@ -191,6 +203,19 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
         </div>
       }
     >
+      {loadFailed && (
+        <div role="alert" className="mb-6 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+          The colours and templates could not be loaded, so a board cannot be created yet.{' '}
+          <button
+            type="button"
+            onClick={() => setLoadAttempt(attempt => attempt + 1)}
+            className="underline cursor-pointer"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       <form id="create-board-form" onSubmit={onSubmit} className="space-y-6">
         <Field label="Board Name" required error={errors.title?.message}>
           {props => <Input {...props} {...register('title')} placeholder="Enter board name" />}
