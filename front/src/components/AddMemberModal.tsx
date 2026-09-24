@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { X, Search, UserPlus, Check } from 'lucide-react';
 import { UserService } from '@/services';
 import type { User } from '@/models';
+import { Button, Modal } from '@/shared/ui';
 
 type AddMemberModalProps = {
   open: boolean;
@@ -140,48 +141,40 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, onAddMem
     onClose();
   }, [onClose]);
 
-  // Early return for performance (AnimatePresence expects null allowed)
-  if (!open) return null;
-
+  // The backdrop, the panel, the animation, the escape handler and the
+  // close button all used to be written out here. They come from the shared
+  // Modal now, which additionally traps focus and restores it to whatever
+  // opened the dialog, neither of which this copy did. Finding P3-4, the
+  // modal shell reimplemented four times.
+  //
+  // Only the shell moved. The member list further down is untouched on
+  // purpose: P4-3 singles it out as the one autocomplete in this codebase
+  // that was already keyboard operable, and there is nothing to gain from
+  // rewriting the part that was right.
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center" aria-hidden={!open}>
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={handleClose}
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        />
-
-        {/* Modal */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Add members"
-          className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden flex flex-col"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 font-heading">Add Members</h2>
-              <p className="text-sm text-gray-600 font-body mt-1">
-                {boardTitle ? `Add team members to "${boardTitle}"` : 'Add team members'}
-              </p>
-            </div>
-            <button
-              onClick={handleClose}
-              aria-label="Close add members modal"
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            >
-              <X size={20} className="text-gray-500" />
-            </button>
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Add Members"
+      subtitle={boardTitle ? `Add team members to "${boardTitle}"` : 'Add team members'}
+      footer={
+        <>
+          <p className="text-sm text-gray-600 font-body">
+            {selectedMembers.length} member{selectedMembers.length !== 1 ? 's' : ''} selected
+          </p>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleAddMembers} disabled={selectedMembers.length === 0}>
+              Add {selectedMembers.length > 0 ? selectedMembers.length : ''} Member
+              {selectedMembers.length !== 1 ? 's' : ''}
+            </Button>
           </div>
-
+        </>
+      }
+    >
+      <div className="space-y-6">
           {/* Search */}
           <div className="p-6 border-b border-gray-200">
             <div className="relative">
@@ -334,36 +327,8 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ open, onClose, onAddMem
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">
-            <p className="text-sm text-gray-600 font-body">
-              {selectedMembers.length} member{selectedMembers.length !== 1 ? 's' : ''} selected
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleClose}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-body cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddMembers}
-                disabled={selectedMembers.length === 0}
-                className={`px-6 py-2 rounded-lg transition-colors font-body ${
-                  selectedMembers.length > 0
-                    ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-                aria-disabled={selectedMembers.length === 0}
-              >
-                Add {selectedMembers.length > 0 ? selectedMembers.length : ''} Member
-                {selectedMembers.length !== 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        </motion.div>
       </div>
-    </AnimatePresence>
+    </Modal>
   );
 };
 

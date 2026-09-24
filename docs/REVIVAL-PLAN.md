@@ -308,6 +308,10 @@ This is the same class of defect as the withdrawn P0-2 and as P0-1: state derive
 
 **P3-3. Components carrying far too much.** `TaskDrawer.tsx` at 729 lines holds two fetch effects, a nested autocomplete component with its own debounce and fetching, hand-rolled validation, payload reshaping and a nested `DndContext`. `BoardDashboard.tsx` at 506 lines, `Profile.tsx` at 411 and `Board.tsx` at 327 follow the same pattern. There is no container and presentational separation anywhere, and exactly one custom hook exists in the whole codebase (`useTextFile`).
 
+Closed in Phase 5c. All four now use the shared `Modal`, which is also where escape handling, focus trapping, focus restoration and a labelled close button live, so the gaps the four copies got inconsistently right are right once. `LegalModal` lost about half its lines to it and `SuccessModal` rather more.
+
+Only the shells moved. `AddMemberModal`'s member list is untouched on purpose: P4-3 singles it out as the one autocomplete in this codebase that was already keyboard operable, and there is nothing to gain from rewriting the part that was right.
+
 **P3-4. The modal shell is reimplemented four times.** `AddMemberModal`, `CreateBoardModal`, `LegalModal` and `SuccessModal` each build their own backdrop, panel, animation and escape handler from scratch. The escape listener is duplicated verbatim three times, and `CreateBoardModal` and `TaskDrawer` simply forgot theirs, which is why escape does not close the task drawer. A single shared `Modal` primitive removes the duplication and fixes the accessibility gaps in one place.
 
 **P3-5. No shared data-fetching abstraction.** Every page reimplements loading, error and unmount-guard state by hand, inconsistently, which is why some pages have error states and others do not. Either a small `useAsync` hook or a proper server-state library is the fix.
@@ -419,7 +423,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, dashboard cards | Done | Cards are containers with a stretched title link. Gate warnings 4 to 2, all on TaskCard |
 | 5c, server state | Started | TanStack Query with refetch on focus, dashboard migrated, idle invariant confirmed intact |
 | 5c, board page onto queries | Done | Fetching effect gone, optimistic drag writes through the cache, P2-6 guard intact |
-| 5, remainder | In progress | Profile onto queries, the remaining modals |
+| 5c, remaining modals | Done | All four modals on the shared shell (P3-4), success message no longer auto-dismisses |
+| 5, remainder | In progress | Profile onto queries |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1109,6 +1114,12 @@ Retries are off deliberately. The pages have real error states now, and a silent
 The concurrency guard from P2-6 survived intact, deliberately. The abort ref stayed imperative rather than being pushed into a mutation hook, because aborting a superseded request is not something the mutation API expresses well and the behaviour had already been verified. Failures still refetch rather than restoring a snapshot, which is now one call instead of a hand-rolled reload function.
 
 A test helper came out of it, `renderWithQuery`, with a fresh client per call. A shared one carries a previous test's data into the next, which reads as a test that passes alone and fails in the suite, or worse, passes for the wrong reason.
+
+**The remaining three modals, and a success message that stopped vanishing.** `AddMemberModal`, `LegalModal` and `SuccessModal` moved onto the shared shell, which closes P3-4 entirely.
+
+`SuccessModal` is the one worth naming. It closed itself after two seconds with no way to stop it, which P4-3 records and which fails WCAG 2.2.1 plainly: two seconds is not enough for somebody reading with a screen reader, reading slowly, or looking elsewhere when it appeared, and nothing let them ask for more time. A confirmation that vanishes before it is read is the same as no confirmation, except the person cannot tell which of the two happened. The `autoCloseMs` prop is deleted rather than defaulted to zero, so no call site can quietly bring it back, and the message is now in a `role="status"` region so it is announced rather than merely present.
+
+**The layer rule caught its author.** `features/tasks/queries.ts` imported `features/board/arrangeColumn` directly, which is exactly the reaching-into-internals the `no-restricted-imports` rule from section 12.3 forbids, and it fired the first time a second feature existed. The answer was to give `features/board` the public `index.ts` the architecture calls for, not to widen the rule. Worth recording that the rule's whole justification was that a structure nobody can verify automatically decays into a convention, and it proved the point against the person who wrote it, within a week.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 
