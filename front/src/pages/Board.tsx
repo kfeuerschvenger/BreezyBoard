@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
-import { arrangeColumn, byOrder, neighboursOf } from '@/features/board/arrangeColumn';
+import { arrangeColumn, byOrder, neighboursOf } from '@/features/board';
 import { useBoard, useBoardTasks, useTaskCacheWriter } from '@/features/tasks/queries';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {

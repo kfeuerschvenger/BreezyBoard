@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BoardService, TaskService } from '@/services';
-import { byOrder } from '@/features/board/arrangeColumn';
+import { byOrder } from '@/features/board';
 import type { Task } from '@/models';
 
 /**

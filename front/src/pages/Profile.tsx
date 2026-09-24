@@ -401,7 +401,6 @@ const ProfilePage: React.FC = () => {
         onClose={() => setSuccessOpen(false)}
         title="Profile saved"
         message="Your profile has been updated successfully."
-        autoCloseMs={2000} // auto-close after 2s; set to 0 to disable
       />
     </div>
   );
