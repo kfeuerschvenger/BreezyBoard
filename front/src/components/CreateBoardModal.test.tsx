@@ -264,3 +264,39 @@ describe('CreateBoardModal', () => {
     });
   });
 });
+
+describe('CreateBoardModal when the colours and templates cannot be loaded', () => {
+  // The worst kind of failure, and the one this covers: the lists stay
+  // empty, the schema requires a colour and a template, and so the create
+  // button is disabled forever with nothing on screen explaining why. The
+  // form looks perfectly ordinary and is permanently dead.
+  //
+  // It surfaced twice as an intermittent "the submit button never became
+  // enabled" in two different test layers, and was twice put down to timing
+  // before anybody looked at the catch block.
+  it('says so instead of leaving a silently dead form', async () => {
+    mockedColorService.getByType.mockRejectedValue(new Error('network down'));
+
+    open();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not be loaded/i);
+    expect(submit()).toBeDisabled();
+  });
+
+  it('can be retried without closing and reopening the modal', async () => {
+    const user = userEvent.setup();
+    mockedColorService.getByType.mockRejectedValueOnce(new Error('network down')).mockResolvedValue(COLORS);
+
+    open();
+
+    await screen.findByRole('alert');
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+
+    await user.type(titleBox(), 'Recovered board');
+    await waitFor(() => expect(submit()).toBeEnabled());
+  });
+});

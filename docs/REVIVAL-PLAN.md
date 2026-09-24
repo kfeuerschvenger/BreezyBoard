@@ -424,7 +424,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, server state | Started | TanStack Query with refetch on focus, dashboard migrated, idle invariant confirmed intact |
 | 5c, board page onto queries | Done | Fetching effect gone, optimistic drag writes through the cache, P2-6 guard intact |
 | 5c, remaining modals | Done | All four modals on the shared shell (P3-4), success message no longer auto-dismisses |
-| 5, remainder | In progress | Profile onto queries |
+| 5c, profile onto queries | Done | Fetch, writes and cancel through the cache; a duplicated field mapping removed |
+| 5, open | Open | Create board submit intermittently never enables, about one end to end run in three. See section 12.6b |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1120,6 +1121,20 @@ A test helper came out of it, `renderWithQuery`, with a fresh client per call. A
 `SuccessModal` is the one worth naming. It closed itself after two seconds with no way to stop it, which P4-3 records and which fails WCAG 2.2.1 plainly: two seconds is not enough for somebody reading with a screen reader, reading slowly, or looking elsewhere when it appeared, and nothing let them ask for more time. A confirmation that vanishes before it is read is the same as no confirmation, except the person cannot tell which of the two happened. The `autoCloseMs` prop is deleted rather than defaulted to zero, so no call site can quietly bring it back, and the message is now in a `role="status"` region so it is announced rather than merely present.
 
 **The layer rule caught its author.** `features/tasks/queries.ts` imported `features/board/arrangeColumn` directly, which is exactly the reaching-into-internals the `no-restricted-imports` rule from section 12.3 forbids, and it fired the first time a second feature existed. The answer was to give `features/board` the public `index.ts` the architecture calls for, not to widen the rule. Worth recording that the rule's whole justification was that a structure nobody can verify automatically decays into a convention, and it proved the point against the person who wrote it, within a week.
+
+**`Profile` onto queries, and a duplicated mapping that was hiding a bug.** Its fetch effect became a query, its two writes became mutations that invalidate the record, and cancel resets from the cache instead of refetching, because the cached record is by definition the last thing the server confirmed and that is exactly what cancel means.
+
+The field mapping from the stored user to the form was written out twice, once in the load effect and once in cancel, and the second copy was missing `createdAt`. Cancelling therefore blanked the joined date until the page was reloaded. One mapping now, used by both.
+
+**An unresolved defect, recorded rather than guessed at again.** The create board submit sometimes never becomes enabled, and the end to end suite fails on it at roughly one run in three. What is known:
+
+The form does become valid. A probe that fills the name and then waits three seconds finds the colour and template selected and the button enabled, ten times out of ten, with both requests answering 200. So the page reaches a good state; what fails is Playwright's click retry never observing it, over fifty five seconds.
+
+Three explanations were tried and are wrong. It is not the development container serving a stale build, which was verified by reading the served module. It is not a failed colour or template fetch, which would now show an alert and does not. And it is not the fragile `.or(locator('input').first())` selector, which was a real defect and was removed, after which the rate improved and then came back.
+
+One change made it measurably worse and was reverted: resetting `isLoading` to true at the start of the fetch took the suite from six passes in nine to four. That is a genuine signal about where the problem lives, in the interaction between the loading flag, the defaults effect and React Hook Form's validity, rather than a fix.
+
+What did come out of it is a real defect, fixed and tested, and worth having regardless: a failed colour or template fetch used to log to the console and nothing else, leaving the colour and template lists empty. The schema requires both, so the create button was disabled permanently with nothing on screen explaining why. A form that looks entirely ordinary and is dead is the worst shape a failure can take, and it is now an alert with a retry.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 

@@ -6,7 +6,7 @@ import PageHeader from '@/components/PageHeader';
 import FormInput from '@/components/FormInput';
 import SuccessModal from '@/components/SuccessModal';
 import { useAuth } from '@/hooks/useAuth';
-import { UserService } from '@/services';
+import { useUpdateUser, useUploadAvatar, useUser } from '@/features/users/queries';
 import type { User as UserModel } from '@/models';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -36,9 +36,20 @@ const ProfilePage: React.FC = () => {
   const { user } = useAuth(); // expects the auth hook to expose current user (with _id)
   const userId = user?._id ?? null;
 
-  const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
+  const profileQuery = useUser(userId);
+  const updateUser = useUpdateUser(userId);
+  const uploadAvatar = useUploadAvatar(userId);
+
+  const loading = profileQuery.isPending && Boolean(userId);
+  const avatarUploading = uploadAvatar.isPending;
+
+  // Only failures this page causes itself. A failed read is reported by the
+  // query rather than kept in a second piece of state to be cleared by hand.
+  const [writeError, setWriteError] = useState<string | null>(null);
+  const apiError = !userId
+    ? 'User not found in auth context.'
+    : (writeError ?? (profileQuery.isError ? 'Failed to load profile. Please try again later.' : null));
+
   const [successOpen, setSuccessOpen] = useState(false);
 
   // file input ref to trigger file dialog programmatically
@@ -67,48 +78,27 @@ const ProfilePage: React.FC = () => {
     },
   });
 
-  // fetch profile on mount (or when userId becomes available)
+  // One mapping, used by the reset below and by cancel. It used to be
+  // written out twice, once in the fetching effect and once in the cancel
+  // handler, with the second copy quietly missing `createdAt`.
+  const toFormValues = (data: UserModel): ProfileFormValues => ({
+    firstName: data.firstName ?? '',
+    lastName: data.lastName ?? '',
+    email: data.email ?? '',
+    location: data.location ?? '',
+    role: data.role ?? '',
+    department: data.department ?? '',
+    avatar: data.avatar ?? '',
+    createdAt: data.createdAt ?? '',
+  });
+
+  // Fill the form from whatever the cache holds. This also runs after the
+  // window regains focus and the record turns out to have changed
+  // elsewhere, which the previous fetch-once effect could not do.
   useEffect(() => {
-    if (!userId) {
-      setLoading(false);
-      setApiError('User not found in auth context.');
-      return;
-    }
-
-    let mounted = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data: UserModel = await UserService.getById(userId);
-        if (!mounted) return;
-
-        // normalize and set fields expected by the form
-        const defaultValues: ProfileFormValues = {
-          firstName: data.firstName ?? '',
-          lastName: data.lastName ?? '',
-          email: data.email ?? '',
-          location: data.location ?? '',
-          role: data.role ?? '',
-          department: data.department ?? '',
-          avatar: data.avatar ?? '',
-          createdAt: data.createdAt ?? '',
-        };
-
-        reset(defaultValues, { keepDirty: false });
-        setApiError(null);
-      } catch (err) {
-        console.error('Failed to load profile:', err);
-        setApiError('Failed to load profile. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [userId, reset]);
+    if (!profileQuery.data) return;
+    reset(toFormValues(profileQuery.data), { keepDirty: false });
+  }, [profileQuery.data, reset]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -121,19 +111,14 @@ const ProfilePage: React.FC = () => {
   // handle avatar selection and upload
   const onAvatarSelected = async (file?: File | null) => {
     if (!file || !userId) return;
-    setAvatarUploading(true);
-    setApiError(null);
+    setWriteError(null);
 
     try {
-      // upload to the server and get the new avatar URL
-      const avatarUrl = await UserService.uploadAvatar(userId, file);
-      // update form value with new avatar
+      const avatarUrl = await uploadAvatar.mutateAsync(file);
       setValue('avatar', avatarUrl, { shouldDirty: true, shouldValidate: true });
     } catch (err) {
       console.error('Avatar upload failed:', err);
-      setApiError('Avatar upload failed. Please try again.');
-    } finally {
-      setAvatarUploading(false);
+      setWriteError('Avatar upload failed. Please try again.');
     }
   };
 
@@ -146,10 +131,10 @@ const ProfilePage: React.FC = () => {
   // Save profile handler
   const onSave = async (values: ProfileFormValues) => {
     if (!userId) {
-      setApiError('User not available.');
+      setWriteError('User not available.');
       return;
     }
-    setApiError(null);
+    setWriteError(null);
     try {
       // send only allowed fields
       const payload: Partial<UserModel> = {
@@ -162,43 +147,29 @@ const ProfilePage: React.FC = () => {
         avatar: values.avatar,
       };
 
-      await UserService.update(userId, payload);
+      await updateUser.mutateAsync(payload);
       // reset form state to reflect that changes were saved
       reset(values, { keepDirty: false });
       setSuccessOpen(true);
     } catch (err) {
       console.error('Failed to update profile:', err);
-      setApiError('Failed to update profile. Please try again.');
+      setWriteError('Failed to update profile. Please try again.');
     }
   };
 
+  // Cancel resets from the cache rather than refetching. The cached record
+  // is the last thing the server confirmed, since every write here
+  // invalidates it, and that is precisely what cancel means: put the form
+  // back to what is actually stored.
+  //
+  // It also fixes a defect in the version this replaces, which refetched and
+  // then rebuilt the form from a second, hand-written copy of the field
+  // mapping. That copy was missing `createdAt`, so cancelling silently blanked
+  // the joined date until the page was reloaded.
   const onCancel = () => {
-    // reload original values from server (safer) or reset to last known values
-    if (!userId) return;
-    // simplest: re-fetch (could be optimized)
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await UserService.getById(userId);
-        reset(
-          {
-            firstName: data.firstName ?? '',
-            lastName: data.lastName ?? '',
-            email: data.email ?? '',
-            location: data.location ?? '',
-            role: data.role ?? '',
-            department: data.department ?? '',
-            avatar: data.avatar ?? '',
-          },
-          { keepDirty: false }
-        );
-      } catch (err) {
-        console.error('Cancel: failed to reload profile', err);
-        setApiError('Failed to reload profile.');
-      } finally {
-        setLoading(false);
-      }
-    })();
+    if (!profileQuery.data) return;
+    setWriteError(null);
+    reset(toFormValues(profileQuery.data), { keepDirty: false });
   };
 
   const avatarValue = watch('avatar');
