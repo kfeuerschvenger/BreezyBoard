@@ -318,4 +318,33 @@ describe('BoardDashboard deletion', () => {
 
     expect(await screen.findByText('Failed to delete board. Please try again.')).toBeInTheDocument();
   });
+
+  // Deleting a board cascades to its tasks and is not fast. With no sign
+  // that it started, the only thing the person can do is click again, and
+  // every click is another cascade against the same board.
+  it('says the delete is under way and refuses a second click while it is', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedBoardService.delete.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+
+    await openDelete(user);
+
+    const deleting = await screen.findByRole('button', { name: /Deleting/ });
+    expect(deleting).toBeDisabled();
+    expect(mockedBoardService.delete).toHaveBeenCalledTimes(1);
+  });
+
+  // The in-flight state belongs to the board being deleted, not to the page.
+  it('leaves the other boards deletable while one is being deleted', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedBoardService.delete.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+
+    await openDelete(user);
+    await screen.findByRole('button', { name: /Deleting/ });
+
+    await user.click(screen.getByRole('button', { name: 'Options for Hiring' }));
+
+    expect(screen.getByRole('button', { name: /^Delete$/ })).toBeEnabled();
+  });
 });

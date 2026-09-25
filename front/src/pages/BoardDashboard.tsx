@@ -38,7 +38,6 @@ const BoardDashboard: React.FC = () => {
   const [selectedBoardForMembers, setSelectedBoardForMembers] = useState<Board | null>(null);
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   // Only failures the page causes itself. A failed read is reported by the
   // query below rather than kept in a second piece of state that has to be
   // cleared by hand.
@@ -126,8 +125,6 @@ const BoardDashboard: React.FC = () => {
     } catch (err) {
       console.error('Error deleting board:', err);
       setWriteError('Failed to delete board. Please try again.');
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -233,7 +230,12 @@ const BoardDashboard: React.FC = () => {
             };
 
             const isMenuOpen = openMenuId === id;
-            const isDeleting = deletingId === id;
+            // Read from the mutation rather than mirrored into state beside
+            // it. The mirror was the defect: nothing ever wrote a board id
+            // into it, so the disabled state and the "Deleting..." label
+            // below could not appear, and a slow cascade invited a second
+            // click that started another one.
+            const isDeleting = deleteBoard.isPending && deleteBoard.variables === id;
 
             return (
               <motion.div
