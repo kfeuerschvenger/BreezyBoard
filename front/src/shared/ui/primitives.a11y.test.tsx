@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { Button, Drawer, Field, IconButton, Input, Modal, Textarea } from './index';
+import { Button, Drawer, Field, IconButton, Input, Modal, SwatchPicker, Textarea } from './index';
+import type { SwatchOption } from './index';
 
 /**
  * The component layer of the accessibility gate in section 10.2 of the
@@ -200,5 +201,68 @@ describe('Drawer', () => {
     await user.keyboard('{Escape}');
 
     expect(closed).toBe(1);
+  });
+});
+
+const SWATCHES: SwatchOption[] = [
+  { id: 'blue', label: 'Royal Blue', color: '#0052CC' },
+  { id: 'green', label: 'Emerald', color: '#2F9E44' },
+];
+
+describe('SwatchPicker', () => {
+  it.each(['inline', 'grid'] as const)('is a named group of named radios in the %s layout', async layout => {
+    const { container } = render(
+      <SwatchPicker name="color" legend="Board colour" options={SWATCHES} value="blue" onChange={() => {}} layout={layout} />
+    );
+
+    expect(screen.getByRole('group', { name: 'Board colour' })).toBeInTheDocument();
+    // A block of colour has no name of its own, so an unnamed swatch is
+    // announced as "radio" with nothing to tell it from the one beside it.
+    expect(screen.getByRole('radio', { name: 'Royal Blue' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Emerald' })).not.toBeChecked();
+    await noViolations(container);
+  });
+
+  it('is operable with the arrow keys alone, which is what the radio group buys', async () => {
+    const user = userEvent.setup();
+    const chosen: string[] = [];
+
+    render(
+      <SwatchPicker name="color" legend="Board colour" options={SWATCHES} value="blue" onChange={id => chosen.push(id)} />
+    );
+
+    await user.tab();
+    await user.keyboard('{ArrowRight}');
+
+    expect(chosen).toEqual(['green']);
+  });
+
+  it('describes the group by its error rather than leaving it on screen unlinked', async () => {
+    const { container } = render(
+      <SwatchPicker
+        name="color"
+        legend="Board colour"
+        options={SWATCHES}
+        value=""
+        onChange={() => {}}
+        error="Color is required"
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Color is required');
+    expect(screen.getByRole('radio', { name: 'Royal Blue' })).toHaveAccessibleDescription('Color is required');
+    await noViolations(container);
+  });
+
+  // A live region announces its contents; it does not take a name from them.
+  // Asserting on the name here passes only if the component carries a label it
+  // does not need, so the assertion is on what would actually be read out.
+  it('announces the wait instead of showing a spinner that says nothing', async () => {
+    const { container } = render(
+      <SwatchPicker name="color" legend="Board colour" options={[]} value="" onChange={() => {}} isLoading />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading colours');
+    await noViolations(container);
   });
 });

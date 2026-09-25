@@ -430,7 +430,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, checklist extracted | Done | `features/tasks/Checklist` owns its sensors and its four edits, 6 tests of its own. `TaskDrawer` 588 to 442 |
 | 5d, priority select extracted | Done | `features/tasks/PrioritySelect`, and its selected state now exists in the stylesheet (P4-6) |
 | 5d, task form hook | Done | `useTaskForm` owns the values, the errors, the draft and the submit. 10 tests, 6 mutations caught |
-| 5d, remaining decomposition | Open | `SwatchPicker` to `shared/ui`, then the `TaskForm` and shell split. See section 12.5 |
+| 5d, swatch picker shared | Done | `shared/ui/SwatchPicker` serves both colour pickers. `TaskDrawer` 196 to 163 |
+| 5d, remaining decomposition | Open | The `TaskForm` and shell split, and the other rows of section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1043,7 +1044,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 
 | Current | Lines | Becomes |
 |---|---|---|
-| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `tasks/Checklist` and `tasks/PrioritySelect` and `useTaskForm` (done, 196 left), `shared/ui/SwatchPicker`, `useTaskForm` |
+| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `tasks/Checklist` and `tasks/PrioritySelect`, `useTaskForm` and `shared/ui/SwatchPicker` (done, 163 left), `shared/ui/SwatchPicker`, `useTaskForm` |
 | `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
@@ -1164,6 +1165,16 @@ The submit gate reads error values rather than error keys. That is the whole of 
 Six mutations were run against the extracted hook and all six are caught: the key count, the two whitespace trims, the single member preselect, the guard that stops a hand picked colour being overwritten, and the stored colour resolution. Two of them were not caught on the first attempt, and both failures were in the tests rather than in the code. One asserted on a form with several fields blank, so removing a single check still left the form invalid and the test green. The other passed an empty colour list, so the effect it meant to exercise returned before doing anything. A test that cannot fail is worse than no test, because it is counted.
 
 One inconsistency is preserved rather than fixed, and named in the hook: only the owner clears its own error as it changes, while the title and the description keep theirs until the next submit. That is an accident rather than a rule, and changing it belongs with a validation rewrite, not with a move.
+
+**`SwatchPicker`, and the cost of a second integration mode.** The two colour pickers are now one primitive, which takes the drawer to 163 lines from 852 where this decomposition started.
+
+They diverged on three axes and only two of them mattered. The layout differs, a row of round swatches against a four column grid of bordered cards, and that is a `layout` prop. The name is visible in the grid and carried for assistive technology alone inline, which follows from the layout. The third was the real question: the drawer's picker is controlled, and the modal's was registered directly with the form library, so a single component would have needed to accept either a value and a change handler or a spread registration, and an API that takes one of two shapes is an API that can be given both.
+
+The answer was to keep the primitive controlled and reach it through the form library's `Controller` at the registered call site, which is what that wrapper exists for. One mode, both callers, and the field stays registered so the per field defaults pass that fixed the create board flake is untouched. Measured afterwards rather than assumed: ten end to end runs, no create board failure.
+
+This is the opposite conclusion to the `UserPicker` entry above, and the difference is worth stating because the two look alike. Merging the user pickers would have needed a data source strategy, a cardinality switch and two ARIA patterns, which is three kinds of behaviour behind one name. Merging the colour pickers needed one layout prop and one wrapper at one call site, and the accessible shape, a fieldset with a legend over radios whose labels are the controls, is identical in both. A shared component is worth it when what differs is presentation and what is shared is behaviour, and not when it is the other way round.
+
+The accessibility gate caught its author again, as it did during the query layer migration. The first version put `aria-invalid` on the radio inputs, which that role does not support, and the lint rule refused it before any test ran.
 
 ### 12.7 Sequencing
 
