@@ -169,6 +169,10 @@ describe('Profile editing', () => {
 
     expect(await screen.findByText('Failed to update profile. Please try again.')).toBeInTheDocument();
     expect(firstNameInput()).toHaveValue('Augusta');
+    // Without this, a save that answers "it worked" after being refused
+    // shows the confirmation and the failure side by side, and only the
+    // failure half is asserted anywhere.
+    expect(screen.queryByText('Your profile has been updated successfully.')).not.toBeInTheDocument();
   });
 
   // Cancel resets from the cache rather than refetching, because the cached

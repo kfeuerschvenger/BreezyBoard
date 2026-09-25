@@ -445,7 +445,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, profile characterized | Done | 13 tests on a page that had none, 8 mutations caught after one test was strengthened |
 | 5d, profile accessibility | Done | Joined date no longer reads Invalid Date (P4-10), avatar upload reachable by keyboard (P4-11) |
 | 5a, gate covers the profile | Done | A seventh surface, measured and budgeted. Its first run found a prohibited aria-label in `PageHeader` |
-| 5d, remaining decomposition | Open | `Profile` 380, `Board` 348, `AddMemberModal` 335, and the smaller rows of section 12.5 |
+| 5d, profile composed | Done | `useProfile`, `ProfileSummary`, `ProfileForm`, `ProfileActions`, `AvatarUploader`. `Profile` 380 to 66 |
+| 5d, remaining decomposition | Open | `AddMemberModal` 335 and the smaller rows of section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1060,7 +1061,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 |---|---|---|
 | `TaskDrawer.tsx` | 852 | Done, 32 left. `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `shared/ui/SwatchPicker`, `useTaskForm` and `useTaskDrawer` |
 | `BoardDashboard.tsx` | 513 | Done, 140 left. `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoardDashboard`, `useBoardMenu`, `shared/ui/StatTile` and `EmptyState` |
-| `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
+| `Profile.tsx` | 380 | Done, 66 left. `users/ProfileSummary`, `users/ProfileForm`, `users/ProfileActions`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
 | `Board.tsx` | 348 | Done, 153 left. `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop`, `shared/ui/LoadingScreen` |
 | `CreateBoardModal.tsx` | 281 | `boards/CreateBoardForm` over `Modal`, `TemplatePicker`, `SwatchPicker` |
@@ -1079,7 +1080,7 @@ A page should read as composition and nothing else: route params in, hooks for d
 | Page | Now | Target |
 |---|---|---|
 | `BoardDashboard.tsx` | 140, from 513 | Under 70, not reached. See 12.6b |
-| `Profile.tsx` | 410 | Under 60 |
+| `Profile.tsx` | 66, from 380 | Under 60, six lines short |
 | `Board.tsx` | 153, from 348 | Under 80, not reached. See 12.6b |
 | `Login.tsx` | 242 | Under 40 |
 | `Register.tsx` | 26 | Unchanged |
@@ -1247,6 +1248,16 @@ P4-11 is the avatar upload being mouse-only. The file input was hidden with Tail
 That second one is asserted as a class name rather than by tabbing, and the reason is worth repeating from P4-7: jsdom loads no stylesheet, so `hidden` has no effect there and a focus test would pass just as happily against the broken version. The difference between the two techniques exists only in the compiled CSS, so the compiled CSS is where it was checked and the class is what the test can hold.
 
 Extending the gate also caught a third thing on its first run: `PageHeader` wrapped its action area in a `div` with no role carrying `aria-label="page actions"`, which ARIA prohibits. It had never fired because this is the first scanned page that renders that header with an empty action area. The label is gone, which is why `aria-prohibited-attr` has no line in the profile baseline rather than a zero.
+
+**`Profile`, the closest any page has come to its target.** 380 lines to 66, against a target of under 60. `useProfile` owns the record, the form over it and the two writes; `ProfileSummary`, `ProfileForm`, `ProfileActions` and `AvatarUploader` own what is drawn.
+
+Two things here were not moves. The save and cancel pair was written out twice, once in the page header and once at the foot of the form for a narrow screen, and the two copies had drifted: the header's save ignored `isDirty` while the footer's did not. One `ProfileActions` now serves both, and it takes an `onSave` only for the pair outside the form, so the one inside it stays a real submit and pressing Enter in a field still works.
+
+And the summary takes the form's current values as one object rather than seven named props. That reads as line count and is not: this card updates as the fields are edited, so the form's values are what it shows, and naming them one at a time described it as a view of the stored record, which it is not.
+
+Twelve mutations were run across the four new files and eleven were caught first time. The survivor made `save` answer that it worked after being refused, which shows the confirmation and the failure side by side; the test asserted the failure half and never checked that the confirmation stayed away. It does now.
+
+Six lines short of the target, and the last six are not worth inventing a component for. What is left is the header block, the two card call sites and the success modal, which is a page composing its parts.
 
 **The unit suite flakes under CPU contention, and this is what was measured.** Worth recording before someone spends a session chasing it as a regression.
 
