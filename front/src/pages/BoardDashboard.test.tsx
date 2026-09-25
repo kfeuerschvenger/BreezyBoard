@@ -4,8 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import BoardDashboard from './BoardDashboard';
-import { AuthService, BoardService, ColorService, DashboardService, TemplateService, UserService } from '@/services';
-import { clearColorCache } from '@/utils/colorUtils';
+import { AuthService, BoardService, ColorService, DashboardService, TemplateService } from '@/services';
 import type { Board } from '@/models';
 
 // Characterization, written against the page as it stands before section
@@ -83,10 +82,6 @@ const renderDashboard = () =>
 const card = (title: string) => screen.getByRole('heading', { name: title }).closest('div.relative') as HTMLElement;
 
 beforeEach(() => {
-  // The colour helper holds a module level Map that survives between tests,
-  // so a colour resolved by one test would make the next one's request
-  // disappear and its call count assertions meaningless.
-  clearColorCache();
   mockedAuthService.getCurrentUser.mockReset().mockReturnValue(null);
   mockedBoardService.getAll.mockReset().mockResolvedValue(BOARDS);
   mockedBoardService.delete.mockReset().mockResolvedValue(undefined);
@@ -140,6 +135,56 @@ describe('BoardDashboard listing', () => {
 
     expect(await screen.findByRole('link', { name: 'Untitled Board' })).toBeInTheDocument();
     expect(screen.getByText('No description')).toBeInTheDocument();
+  });
+});
+
+describe('BoardDashboard board colours', () => {
+  const PALETTE = [
+    { _id: 'color-green', name: 'Green', value: '#10B981' },
+    { _id: 'color-amber', name: 'Amber', value: '#F59E0B' },
+  ];
+
+  beforeEach(() => {
+    mockedColorService.getByType.mockResolvedValue(PALETTE);
+    // Deliberately a different colour from the palette entry of the same id.
+    // Anything still resolving a board colour one request at a time paints
+    // red, so the assertions below say which of the two paths produced the
+    // colour rather than only that a colour arrived.
+    mockedColorService.getById.mockResolvedValue({ _id: 'color-green', name: 'Red', value: '#EF4444' });
+  });
+
+  it('reads the board palette once however many boards are listed', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Hiring' });
+
+    await waitFor(() => expect(mockedColorService.getByType).toHaveBeenCalledWith('board'));
+    expect(mockedColorService.getByType).toHaveBeenCalledTimes(1);
+    expect(mockedColorService.getById).not.toHaveBeenCalled();
+  });
+
+  it('paints a board whose colour is an id with the palette entry of that id', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Hiring' });
+
+    await waitFor(() =>
+      expect(within(card('Hiring')).getByRole('progressbar')).toHaveStyle({ backgroundColor: '#10B981' })
+    );
+  });
+
+  it('keeps painting a board whose colour is already a hex value', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+
+    expect(within(card('Launch Plan')).getByRole('progressbar')).toHaveStyle({ backgroundColor: '#3B82F6' });
+  });
+
+  it('falls back to the neutral colour when the palette has no entry for the id', async () => {
+    mockedBoardService.getAll.mockResolvedValue([makeBoard({ _id: 'board-odd', title: 'Odd', color: 'color-gone' })]);
+
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Odd' });
+
+    expect(within(card('Odd')).getByRole('progressbar')).toHaveStyle({ backgroundColor: '#64748B' });
   });
 });
 
