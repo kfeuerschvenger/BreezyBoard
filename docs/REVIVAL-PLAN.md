@@ -431,6 +431,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, priority select extracted | Done | `features/tasks/PrioritySelect`, and its selected state now exists in the stylesheet (P4-6) |
 | 5d, task form hook | Done | `useTaskForm` owns the values, the errors, the draft and the submit. 10 tests, 6 mutations caught |
 | 5d, swatch picker shared | Done | `shared/ui/SwatchPicker` serves both colour pickers. `TaskDrawer` 196 to 163 |
+| 5d, drawer reference data | Done | `useColors` and `useBoardMembers` replace two effects that refetched per task. `TaskDrawer` 163 to 121 |
 | 5d, remaining decomposition | Open | The `TaskForm` and shell split, and the other rows of section 12.5 |
 | 6 onward | Not started | |
 
@@ -1175,6 +1176,16 @@ The answer was to keep the primitive controlled and reach it through the form li
 This is the opposite conclusion to the `UserPicker` entry above, and the difference is worth stating because the two look alike. Merging the user pickers would have needed a data source strategy, a cardinality switch and two ARIA patterns, which is three kinds of behaviour behind one name. Merging the colour pickers needed one layout prop and one wrapper at one call site, and the accessible shape, a fieldset with a legend over radios whose labels are the controls, is identical in both. A shared component is worth it when what differs is presentation and what is shared is behaviour, and not when it is the other way round.
 
 The accessibility gate caught its author again, as it did during the query layer migration. The first version put `aria-invalid` on the radio inputs, which that role does not support, and the lint rule refused it before any test ran.
+
+**The drawer's two fetching effects, and what the query migration had missed.** `TaskDrawer` still held two hand written `useEffect` fetches, one for the task colour palette and one for the board's members, after the pages around it had already moved onto the query cache. They were 43 lines of the drawer, which is why they read as a line count problem, but the defect underneath was a cache scope: both effects listed `task` as their dependency, so pointing the drawer at a different task refetched both lists. The colour palette is the same list for every task in the product and the member list belongs to the board, so neither request could return anything new.
+
+They are now `features/colors/useColors(type)` and `features/users/useBoardMembers(boardId)`, each keyed on the scope its data actually has. Working through six tasks on one board costs one palette request and one member request rather than six of each. The colour palettes carry `staleTime: Infinity` because they are seeded reference data that no part of the product writes to, which also means a window regaining focus does not revalidate them.
+
+`useColors` takes the type as an argument rather than existing as a `useTaskColors`, because `CreateBoardModal` asks the same endpoint for the board palette and is the next caller. That is also the one thing the drawer's own tests cannot show, since the drawer only ever asks for one type: a key that ignored its argument would hand the second palette the first one's colours and every drawer test would stay green. It has its own test for that, and the mutation confirms it.
+
+Three mutations were run and all three are caught: the colour key dropping its type, the member key dropping its board id, and the member query enabled unconditionally. The three tests behind them are new, and the two that matter were written against the old code first and watched to fail with two calls where one was expected.
+
+One thing in the result is not covered by a test and is named here rather than left to be rediscovered. The two lists fall back to module level constants instead of a `[]` literal, because `useTaskForm` keys three effects on them and a fresh literal gives each render a new identity. Those three effects all return at their first guard on an empty list, so today the difference is a no-op rather than a defect, and no test distinguishes the two. It is written that way because this exact trap already cost a debugging cycle in the hook's own tests, where an object literal in a `renderHook` callback reset the form on every rerender.
 
 ### 12.7 Sequencing
 

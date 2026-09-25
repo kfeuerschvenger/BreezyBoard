@@ -3,4 +3,4 @@
 // dependency direction rule in the lint config enforces.
 export { UserPicker } from './components/UserPicker';
 export type { UserPickerProps } from './components/UserPicker';
-export { userKeys, useUser, useUpdateUser, useUploadAvatar } from './queries';
+export { userKeys, useUser, useBoardMembers, useUpdateUser, useUploadAvatar } from './queries';

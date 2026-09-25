@@ -4,6 +4,7 @@ import type { User } from '@/models';
 
 export const userKeys = {
   detail: (userId: string) => ['user', userId] as const,
+  boardMembers: (boardId: string) => ['users', 'board-members', boardId] as const,
 };
 
 export const useUser = (userId: string | null) =>
@@ -11,6 +12,20 @@ export const useUser = (userId: string | null) =>
     queryKey: userKeys.detail(userId ?? ''),
     queryFn: () => UserService.getById(userId as string),
     enabled: Boolean(userId),
+  });
+
+/**
+ * The people who can be assigned work on one board.
+ *
+ * Keyed on the board rather than on the task being looked at, which is the
+ * scope the list actually has: moving between two tasks of the same board
+ * reads a list already held instead of asking for it again.
+ */
+export const useBoardMembers = (boardId?: string) =>
+  useQuery({
+    queryKey: userKeys.boardMembers(boardId ?? ''),
+    queryFn: () => UserService.getBoardMembers(boardId as string),
+    enabled: Boolean(boardId),
   });
 
 /**
