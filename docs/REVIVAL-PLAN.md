@@ -428,7 +428,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, create board flake | Done | The defaults are applied per field, so a name typed as the fetch resolves survives. 18 runs, 0 recurrences |
 | 5d, owner picker extracted | Done | `features/users/UserPicker` with the resolution on the feature query. `TaskDrawer` 852 to 588 |
 | 5d, checklist extracted | Done | `features/tasks/Checklist` owns its sensors and its four edits, 6 tests of its own. `TaskDrawer` 588 to 442 |
-| 5d, remaining decomposition | Open | SwatchPicker, PrioritySelect and `useTaskForm` still inside `TaskDrawer`. See section 12.5 |
+| 5d, priority select extracted | Done | `features/tasks/PrioritySelect`, and its selected state now exists in the stylesheet (P4-6) |
+| 5d, remaining decomposition | Open | SwatchPicker and `useTaskForm` still inside `TaskDrawer`. See section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1041,7 +1042,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 
 | Current | Lines | Becomes |
 |---|---|---|
-| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker` and `tasks/Checklist` (both done, 442 left), `shared/ui/SwatchPicker`, `useTaskForm` |
+| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `tasks/Checklist` and `tasks/PrioritySelect` (done, 414 left), `shared/ui/SwatchPicker`, `useTaskForm` |
 | `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
@@ -1146,6 +1147,14 @@ Two things are worth carrying out of this. The recorded signal from the previous
 A second defect was fixed on the way and is worth having regardless: a failed colour or template fetch used to log to the console and nothing else, leaving both lists empty. The schema requires both, so the create button was disabled permanently with nothing on screen explaining why. A form that looks entirely ordinary and is dead is the worst shape a failure can take, and it is now an alert with a retry.
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
+
+**P4-6, a selected state that was never generated.** Found while lifting the priority group out of the drawer, and confirmed against the compiled stylesheet rather than by reading the markup.
+
+The three priority chips composed their selected styling at runtime, as `has-[:checked]:${priority.color}` over a value holding `bg-green-100 text-green-800`. Tailwind generates a rule only for a class it can read in the source, so `has-[:checked]:bg-green-100` named a rule that was never emitted. The build output confirms it: the literal `has-[:checked]:` classes used by the two swatch pickers are all present, and the three priority ones are absent entirely.
+
+The composition also splits wrongly. Only the first of the two classes inherits the variant, so `text-green-800` applied unconditionally. The result is three chips permanently tinted and no indication of which one is selected, which is the same failure as having no selected state at all.
+
+Every class is written out in full now, and the six rules appear in the build. The guard is an assertion about class names, which is normally the wrong way to test a selection and is the only way here: the markup was always correct and the missing piece was a stylesheet the test environment does not consult.
 
 ### 12.7 Sequencing
 

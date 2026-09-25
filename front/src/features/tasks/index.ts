@@ -3,3 +3,5 @@
 // dependency direction rule in the lint config enforces.
 export { Checklist } from './components/Checklist';
 export type { ChecklistItemData, ChecklistProps } from './components/Checklist';
+export { PrioritySelect } from './components/PrioritySelect';
+export type { PrioritySelectProps, TaskPriority } from './components/PrioritySelect';
