@@ -439,6 +439,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, board delete in-flight | Done | The unreachable "Deleting..." state now reads the mutation (P4-8). `BoardDashboard` 405 to 403 |
 | 5d, board card extracted | Done | `BoardCard`, `BoardCardMenu` and `useBoardMenu`. `BoardDashboard` 403 to 217 |
 | 5d, dashboard composed | Done | `useBoardDashboard` and `shared/ui/EmptyState`. `BoardDashboard` 217 to 140, section 12.5 row closed |
+| 5d, failed task save | Done | The board page stopped swallowing the error, so the drawer can report it and keep the draft (P4-9) |
 | 5d, remaining decomposition | Open | `Profile` 380, `Board` 348, `AddMemberModal` 335, and the smaller rows of section 12.5 |
 | 6 onward | Not started | |
 
@@ -1209,6 +1210,18 @@ Deleting a board cascades to every task on it and is not fast. With nothing on s
 It now reads the mutation's own in-flight state and the id it was called with, so the second piece of state is gone rather than corrected. That is the general form of the defect: the fact was already held by the mutation, and copying it into a neighbouring `useState` created a second version that had to be kept in step with the first and was not. Two tests cover it, one that the item disables and says so, and one that the other boards stay deletable, which is what makes the id comparison load bearing rather than decoration.
 
 What made the split safe to judge was one characterization test written before it. Choosing between the two titles is the only decision the shell keeps, and nothing pinned it, so a split that dropped the title entirely would have left all eighteen other tests in that file green. It is asserted as the dialog's accessible name rather than as text, which is what assistive technology announces and what section 10.2 records as having been missing here.
+
+**P4-9, a failed task save that looked exactly like a successful one.** Found while reading `Board.tsx` before decomposing it, and it is the worst defect this migration has turned up so far, because the outcome is lost work rather than a wrong pixel.
+
+The task drawer knows how to report a failed save. Its hook wraps `onSave`, catches, and sets a message the drawer shows while staying open and holding what was typed. There is a test for it, and that test passes, because it hands the drawer an `onSave` that rejects.
+
+The real `onSave` is the board page's handler, and it wrapped everything in a try/catch that logged and returned normally. A rejected create therefore reached the drawer as a resolved promise, so the drawer cleared the saved draft and closed itself. The person is returned to the board with no message, no task, and no draft to recover. The drawer's entire error path was unreachable in the running application.
+
+This is the same shape as P0-1 and worth naming as a class: a guard that is tested in isolation and never reached in composition. The unit test proved the drawer behaves correctly when told about a failure. Nothing proved anything ever told it.
+
+The handler no longer catches. The write throws, the drawer reports it and keeps itself open, and closing on success is the drawer's job through `onSaved` rather than something both of them did. One thing is still swallowed on purpose: the follow-up move that sends a fully checked task to the last column. That runs after the save succeeded, and answering "the task could not be saved" because a follow-up failed would be a worse answer than saying nothing.
+
+The test for it goes through the page rather than the drawer, because the seam is the defect. A drawer level test cannot see it, which is exactly how it survived this long.
 
 **`BoardDashboard`, and the target this one did not reach.** The page went from 513 lines to 140 over five commits, and every component this section named for it exists: `BoardCard`, `BoardCardMenu`, `BoardStats`, `shared/ui/StatTile`, `shared/ui/EmptyState`, plus `useBoardMenu` and `useBoardDashboard`. Section 12.6 asks for under 70 and 140 is not that, so the number is recorded as it is rather than rounded into a claim.
 

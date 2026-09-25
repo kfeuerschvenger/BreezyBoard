@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Board from './Board';
 import { BoardService, TaskService, ColorService, UserService } from '@/services';
-import type { Board as BoardModel, Task } from '@/models';
+import type { Board as BoardModel, Color, Task, User } from '@/models';
 
 // Board always mounts a TaskDrawer child (it just keeps it closed until a
 // task is clicked), and that drawer loads colors on mount regardless of
@@ -12,7 +13,7 @@ import type { Board as BoardModel, Task } from '@/models';
 // that side effect never reaches the real, unmocked axios client.
 vi.mock('@/services', () => ({
   BoardService: { getById: vi.fn() },
-  TaskService: { getByBoard: vi.fn(), move: vi.fn() },
+  TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
 }));
@@ -147,5 +148,84 @@ describe('Board page rendering', () => {
     expect(within(alert).getByText('This board could not be loaded')).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: /try again/i })).toBeInTheDocument();
     expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
+  });
+});
+
+describe('Board page saving a task', () => {
+  const COLORS: Color[] = [{ _id: 'color-blue', name: 'Blue', value: '#3B82F6' }];
+  const MEMBERS: User[] = [
+    { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' },
+    { _id: 'user-grace', firstName: 'Grace', lastName: 'Hopper', email: 'grace@example.com', avatar: '' },
+  ];
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    mockedBoardService.getById.mockReset().mockResolvedValue(board);
+    mockedTaskService.getByBoard.mockReset().mockResolvedValue([]);
+    mockedTaskService.create.mockReset();
+    mockedTaskService.update.mockReset();
+    mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  /** Opens the drawer through Add Task and fills it to the point of being submittable. */
+  const fillNewTask = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderBoard();
+    await screen.findByRole('heading', { name: 'To Do' });
+
+    await user.click(screen.getByRole('button', { name: /Add Task/ }));
+    await screen.findByRole('dialog');
+    // The colour arrives from the column the task is created in, so only the
+    // three remaining required fields have to be filled here.
+    await screen.findByRole('radio', { name: 'Blue' });
+
+    const title = screen.getByPlaceholderText('Enter task title');
+    await user.clear(title);
+    await user.type(title, 'Write the release notes');
+    await user.type(screen.getByPlaceholderText('Enter task description'), 'For this cycle.');
+
+    await user.type(screen.getByLabelText(/Owner/), 'Ada');
+    await user.click(await screen.findByText('Ada Lovelace', {}, { timeout: 15_000 }));
+
+    const save = screen.getByRole('button', { name: 'Save Changes' });
+    await waitFor(() => expect(save).toBeEnabled());
+    return save;
+  };
+
+  it('creates the task and closes the drawer when the server accepts it', async () => {
+    const user = userEvent.setup();
+    mockedTaskService.create.mockResolvedValue(
+      makeTask({ _id: 'task-new', title: 'Write the release notes', status: 'col-todo' })
+    );
+
+    const save = await fillNewTask(user);
+    await user.click(save);
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockedTaskService.create).toHaveBeenCalledWith(BOARD_ID, expect.objectContaining({ title: 'Write the release notes' }));
+  });
+
+  // The drawer knows how to report a failed save and is tested doing it. It
+  // can only do so if the failure reaches it, and the page's save handler
+  // catches everything and returns normally, so the drawer is told the save
+  // succeeded: it clears the draft and closes. The work is gone and nothing
+  // was ever written.
+  it('keeps the drawer open and says so when the server refuses the task', async () => {
+    const user = userEvent.setup();
+    mockedTaskService.create.mockRejectedValue(new Error('refused'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const save = await fillNewTask(user);
+    await user.click(save);
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter task title')).toHaveValue('Write the release notes');
   });
 });
