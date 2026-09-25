@@ -17,5 +17,7 @@ export type {
   UseTaskFormOptions,
   UseTaskFormResult,
 } from './hooks/useTaskForm';
+export { useTaskDragAndDrop } from './hooks/useTaskDragAndDrop';
+export type { TaskCache, UseTaskDragAndDropOptions, UseTaskDragAndDropResult } from './hooks/useTaskDragAndDrop';
 export { useTaskDrawer } from './hooks/useTaskDrawer';
 export type { UseTaskDrawerOptions, UseTaskDrawerResult } from './hooks/useTaskDrawer';
