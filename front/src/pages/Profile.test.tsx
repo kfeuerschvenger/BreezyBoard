@@ -91,6 +91,19 @@ describe('Profile rendering', () => {
     expect(image).toHaveAttribute('src', '/uploads/avatars/ada.png');
   });
 
+  // A record with no createdAt reached `new Date('')`, which formats as the
+  // literal string "Invalid Date". Every other missing field on this page has
+  // a fallback; this one printed the error to the person instead.
+  it('says nothing rather than Invalid Date when no joined date is stored', async () => {
+    mockedUserService.getById.mockResolvedValue({ ...PROFILE, createdAt: undefined });
+
+    renderProfile();
+    await waitFor(() => expect(firstNameInput()).toHaveValue('Ada'));
+
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Joined /)).toHaveTextContent('Joined Unknown');
+  });
+
   it('says Unknown rather than nothing when no location is stored', async () => {
     mockedUserService.getById.mockResolvedValue({ ...PROFILE, location: '' });
 
@@ -209,6 +222,28 @@ describe('Profile avatar', () => {
     await waitFor(() => expect(mockedUserService.uploadAvatar).toHaveBeenCalledWith('user-ada', file));
     const image = await screen.findByRole('img', { name: 'Profile' });
     expect(image).toHaveAttribute('src', '/uploads/avatars/ada.png');
+  });
+
+  // The input was hidden with Tailwind's `hidden`, which compiles to
+  // display:none, and a display:none control is out of the focus order
+  // entirely. Changing your avatar was therefore mouse-only.
+  //
+  // Asserted as a class rather than by tabbing, for the same reason P4-7 is:
+  // jsdom loads no stylesheet, so `hidden` has no effect here and a focus
+  // test would pass against the broken version. The compiled stylesheet is
+  // where the two techniques actually differ, and sr-only is the one that
+  // hides an element while leaving it focusable.
+  it('hides the file input without taking it out of the focus order', async () => {
+    renderProfile();
+    await waitFor(() => expect(firstNameInput()).toHaveValue('Ada'));
+
+    const input = screen.getByLabelText('Change avatar');
+    // The name has to be on the control, not on the label drawn around it.
+    // It was on the label, so the input itself had no accessible name, which
+    // did not matter while it could not be focused and does now.
+    expect(input.tagName).toBe('INPUT');
+    expect(input).toHaveClass('sr-only');
+    expect(input).not.toHaveClass('hidden');
   });
 
   it('says so when the upload is refused', async () => {

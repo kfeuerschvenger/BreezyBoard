@@ -43,6 +43,15 @@ const BASELINE = {
   // word for word, and it closed when the task drawer moved onto the shared
   // Drawer, whose dialog is labelled by its own title.
   'board, task drawer open': { region: 1 },
+  // Added on 2026-09-25, when this surface was scanned for the first time.
+  // Its two numbers are the same debt every other surface carries: no main
+  // landmark, and content sitting outside one. aria-prohibited-attr was also
+  // 1 on the first measurement and its line is absent rather than zero,
+  // because it was fixed in the same change: PageHeader's action wrapper is a
+  // div with no role and carried an aria-label, which ARIA does not allow.
+  // It only ever surfaced here because this is the first scanned page that
+  // renders that header with an empty action area.
+  profile: { 'landmark-one-main': 1, region: 18 },
 };
 
 // There is deliberately no colour-contrast entry anywhere above. The first
@@ -160,6 +169,15 @@ await scan('board');
 await page.getByRole('button', { name: /add task/i }).first().click();
 await page.waitForTimeout(400);
 await scan('board, task drawer open');
+
+// The profile page was outside this gate until now, which is how its joined
+// date printed "Invalid Date" and its avatar input sat at display:none
+// without either being measured. A surface nobody scans is a surface nobody
+// knows about.
+await page.goto(`${FRONT}/profile`);
+await page.getByText('Profile Settings').waitFor();
+await page.waitForTimeout(400);
+await scan('profile');
 
 await browser.close();
 

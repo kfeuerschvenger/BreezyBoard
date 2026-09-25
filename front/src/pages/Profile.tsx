@@ -100,12 +100,17 @@ const ProfilePage: React.FC = () => {
     reset(toFormValues(profileQuery.data), { keepDirty: false });
   }, [profileQuery.data, reset]);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  /**
+   * A record with no joined date reached `new Date('')`, which formats as the
+   * literal string "Invalid Date". Every other missing field on this page has
+   * a fallback; this one printed the error to the person. Finding P4-10.
+   */
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   // handle avatar selection and upload
@@ -225,18 +230,25 @@ const ProfilePage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Camera upload button */}
-                  <label
-                    className="absolute -bottom-0 -right-0 translate-x-1/4 translate-y-1/4 bg-white border-2 border-gray-200 rounded-full p-2 cursor-pointer hover:bg-gray-50 transition-colors"
-                    aria-label="Change avatar"
-                  >
-                    <Camera size={16} className="text-gray-600" />
+                  {/*
+                    The input is hidden with sr-only rather than with `hidden`,
+                    which compiles to display:none and takes a control out of
+                    the focus order altogether. It did, so changing an avatar
+                    was mouse-only. Finding P4-11.
+
+                    The focus ring lives on the label, since that is what is
+                    drawn, and focus-within is what puts it there when the
+                    input behind it takes focus.
+                  */}
+                  <label className="absolute -bottom-0 -right-0 translate-x-1/4 translate-y-1/4 bg-white border-2 border-gray-200 rounded-full p-2 cursor-pointer hover:bg-gray-50 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500">
+                    <Camera size={16} className="text-gray-600" aria-hidden="true" />
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="image/*"
+                      aria-label="Change avatar"
                       onChange={onAvatarInputChange}
-                      className="hidden"
+                      className="sr-only"
                     />
                   </label>
                 </div>
@@ -251,7 +263,7 @@ const ProfilePage: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex items-center gap-3 text-sm">
                   <Calendar size={16} className="text-gray-400" />
-                  <span className="text-gray-600">Joined {formatDate(watch('createdAt') || '')}</span>
+                  <span className="text-gray-600">Joined {formatDate(watch('createdAt'))}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <MapPin size={16} className="text-gray-400" />

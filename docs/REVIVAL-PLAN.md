@@ -442,6 +442,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, failed task save | Done | The board page stopped swallowing the error, so the drawer can report it and keep the draft (P4-9) |
 | 5d, board drag extracted | Done | `useTaskDragAndDrop` with 13 tests and 8 mutations caught, P2-6 covered at last. `Board` 344 to 233 |
 | 5d, board page composed | Done | `useBoardData`, `BoardColumns` and `shared/ui/LoadingScreen`. `Board` 233 to 153 |
+| 5d, profile characterized | Done | 13 tests on a page that had none, 8 mutations caught after one test was strengthened |
+| 5d, profile accessibility | Done | Joined date no longer reads Invalid Date (P4-10), avatar upload reachable by keyboard (P4-11) |
+| 5a, gate covers the profile | Done | A seventh surface, measured and budgeted. Its first run found a prohibited aria-label in `PageHeader` |
 | 5d, remaining decomposition | Open | `Profile` 380, `Board` 348, `AddMemberModal` 335, and the smaller rows of section 12.5 |
 | 6 onward | Not started | |
 
@@ -1234,6 +1237,16 @@ The buttons are a real migration and were left out on purpose: two of the three 
 The two full-page states are the more interesting one. `Board.tsx` has the same pair behind the same `min-h-screen bg-gray-50 flex items-center justify-center` wrapper, which is four instances across two pages, so a primitive for them is justified rather than speculative. It was still not written here: it would save the dashboard twenty lines and leave it at 120, so it does not reach the target either, and building it while only one of the two pages can use it repeats the mistake this section already records under `UserPicker`. It is worth doing when `Board.tsx` migrates, with both callers in hand.
 
 Two things the decomposition surfaced that were not decomposition. The first is P4-8 above. The second is the board colours: the page resolved each board's colour with a request of its own, through the same `resolveColorValue` that `TaskCard` still uses per card, where `GET /colors?type=board` returns the list whole. It now reads that one palette through `useColors`, which is why that hook takes the colour type as an argument, and an end to end run against the live stack makes zero requests to `/colors/:id`. `TaskCard` has the same defect and keeps its own row in section 12.5 rather than being pulled into this one.
+
+**P4-10 and P4-11, found on a page the accessibility gate was never pointed at.** Both were in `Profile.tsx`, and the reason they survived is the more useful half of the entry: section 10.2's gate scans six surfaces and the profile page is not one of them. A surface nobody scans is a surface nobody knows about, so it is scanned now and its measured numbers are the baseline in `e2e/verify/accessibility.mjs`.
+
+P4-10 is a record with no joined date reaching `new Date('')`, which formats as the literal string "Invalid Date". Every other missing field on that page has a fallback. This one printed the error to the person, and the field now reads "Unknown" like the location beside it.
+
+P4-11 is the avatar upload being mouse-only. The file input was hidden with Tailwind's `hidden`, and the compiled stylesheet confirms that is `display:none`, which removes a control from the focus order entirely. It is `sr-only` now, which hides it while leaving it focusable, with the focus ring drawn on the label through `focus-within`. The accessible name moved off the label and onto the input at the same time: it had been on the label, so the control itself had no name, which did not matter while nothing could focus it and does now.
+
+That second one is asserted as a class name rather than by tabbing, and the reason is worth repeating from P4-7: jsdom loads no stylesheet, so `hidden` has no effect there and a focus test would pass just as happily against the broken version. The difference between the two techniques exists only in the compiled CSS, so the compiled CSS is where it was checked and the class is what the test can hold.
+
+Extending the gate also caught a third thing on its first run: `PageHeader` wrapped its action area in a `div` with no role carrying `aria-label="page actions"`, which ARIA prohibits. It had never fired because this is the first scanned page that renders that header with an empty action area. The label is gone, which is why `aria-prohibited-attr` has no line in the profile baseline rather than a zero.
 
 **The unit suite flakes under CPU contention, and this is what was measured.** Worth recording before someone spends a session chasing it as a regression.
 
