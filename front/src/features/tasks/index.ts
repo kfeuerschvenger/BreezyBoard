@@ -17,6 +17,10 @@ export type {
   UseTaskFormOptions,
   UseTaskFormResult,
 } from './hooks/useTaskForm';
+export { BoardColumns } from './components/BoardColumns';
+export type { BoardColumnsProps } from './components/BoardColumns';
+export { useBoardData } from './hooks/useBoardData';
+export type { ColumnData, UseBoardDataResult } from './hooks/useBoardData';
 export { useTaskDragAndDrop } from './hooks/useTaskDragAndDrop';
 export type { TaskCache, UseTaskDragAndDropOptions, UseTaskDragAndDropResult } from './hooks/useTaskDragAndDrop';
 export { useTaskDrawer } from './hooks/useTaskDrawer';

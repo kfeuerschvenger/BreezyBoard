@@ -1,73 +1,57 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
-import { useBoard, useBoardTasks, useTaskCacheWriter } from '@/features/tasks/queries';
-import { closestCorners, DndContext, DragOverlay } from '@dnd-kit/core';
+import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
-import Column from '../components/Column';
+import { LoadingScreen } from '@/shared/ui';
 import PageHeader from '../components/PageHeader';
-import TaskCard from '../components/TaskCard';
-import { TaskDrawer, useTaskDragAndDrop } from '@/features/tasks';
 import UserAvatar from '../components/UserAvatar';
-
-interface ColumnData {
-  _id: string;
-  id: string;
-  title: string;
-  color: string;
-  order: number;
-}
 
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Partial<Task> | null>(null);
 
-  const boardQuery = useBoard(boardId);
-  const tasksQuery = useBoardTasks(boardId);
-  const taskCache = useTaskCacheWriter(boardId);
+  const { board, columns, tasks, cache, isLoading, error } = useBoardData(boardId);
 
-  const currentBoard = boardQuery.data ?? null;
-  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
-  const isLoading = Boolean(boardId) && (boardQuery.isPending || tasksQuery.isPending);
-  const error = !boardId
-    ? 'No board was specified in the address.'
-    : boardQuery.isError || tasksQuery.isError
-      ? 'This board could not be loaded. Check your connection and try again.'
-      : null;
-
-  // The board's own columns, not its template's. They were copied out of the
-  // template when the board was created and belong to it since, which is
-  // what lets one board rename a column without renaming it on every other
-  // board built from the same template.
-  const columns: ColumnData[] = useMemo(
-    () =>
-      (currentBoard?.columns ?? [])
-        .map(column => ({
-          id: column._id,
-          _id: column._id,
-          title: column.title,
-          color: typeof column.color === 'string' ? column.color : (column.color?.value ?? '#64748B'),
-          order: column.order,
-        }))
-        .sort((a, b) => a.order - b.order),
-    [currentBoard]
-  );
-
-  const { activeTask, sensors, onDragStart, onDragEnd } = useTaskDragAndDrop({
+  const drag = useTaskDragAndDrop({
     tasks,
     columnIds: columns.map(column => column.id),
-    cache: taskCache,
+    cache,
   });
 
-  const handleTaskClick = (task: Task) => {
+  const openTask = (task: Partial<Task>) => {
     setSelectedTask(task);
     setDrawerOpen(true);
+  };
+
+  const openNewTask = () => {
+    if (!boardId || columns.length === 0) return;
+    const [firstColumn] = columns;
+
+    openTask({
+      title: 'New Task',
+      description: '',
+      status: firstColumn.id,
+      priority: 'medium',
+      color: firstColumn.color,
+      owner: '',
+      boardId,
+      checklist: [],
+    });
+  };
+
+  const moveTask = async (taskId: string, newStatus: string, between: TaskNeighbours = {}) => {
+    try {
+      cache.replace(await TaskService.move(taskId, newStatus, between));
+    } catch (error) {
+      console.error('Error moving task:', error);
+    }
   };
 
   /**
@@ -79,7 +63,7 @@ const Board = () => {
    *
    * Closing on success is the drawer's job too, through onSaved.
    */
-  const handleTaskSave = async (taskData: Partial<Task>) => {
+  const saveTask = async (taskData: Partial<Task>) => {
     if (!boardId) throw new Error('No board was specified in the address.');
 
     const result = taskData._id
@@ -87,9 +71,9 @@ const Board = () => {
       : await TaskService.create(boardId, taskData);
 
     if (taskData._id) {
-      taskCache.replace(result);
+      cache.replace(result);
     } else {
-      taskCache.write([...(taskCache.read() ?? []), result]);
+      cache.write([...(cache.read() ?? []), result]);
     }
 
     // A task whose checklist is entirely done moves itself to the last
@@ -106,47 +90,12 @@ const Board = () => {
     // reported and swallowed: the task was saved, and telling the person it
     // was not because a follow-up move failed would be a worse answer.
     const doneTasks = tasks.filter(task => task.status === doneColumn.id).sort(byOrder);
-    await handleTaskMove(result._id, doneColumn.id, {
+    await moveTask(result._id, doneColumn.id, {
       afterId: doneTasks.length > 0 ? doneTasks[doneTasks.length - 1]._id : null,
     });
   };
 
-  const handleAddTask = () => {
-    if (!boardId || !columns.length) return;
-
-    const defaultColumn = columns[0];
-
-    const newTask: Partial<Task> = {
-      title: 'New Task',
-      description: '',
-      status: defaultColumn.id,
-      priority: 'medium',
-      color: defaultColumn.color,
-      owner: '',
-      boardId,
-      checklist: [],
-    };
-
-    setSelectedTask(newTask as Task);
-    setDrawerOpen(true);
-  };
-
-  const handleTaskMove = async (taskId: string, newStatus: string, between: TaskNeighbours = {}) => {
-    try {
-      const moved = await TaskService.move(taskId, newStatus, between);
-      taskCache.replace(moved);
-    } catch (error) {
-      console.error('Error moving task:', error);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  if (isLoading) return <LoadingScreen label="Loading this board" />;
 
   if (error) {
     return (
@@ -176,55 +125,26 @@ const Board = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader
-        title={currentBoard ? currentBoard.title : 'Project Board'}
+        title={board ? board.title : 'Project Board'}
         subtitle="Manage tasks in this board"
         showBackButton
         onBack={() => navigate('/')}
       >
         <button
-          onClick={handleAddTask}
+          onClick={openNewTask}
           className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
-          disabled={!columns.length}
+          disabled={columns.length === 0}
         >
           <Plus size={20} />
           Add Task
         </button>
         <UserAvatar />
       </PageHeader>
+
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
-        {columns.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {columns.map(column => (
-                <Column
-                  key={column.id}
-                  column={column}
-                  tasks={tasks.filter(task => task.status === column.id)}
-                  onTaskClick={handleTaskClick}
-                />
-              ))}
-            </div>
+        <BoardColumns columns={columns} tasks={tasks} drag={drag} onTaskClick={openTask} />
 
-            <DragOverlay>{activeTask ? <TaskCard task={activeTask} isDragging /> : null}</DragOverlay>
-          </DndContext>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-gray-500 text-lg">No columns available for this board</div>
-            <p className="text-gray-400 mt-2">This board template doesn't have any columns configured.</p>
-          </div>
-        )}
-
-        <TaskDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          task={selectedTask}
-          onSave={handleTaskSave}
-        />
+        <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />
       </motion.div>
     </div>
   );

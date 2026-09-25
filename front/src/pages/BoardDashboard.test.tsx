@@ -209,7 +209,7 @@ describe('BoardDashboard states with nothing to list', () => {
 
     renderDashboard();
 
-    expect(await screen.findByText('Loading boards...')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading boards...' })).toBeInTheDocument();
     expect(screen.queryByText('No boards yet')).not.toBeInTheDocument();
   });
 

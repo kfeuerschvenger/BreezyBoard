@@ -131,23 +131,24 @@ describe('Board page rendering', () => {
     mockedBoardService.getById.mockReturnValue(new Promise(() => {}));
     mockedTaskService.getByBoard.mockReturnValue(new Promise(() => {}));
 
-    const { container } = renderBoard();
+    renderBoard();
 
-    // The spinner carries no role="status" or accessible name, another
-    // accessibility gap: only its class identifies it as a loading cue.
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    // Asserted as a named status rather than as a spinning class. Until the
+    // loading screen became a primitive, only the class identified this as a
+    // loading cue, so the page read as empty to anyone not looking at it.
+    expect(screen.getByRole('status', { name: 'Loading this board' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'To Do' })).not.toBeInTheDocument();
   });
 
   it('shows an error message with a retry when the fetch rejects, not a permanent spinner', async () => {
     mockedBoardService.getById.mockRejectedValue(new Error('network down'));
 
-    const { container } = renderBoard();
+    renderBoard();
 
     const alert = await screen.findByRole('alert');
     expect(within(alert).getByText('This board could not be loaded')).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: /try again/i })).toBeInTheDocument();
-    expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
 

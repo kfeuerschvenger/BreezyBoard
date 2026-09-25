@@ -22,6 +22,9 @@ export type { DrawerProps, DrawerSize } from './Drawer';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 
+export { LoadingScreen } from './LoadingScreen';
+export type { LoadingScreenProps } from './LoadingScreen';
+
 export { StatTile } from './StatTile';
 export type { StatTileProps, StatTileTone } from './StatTile';
 
