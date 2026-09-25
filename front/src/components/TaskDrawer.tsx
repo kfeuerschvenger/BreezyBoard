@@ -1,20 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, User, Palette, Flag, GripVertical } from 'lucide-react';
+import { User, Palette, Flag } from 'lucide-react';
 import { ColorService, UserService } from '@/services';
 import type { User as UserModel, Task } from '@/models';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import type { DragEndEvent } from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { useDraft } from '@/shared/hooks/useDraft';
 import { Button, Drawer, Field, Input, Textarea } from '@/shared/ui';
 import { UserPicker } from '@/features/users';
+import { Checklist } from '@/features/tasks';
+import type { ChecklistItemData } from '@/features/tasks';
 
 // The legend of a group carries the same weight as a Field's label, so the
 // three grouped controls below read as part of the same form.
@@ -37,12 +29,6 @@ interface TaskDrawerProps {
   onSave: (task: Partial<Task>) => Promise<void>;
 }
 
-interface ChecklistItemData {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
 type TaskColorOption = { _id: string; name?: string; value: string };
 
 /**
@@ -55,57 +41,6 @@ const resolveColorId = (taskColor: Task['color'] | undefined, colors: TaskColorO
   if (typeof taskColor === 'object') return (taskColor as { _id?: string })._id ?? '';
   const foundByValue = colors.find(color => color.value.toLowerCase() === String(taskColor).toLowerCase());
   return foundByValue?._id ?? String(taskColor);
-};
-
-// ----------------------
-// Sortable Checklist Item Component
-// ----------------------
-interface SortableChecklistItemProps {
-  item: ChecklistItemData;
-  onUpdate: (id: string, field: string, value: string | boolean) => void;
-  onDelete: (id: string) => void;
-}
-
-const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onUpdate, onDelete }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-center gap-2 p-2 rounded-lg ${isDragging ? 'bg-blue-50' : 'bg-white'}`}
-    >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-gray-400 p-1">
-        <GripVertical size={14} />
-      </div>
-      <input
-        type="checkbox"
-        checked={item.completed}
-        onChange={e => onUpdate(item.id, 'completed', e.target.checked)}
-        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-      />
-      <input
-        type="text"
-        value={item.text}
-        onChange={e => onUpdate(item.id, 'text', e.target.value)}
-        className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent font-body"
-        placeholder="Enter checklist item"
-      />
-      <button
-        type="button"
-        onClick={() => onDelete(item.id)}
-        className="p-1 text-red-600 hover:text-red-700 cursor-pointer"
-        aria-label="Delete checklist item"
-      >
-        <Trash2 size={14} />
-      </button>
-    </div>
-  );
 };
 
 // ----------------------
@@ -141,14 +76,6 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
   // for a drawer nobody has open.
   const draftKey = open ? `task:${task?._id ?? 'new:' + (task?.boardId ?? 'unknown')}` : null;
   const draft = useDraft<typeof formData>(draftKey);
-
-  // DnD sensors for checklist reordering
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
 
   // Load colors
   useEffect(() => {
@@ -371,52 +298,6 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     }
   };
 
-  const handleChecklistAdd = () => {
-    setFormData(prev => ({
-      ...prev,
-      checklist: [
-        ...prev.checklist,
-        {
-          id: crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-          text: '',
-          completed: false,
-        },
-      ],
-    }));
-  };
-
-  const handleChecklistUpdate = (id: string, field: string, value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      checklist: prev.checklist.map(item => (item.id === id ? { ...item, [field]: value } : item)),
-    }));
-  };
-
-  const handleChecklistDelete = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      checklist: prev.checklist.filter(item => item.id !== id),
-    }));
-  };
-
-  const handleChecklistReorder = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    // A null `over` means the drag ended outside any valid drop target, so
-    // there is nothing to reorder.
-    if (!over || active.id === over.id) return;
-
-    setFormData(prev => {
-      const oldIndex = prev.checklist.findIndex(item => item.id === active.id);
-      const newIndex = prev.checklist.findIndex(item => item.id === over.id);
-
-      return {
-        ...prev,
-        checklist: arrayMove(prev.checklist, oldIndex, newIndex),
-      };
-    });
-  };
-
   const handleOwnerChange = (ownerId: string) => {
     setFormData(prev => ({ ...prev, owner: ownerId }));
     setErrors(prev => ({ ...prev, owner: undefined }));
@@ -534,37 +415,10 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
           )}
         </fieldset>
 
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            {/* A heading rather than a label: it names a section, not a
-                control, which is what made it one of the six orphan labels
-                the gate was holding. h3 because the drawer title is an h2. */}
-            <h3 className="text-sm font-medium text-gray-700 font-heading">Checklist</h3>
-            <button
-              type="button"
-              onClick={handleChecklistAdd}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
-            >
-              <Plus size={16} aria-hidden="true" />
-              Add Item
-            </button>
-          </div>
-
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChecklistReorder}>
-            <SortableContext items={formData.checklist.map(item => item.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {formData.checklist.map(item => (
-                  <SortableChecklistItem
-                    key={item.id}
-                    item={item}
-                    onUpdate={handleChecklistUpdate}
-                    onDelete={handleChecklistDelete}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </div>
+        <Checklist
+          items={formData.checklist}
+          onChange={checklist => setFormData(prev => ({ ...prev, checklist }))}
+        />
 
         {submitError && (
           <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">

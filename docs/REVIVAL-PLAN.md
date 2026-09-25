@@ -427,7 +427,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, profile onto queries | Done | Fetch, writes and cancel through the cache; a duplicated field mapping removed |
 | 5c, create board flake | Done | The defaults are applied per field, so a name typed as the fetch resolves survives. 18 runs, 0 recurrences |
 | 5d, owner picker extracted | Done | `features/users/UserPicker` with the resolution on the feature query. `TaskDrawer` 852 to 588 |
-| 5d, remaining decomposition | Open | Checklist, SwatchPicker, PrioritySelect and `useTaskForm` still inside `TaskDrawer`. See section 12.5 |
+| 5d, checklist extracted | Done | `features/tasks/Checklist` owns its sensors and its four edits, 6 tests of its own. `TaskDrawer` 588 to 442 |
+| 5d, remaining decomposition | Open | SwatchPicker, PrioritySelect and `useTaskForm` still inside `TaskDrawer`. See section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1040,7 +1041,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 
 | Current | Lines | Becomes |
 |---|---|---|
-| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker` (done, 588 left), `shared/ui/SwatchPicker`, `useTaskForm` |
+| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker` and `tasks/Checklist` (both done, 442 left), `shared/ui/SwatchPicker`, `useTaskForm` |
 | `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
