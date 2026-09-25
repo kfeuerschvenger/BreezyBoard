@@ -426,6 +426,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, remaining modals | Done | All four modals on the shared shell (P3-4), success message no longer auto-dismisses |
 | 5c, profile onto queries | Done | Fetch, writes and cancel through the cache; a duplicated field mapping removed |
 | 5c, create board flake | Done | The defaults are applied per field, so a name typed as the fetch resolves survives. 18 runs, 0 recurrences |
+| 5d, owner picker extracted | Done | `features/users/UserPicker` with the resolution on the feature query. `TaskDrawer` 852 to 588 |
+| 5d, remaining decomposition | Open | Checklist, SwatchPicker, PrioritySelect and `useTaskForm` still inside `TaskDrawer`. See section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1034,9 +1036,11 @@ Shared lib, from table B of the inventory: `normalizeRef` for the object-or-id g
 
 The four nested component definitions come out first, because they are the clearest signal. `UserSearchInput` is 173 lines living inside `TaskDrawer.tsx`, with its own fetching, its own debounce and its own suggestion list, while `AddMemberModal` independently implements user search a second time. That is one `features/users/UserPicker` serving both.
 
+Corrected on extraction: the two are not one component. The picker in the drawer filters a `members` list it is handed, selects exactly one user and writes an owner id; the one in `AddMemberModal` searches the server through `UserService.search(term, boardId)`, accumulates a multi-selection and carries its own loading and error states. They also answer to two different patterns, a combobox over a listbox against a search field over a list of toggles. Serving both from one component means a data source strategy, a cardinality switch and two ARIA shapes behind one name, which is worse than the duplication it removes. What they genuinely share is a debounce and a result row, and neither is worth a shared component. `UserPicker` is therefore the drawer's picker, extracted and named, and `AddMemberModal` keeps its own list, which section 12.6b already singles out as the one autocomplete here that was right from the start.
+
 | Current | Lines | Becomes |
 |---|---|---|
-| `TaskDrawer.tsx` | 728 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `shared/ui/SwatchPicker`, `useTaskForm` |
+| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker` (done, 588 left), `shared/ui/SwatchPicker`, `useTaskForm` |
 | `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
