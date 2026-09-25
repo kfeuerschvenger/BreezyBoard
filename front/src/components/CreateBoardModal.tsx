@@ -54,6 +54,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
     reset,
     watch,
     getValues,
+    setValue,
     formState: { errors, isValid },
   } = useForm<BoardFormData>({
     resolver: zodResolver(boardSchema),
@@ -117,31 +118,42 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   // one place removes the race instead of documenting it.
   //
   // Anything already in the form wins over both, and that ordering is the
-  // whole point rather than a detail. This effect runs when an async fetch
-  // resolves, by which time a fast typist is mid-word, and the first version
-  // of this migration called reset() with the computed values alone and
-  // threw their typing away. That is the same defect as P2-10, where the
-  // colour fetch resolving late rebuilt the entire form over whatever was in
-  // it. The implementation this replaced merged rather than replaced, which
-  // is why it never had the problem.
+  // whole point rather than a detail. This effect fires when an async fetch
+  // resolves, which is exactly when somebody is mid-word, so it is the same
+  // hazard as P2-10: state derived from an async value must be merged, never
+  // replaced.
+  //
+  // The merge is written field by field, and only into fields that are still
+  // empty, rather than as one reset() carrying the four computed values. The
+  // difference is not stylistic. reset() discards the form library's field
+  // registry, and a change event arriving between that call and React
+  // re-running the register refs finds no field to record against, so it is
+  // dropped in silence; the re-registration then writes the stale value back
+  // over what was typed, and the field is left holding nothing. Reading the
+  // typed values first and rewriting all four does not close that window
+  // either, because the value that gets lost is one that arrives after the
+  // read. Writing only the empty fields leaves the rest untouched, so a
+  // keystroke racing this effect has nothing to collide with.
   useEffect(() => {
     if (!open || isLoading || hasRestoredDraftRef.current) return;
 
-    const typed = getValues();
     const restored = draft.read();
     const firstColor = boardColors[0]?._id ?? boardColors[0]?.value ?? '';
     const firstTemplate = templates[0]?._id ?? templates[0]?.name ?? '';
 
-    reset({
-      title: typed.title || restored?.title || '',
-      description: typed.description || restored?.description || '',
-      color: typed.color || restored?.color || firstColor,
-      template: typed.template || restored?.template || firstTemplate,
-    });
+    const fillIfEmpty = (name: keyof BoardFormData, value: string | undefined) => {
+      if (!value || getValues(name)) return;
+      setValue(name, value, { shouldValidate: true });
+    };
+
+    fillIfEmpty('title', restored?.title);
+    fillIfEmpty('description', restored?.description);
+    fillIfEmpty('color', restored?.color || firstColor);
+    fillIfEmpty('template', restored?.template || firstTemplate);
 
     hasRestoredDraftRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isLoading, boardColors, templates, draft.read, getValues, reset]);
+  }, [open, isLoading, boardColors, templates, draft.read, getValues, setValue]);
 
   // Autosave while open. Gated on hasRestoredDraftRef so it never persists
   // the still-empty form before the effect above has had its turn: without
