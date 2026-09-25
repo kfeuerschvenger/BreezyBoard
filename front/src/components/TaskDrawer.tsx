@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { User, Palette } from 'lucide-react';
-import { ColorService, UserService } from '@/services';
 import type { User as UserModel, Task } from '@/models';
 import { Button, Drawer, Field, Input, SwatchPicker, Textarea } from '@/shared/ui';
-import { UserPicker } from '@/features/users';
+import { UserPicker, useBoardMembers } from '@/features/users';
+import { useColors } from '@/features/colors';
 import { Checklist, PrioritySelect, useTaskForm } from '@/features/tasks';
 import type { TaskColorOption } from '@/features/tasks';
 
@@ -14,10 +14,15 @@ interface TaskDrawerProps {
   onSave: (task: Partial<Task>) => Promise<void>;
 }
 
+// Stable identities for the two lists while their requests are in flight or
+// have failed. `useTaskForm` keys three effects on these, so a fresh literal
+// here would re-run all three on every render of the drawer.
+const NO_COLORS: TaskColorOption[] = [];
+const NO_MEMBERS: UserModel[] = [];
+
 const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onSave }) => {
-  const [isLoadingColors, setIsLoadingColors] = useState(true);
-  const [taskColors, setTaskColors] = useState<TaskColorOption[]>([]);
-  const [boardMembers, setBoardMembers] = useState<UserModel[]>([]);
+  const { data: taskColors = NO_COLORS, isPending: isLoadingColors } = useColors('task');
+  const { data: boardMembers = NO_MEMBERS } = useBoardMembers(task?.boardId);
 
   const { values, errors, isValid, isSubmitting, submitError, setField, handleSubmit } = useTaskForm({
     open,
@@ -27,53 +32,6 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     onSave,
     onSaved: onClose,
   });
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchColors = async () => {
-      try {
-        setIsLoadingColors(true);
-        const colors = await ColorService.getByType('task');
-        if (!mounted) return;
-        setTaskColors(colors ?? []);
-      } catch (error) {
-        console.error('Failed to load colors', error);
-        if (mounted) setTaskColors([]);
-      } finally {
-        if (mounted) setIsLoadingColors(false);
-      }
-    };
-
-    fetchColors();
-    return () => {
-      mounted = false;
-    };
-  }, [task]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchMembers = async () => {
-      if (!task?.boardId) {
-        if (mounted) setBoardMembers([]);
-        return;
-      }
-      try {
-        const members = await UserService.getBoardMembers(task.boardId);
-        if (!mounted) return;
-        setBoardMembers(members);
-      } catch (error) {
-        console.error('Failed to load board members', error);
-        if (mounted) setBoardMembers([]);
-      }
-    };
-
-    fetchMembers();
-    return () => {
-      mounted = false;
-    };
-  }, [task]);
 
   const drawerTitle = task?._id ? 'Edit Task' : 'Create New Task';
 

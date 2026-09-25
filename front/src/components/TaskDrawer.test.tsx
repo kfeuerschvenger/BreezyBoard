@@ -378,3 +378,67 @@ describe('TaskDrawer owner suggestions, by keyboard alone', () => {
     expect(combobox).toHaveValue('Ada');
   });
 });
+
+describe('TaskDrawer reference data fetching', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  // The palette of task colours is the same list for every task in the
+  // product. Refetching it each time the drawer is pointed at a different
+  // task is a request that can never return anything new, and on a board
+  // being worked through task by task it is one such request per open.
+  it('fetches the task colours once across two tasks', async () => {
+    const { rerender } = renderWithQuery(
+      <TaskDrawer open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
+    );
+    await waitForColorsLoaded();
+
+    rerender(<TaskDrawer open task={{ _id: 'task-2', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitForColorsLoaded();
+
+    expect(mockedColorService.getByType).toHaveBeenCalledTimes(1);
+  });
+
+  // Same argument, one scope narrower: the member list belongs to the board,
+  // so moving between two tasks of that board asks for a list already held.
+  it('fetches the board members once across two tasks of the same board', async () => {
+    const { rerender } = renderWithQuery(
+      <TaskDrawer open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
+    );
+    await waitForColorsLoaded();
+
+    rerender(<TaskDrawer open task={{ _id: 'task-2', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitForColorsLoaded();
+
+    expect(mockedUserService.getBoardMembers).toHaveBeenCalledTimes(1);
+    expect(mockedUserService.getBoardMembers).toHaveBeenCalledWith('board-1');
+  });
+
+  // The counterpart, so the test above cannot be satisfied by never fetching
+  // again at all: a different board is a different list and must be asked for.
+  it('fetches the members again when the drawer moves to another board', async () => {
+    const { rerender } = renderWithQuery(
+      <TaskDrawer open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
+    );
+    await waitForColorsLoaded();
+
+    rerender(<TaskDrawer open task={{ _id: 'task-2', boardId: 'board-2' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitForColorsLoaded();
+
+    await waitFor(() => expect(mockedUserService.getBoardMembers).toHaveBeenCalledWith('board-2'));
+    expect(mockedUserService.getBoardMembers).toHaveBeenCalledTimes(2);
+  });
+
+  // A task with no board yet has no member list to ask for, and asking would
+  // be a request with an undefined id in the query string.
+  it('asks for no members at all when the task has no board', async () => {
+    renderWithQuery(<TaskDrawer open task={{}} onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitForColorsLoaded();
+
+    expect(mockedUserService.getBoardMembers).not.toHaveBeenCalled();
+  });
+});
