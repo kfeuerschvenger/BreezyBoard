@@ -21,7 +21,7 @@ import { Plus } from 'lucide-react';
 import Column from '../components/Column';
 import PageHeader from '../components/PageHeader';
 import TaskCard from '../components/TaskCard';
-import TaskDrawer from '../components/TaskDrawer';
+import { TaskDrawer } from '@/features/tasks';
 import UserAvatar from '../components/UserAvatar';
 
 interface ColumnData {

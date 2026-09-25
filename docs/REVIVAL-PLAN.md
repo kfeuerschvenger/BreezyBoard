@@ -432,7 +432,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, task form hook | Done | `useTaskForm` owns the values, the errors, the draft and the submit. 10 tests, 6 mutations caught |
 | 5d, swatch picker shared | Done | `shared/ui/SwatchPicker` serves both colour pickers. `TaskDrawer` 196 to 163 |
 | 5d, drawer reference data | Done | `useColors` and `useBoardMembers` replace two effects that refetched per task. `TaskDrawer` 163 to 121 |
-| 5d, remaining decomposition | Open | The `TaskForm` and shell split, and the other rows of section 12.5 |
+| 5d, drawer shell and form split | Done | `TaskForm` and `useTaskDrawer` in `features/tasks`. `TaskDrawer` 121 to 32, from 852 where this started |
+| 5d, remaining decomposition | Open | The other rows of section 12.5, `BoardDashboard` first at 513 lines |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1045,7 +1046,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 
 | Current | Lines | Becomes |
 |---|---|---|
-| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `tasks/Checklist` and `tasks/PrioritySelect`, `useTaskForm` and `shared/ui/SwatchPicker` (done, 163 left), `shared/ui/SwatchPicker`, `useTaskForm` |
+| `TaskDrawer.tsx` | 852 | Done, 32 left. `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `shared/ui/SwatchPicker`, `useTaskForm` and `useTaskDrawer` |
 | `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
@@ -1186,6 +1187,14 @@ They are now `features/colors/useColors(type)` and `features/users/useBoardMembe
 Three mutations were run and all three are caught: the colour key dropping its type, the member key dropping its board id, and the member query enabled unconditionally. The three tests behind them are new, and the two that matter were written against the old code first and watched to fail with two calls where one was expected.
 
 One thing in the result is not covered by a test and is named here rather than left to be rediscovered. The two lists fall back to module level constants instead of a `[]` literal, because `useTaskForm` keys three effects on them and a fresh literal gives each render a new identity. Those three effects all return at their first guard on an empty list, so today the difference is a no-op rather than a defect, and no test distinguishes the two. It is written that way because this exact trap already cost a debugging cycle in the hook's own tests, where an object literal in a `renderHook` callback reset the form on every rerender.
+
+**The shell and the form, which closes this row.** `TaskDrawer` is 32 lines and lives in `features/tasks` with everything it once contained. It reads as a title and a composition, which is the target section 12.6 sets for a page and is worth holding one level below one too. The fields are `tasks/TaskForm` and the two lists plus the form state machine are `tasks/useTaskDrawer`.
+
+The hook exists rather than the shell calling the three hooks itself, and the reason is the rule already in the lint config: a component renders and does not fetch. Which lists the form needs and how they are keyed is a question about the feature, so a component that composed them would be answering it in the markup. The split also moved the file out of `src/components`, which is the directory holding the legacy accessibility warnings, so the three rules held at warn there are errors for this code from now on. It passes them.
+
+`TaskForm` is not quite presentational and the distinction is worth keeping honest: `UserPicker` inside it resolves the name of an owner the member list does not contain, and owns that query itself. A test asserting the form renders with no query cache in scope was drafted and then dropped, because it would have been asserting something untrue.
+
+What made the split safe to judge was one characterization test written before it. Choosing between the two titles is the only decision the shell keeps, and nothing pinned it, so a split that dropped the title entirely would have left all eighteen other tests in that file green. It is asserted as the dialog's accessible name rather than as text, which is what assistive technology announces and what section 10.2 records as having been missing here.
 
 ### 12.7 Sequencing
 
