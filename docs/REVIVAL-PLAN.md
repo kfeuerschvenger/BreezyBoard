@@ -428,7 +428,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5c, create board flake | Done | The defaults are applied per field, so a name typed as the fetch resolves survives. 18 runs, 0 recurrences |
 | 5d, owner picker extracted | Done | `features/users/UserPicker` with the resolution on the feature query. `TaskDrawer` 852 to 588 |
 | 5d, checklist extracted | Done | `features/tasks/Checklist` owns its sensors and its four edits, 6 tests of its own. `TaskDrawer` 588 to 442 |
-| 5d, priority select extracted | Done | `features/tasks/PrioritySelect`, and its selected state now exists in the stylesheet (P4-6) |
+| 5d, priority select extracted | Done | `features/tasks/PrioritySelect`, and its selected state now exists in the stylesheet (P4-7) |
 | 5d, task form hook | Done | `useTaskForm` owns the values, the errors, the draft and the submit. 10 tests, 6 mutations caught |
 | 5d, swatch picker shared | Done | `shared/ui/SwatchPicker` serves both colour pickers. `TaskDrawer` 196 to 163 |
 | 5d, drawer reference data | Done | `useColors` and `useBoardMembers` replace two effects that refetched per task. `TaskDrawer` 163 to 121 |
@@ -1152,7 +1152,9 @@ A second defect was fixed on the way and is worth having regardless: a failed co
 
 **Two flaky tests, both the test's fault.** After the migration the submit button stays disabled until the colour and template lists arrive, because the schema requires both. Two tests clicked it after waiting only for the title input to exist. A click on a disabled button is a silent no-op with no retry, so under load the failure read as "the parent was never called" and looked like a product defect. Waiting for the button to be enabled fixed both. Worth noticing that the underlying experience is genuinely poor, and is P4-5: a submit disabled with no indication of why.
 
-**P4-6, a selected state that was never generated.** Found while lifting the priority group out of the drawer, and confirmed against the compiled stylesheet rather than by reading the markup.
+**P4-7, a selected state that was never generated.** Found while lifting the priority group out of the drawer, and confirmed against the compiled stylesheet rather than by reading the markup.
+
+This finding was first written down as P4-6, which section 5.5 had already given to the product gaps visible from the interface. Renumbered here rather than left as two findings under one name.
 
 The three priority chips composed their selected styling at runtime, as `has-[:checked]:${priority.color}` over a value holding `bg-green-100 text-green-800`. Tailwind generates a rule only for a class it can read in the source, so `has-[:checked]:bg-green-100` named a rule that was never emitted. The build output confirms it: the literal `has-[:checked]:` classes used by the two swatch pickers are all present, and the three priority ones are absent entirely.
 
@@ -1193,6 +1195,12 @@ One thing in the result is not covered by a test and is named here rather than l
 The hook exists rather than the shell calling the three hooks itself, and the reason is the rule already in the lint config: a component renders and does not fetch. Which lists the form needs and how they are keyed is a question about the feature, so a component that composed them would be answering it in the markup. The split also moved the file out of `src/components`, which is the directory holding the legacy accessibility warnings, so the three rules held at warn there are errors for this code from now on. It passes them.
 
 `TaskForm` is not quite presentational and the distinction is worth keeping honest: `UserPicker` inside it resolves the name of an owner the member list does not contain, and owns that query itself. A test asserting the form renders with no query cache in scope was drafted and then dropped, because it would have been asserting something untrue.
+
+**P4-8, an in-flight state that nothing could ever enter.** Found while extracting the dashboard's board card. The delete item in each board's menu carried `disabled={isDeleting}` and a label reading "Deleting..." when that was true, and `isDeleting` compared the board's id against a `deletingId` piece of state that only ever had `null` written to it. The mirror was never filled, so the disabled state and the label were unreachable and the menu item looked idle throughout.
+
+Deleting a board cascades to every task on it and is not fast. With nothing on screen to say it started, the only thing left to do is click again, and each click starts another cascade against the same board.
+
+It now reads the mutation's own in-flight state and the id it was called with, so the second piece of state is gone rather than corrected. That is the general form of the defect: the fact was already held by the mutation, and copying it into a neighbouring `useState` created a second version that had to be kept in step with the first and was not. Two tests cover it, one that the item disables and says so, and one that the other boards stay deletable, which is what makes the id comparison load bearing rather than decoration.
 
 What made the split safe to judge was one characterization test written before it. Choosing between the two titles is the only decision the shell keeps, and nothing pinned it, so a split that dropped the title entirely would have left all eighteen other tests in that file green. It is asserted as the dialog's accessible name rather than as text, which is what assistive technology announces and what section 10.2 records as having been missing here.
 
