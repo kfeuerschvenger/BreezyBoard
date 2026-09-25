@@ -433,7 +433,13 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, swatch picker shared | Done | `shared/ui/SwatchPicker` serves both colour pickers. `TaskDrawer` 196 to 163 |
 | 5d, drawer reference data | Done | `useColors` and `useBoardMembers` replace two effects that refetched per task. `TaskDrawer` 163 to 121 |
 | 5d, drawer shell and form split | Done | `TaskForm` and `useTaskDrawer` in `features/tasks`. `TaskDrawer` 121 to 32, from 852 where this started |
-| 5d, remaining decomposition | Open | The other rows of section 12.5, `BoardDashboard` first at 513 lines |
+| 5d, dashboard characterized | Done | 15 tests over a page that had none, 8 mutations caught after one test was strengthened |
+| 5d, dashboard colours | Done | One board palette request replaces one per board (zero calls to `/colors/:id` in an end to end run) |
+| 5d, dashboard totals | Done | `shared/ui/StatTile` and `features/boards/BoardStats`. `BoardDashboard` 475 to 405 |
+| 5d, board delete in-flight | Done | The unreachable "Deleting..." state now reads the mutation (P4-8). `BoardDashboard` 405 to 403 |
+| 5d, board card extracted | Done | `BoardCard`, `BoardCardMenu` and `useBoardMenu`. `BoardDashboard` 403 to 217 |
+| 5d, dashboard composed | Done | `useBoardDashboard` and `shared/ui/EmptyState`. `BoardDashboard` 217 to 140, section 12.5 row closed |
+| 5d, remaining decomposition | Open | `Profile` 380, `Board` 348, `AddMemberModal` 335, and the smaller rows of section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1047,7 +1053,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | Current | Lines | Becomes |
 |---|---|---|
 | `TaskDrawer.tsx` | 852 | Done, 32 left. `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `shared/ui/SwatchPicker`, `useTaskForm` and `useTaskDrawer` |
-| `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
+| `BoardDashboard.tsx` | 513 | Done, 140 left. `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoardDashboard`, `useBoardMenu`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
 | `Board.tsx` | 326 | `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop` |
@@ -1066,7 +1072,7 @@ A page should read as composition and nothing else: route params in, hooks for d
 
 | Page | Now | Target |
 |---|---|---|
-| `BoardDashboard.tsx` | 505 | Under 70 |
+| `BoardDashboard.tsx` | 140, from 513 | Under 70, not reached. See 12.6b |
 | `Profile.tsx` | 410 | Under 60 |
 | `Board.tsx` | 326 | Under 80 |
 | `Login.tsx` | 242 | Under 40 |
@@ -1203,6 +1209,18 @@ Deleting a board cascades to every task on it and is not fast. With nothing on s
 It now reads the mutation's own in-flight state and the id it was called with, so the second piece of state is gone rather than corrected. That is the general form of the defect: the fact was already held by the mutation, and copying it into a neighbouring `useState` created a second version that had to be kept in step with the first and was not. Two tests cover it, one that the item disables and says so, and one that the other boards stay deletable, which is what makes the id comparison load bearing rather than decoration.
 
 What made the split safe to judge was one characterization test written before it. Choosing between the two titles is the only decision the shell keeps, and nothing pinned it, so a split that dropped the title entirely would have left all eighteen other tests in that file green. It is asserted as the dialog's accessible name rather than as text, which is what assistive technology announces and what section 10.2 records as having been missing here.
+
+**`BoardDashboard`, and the target this one did not reach.** The page went from 513 lines to 140 over five commits, and every component this section named for it exists: `BoardCard`, `BoardCardMenu`, `BoardStats`, `shared/ui/StatTile`, `shared/ui/EmptyState`, plus `useBoardMenu` and `useBoardDashboard`. Section 12.6 asks for under 70 and 140 is not that, so the number is recorded as it is rather than rounded into a claim.
+
+What the remaining 140 are is worth writing down, because the gap is not more of the same work. Roughly fifty-five are the page's own composition, which is what a page is for. Twenty-five are two full-page states, one for loading and one for an unreadable read. Twenty-five more are three buttons written out by hand, where `shared/ui/Button` exists and its primary variant was harvested from this very page. The rest are imports and the two modal call sites.
+
+The buttons are a real migration and were left out on purpose: two of the three match the primitive exactly and the third, the reload button, is `px-4 py-2` where the primitive is `px-6 py-3`, so migrating it changes a size that nothing asserts. That belongs in a change about the button surface, judged on its own.
+
+The two full-page states are the more interesting one. `Board.tsx` has the same pair behind the same `min-h-screen bg-gray-50 flex items-center justify-center` wrapper, which is four instances across two pages, so a primitive for them is justified rather than speculative. It was still not written here: it would save the dashboard twenty lines and leave it at 120, so it does not reach the target either, and building it while only one of the two pages can use it repeats the mistake this section already records under `UserPicker`. It is worth doing when `Board.tsx` migrates, with both callers in hand.
+
+Two things the decomposition surfaced that were not decomposition. The first is P4-8 above. The second is the board colours: the page resolved each board's colour with a request of its own, through the same `resolveColorValue` that `TaskCard` still uses per card, where `GET /colors?type=board` returns the list whole. It now reads that one palette through `useColors`, which is why that hook takes the colour type as an argument, and an end to end run against the live stack makes zero requests to `/colors/:id`. `TaskCard` has the same defect and keeps its own row in section 12.5 rather than being pulled into this one.
+
+One simplification went in with the last commit and is named because it is a behaviour change rather than a move. The add member modal was held open by a `showAddMemberModal` boolean beside a `selectedBoardForMembers` board, two pieces of state that had to agree. They are one now, and the modal is open when there is a board. The old pair could open the modal with no board, showing an empty title, which nothing reached in practice because the id always came from a rendered card. It is the same shape as P4-8: a second copy of a fact that something has to keep in step.
 
 ### 12.7 Sequencing
 

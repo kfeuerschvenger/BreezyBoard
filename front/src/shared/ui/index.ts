@@ -19,6 +19,9 @@ export type { ModalProps, ModalSize } from './Modal';
 export { Drawer } from './Drawer';
 export type { DrawerProps, DrawerSize } from './Drawer';
 
+export { EmptyState } from './EmptyState';
+export type { EmptyStateProps } from './EmptyState';
+
 export { StatTile } from './StatTile';
 export type { StatTileProps, StatTileTone } from './StatTile';
 

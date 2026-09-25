@@ -1,118 +1,46 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Folder } from 'lucide-react';
+import { Folder, Plus } from 'lucide-react';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
-import {
-  BoardCard,
-  BoardStats,
-  resolveBoardColor,
-  toColorLookup,
-  useAddBoardMembers,
-  useBoards,
-  useCreateBoard,
-  useDashboardStats,
-  useBoardMenu,
-  useDeleteBoard,
-} from '@/features/boards';
-import { useColors } from '@/features/colors';
+import { BoardCard, BoardStats, resolveBoardColor, useBoardDashboard, useBoardMenu } from '@/features/boards';
+import type { NewBoard } from '@/features/boards';
 import type { Board, User } from '@/models';
+import { EmptyState } from '@/shared/ui';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
 
 const BoardDashboard: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [selectedBoardForMembers, setSelectedBoardForMembers] = useState<Board | null>(null);
+  const [memberBoard, setMemberBoard] = useState<Board | null>(null);
 
+  const dashboard = useBoardDashboard();
   const menu = useBoardMenu();
-  // Only failures the page causes itself. A failed read is reported by the
-  // query below rather than kept in a second piece of state that has to be
-  // cleared by hand.
-  const [writeError, setWriteError] = useState<string | null>(null);
 
-  const boardsQuery = useBoards();
-  const statsQuery = useDashboardStats();
-
-  // Memoised because the empty fallback would otherwise be a new array on
-  // every render, and the colour resolving effect below depends on it: a
-  // fresh identity each time makes that effect run forever.
-  const boards = useMemo(() => boardsQuery.data ?? [], [boardsQuery.data]);
-  const isLoading = boardsQuery.isPending || statsQuery.isPending;
-  const error = writeError ?? (boardsQuery.isError || statsQuery.isError ? 'Failed to load data. Please try again later.' : null);
-
-  const stats = statsQuery.data ?? {
-    totalBoards: 0,
-    totalMembers: 0,
-    totalTasks: 0,
-    avgProgress: 0,
-  };
-
-  const createBoard = useCreateBoard();
-  const deleteBoard = useDeleteBoard();
-  const addBoardMembers = useAddBoardMembers();
-
-  // The whole board palette in one request, rather than resolving each
-  // board's colour with a request of its own. The colours a board can carry
-  // are a fixed seeded list, so a dashboard of twelve boards was making up to
-  // twelve calls to fetch parts of a list it could have had in one.
-  const { data: palette } = useColors('board');
-  const colorLookup = useMemo(() => toColorLookup(palette ?? []), [palette]);
-
-  // There is no refreshData any more. Every write below invalidates the two
-  // keys it affects and the cache refetches them, which is the same thing
-  // said once in features/boards/queries.ts instead of at four call sites,
-  // and is also what runs when the window regains focus.
-
-  const handleCreateBoard = async (newBoard: Pick<Board, 'title' | 'description' | 'color' | 'template'>) => {
-    try {
-      await createBoard.mutateAsync(newBoard);
-      setWriteError(null);
-      setShowCreateModal(false);
-    } catch (err) {
-      console.error('Error creating board:', err);
-      setWriteError('Failed to create board. Please try again.');
-    }
-  };
-
-  const handleDeleteBoard = async (boardId: string) => {
-    const ok = window.confirm('Are you sure you want to delete this board? This action cannot be undone.');
-    if (!ok) return;
-    try {
-      await deleteBoard.mutateAsync(boardId);
-      setWriteError(null);
-    } catch (err) {
-      console.error('Error deleting board:', err);
-      setWriteError('Failed to delete board. Please try again.');
-    }
-  };
-
-  const handleOpenAddMember = (boardId: string) => {
-    const board = boards.find(b => b._id === boardId) ?? null;
-    setSelectedBoardForMembers(board);
-    setShowAddMemberModal(true);
-    menu.close();
+  const handleCreateBoard = async (board: NewBoard) => {
+    if (await dashboard.createBoard(board)) setShowCreateModal(false);
   };
 
   const handleAddMembers = async (members: User[]) => {
-    if (!selectedBoardForMembers) return;
-
-    const boardId = selectedBoardForMembers._id;
-    const memberIds = members.map(m => m._id);
-
-    try {
-      await addBoardMembers.mutateAsync({ boardId, memberIds });
-      setWriteError(null);
-    } catch (error) {
-      console.error('Error adding members:', error);
-      setWriteError('Failed to add members. Please try again.');
-    } finally {
-      setShowAddMemberModal(false);
-      setSelectedBoardForMembers(null);
-    }
+    if (!memberBoard) return;
+    await dashboard.addMembers(memberBoard._id, members);
+    setMemberBoard(null);
   };
 
-  if (isLoading) {
+  const openAddMember = (boardId: string) => {
+    setMemberBoard(dashboard.boards.find(board => board._id === boardId) ?? null);
+    menu.close();
+  };
+
+  // Asked here rather than in the hook: deleting a board cascades to every
+  // task on it, and whether to ask before an irreversible action is a
+  // question about this screen, not about the write.
+  const confirmAndDelete = (boardId: string) => {
+    if (!window.confirm('Are you sure you want to delete this board? This action cannot be undone.')) return;
+    void dashboard.deleteBoard(boardId);
+  };
+
+  if (dashboard.isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
         <div className="text-center">
@@ -123,11 +51,11 @@ const BoardDashboard: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (dashboard.error) {
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
         <div className="text-center max-w-md">
-          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-4">{error}</div>
+          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-4">{dashboard.error}</div>
           <button
             onClick={() => window.location.reload()}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
@@ -141,7 +69,6 @@ const BoardDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <PageHeader title="My Boards" subtitle="Manage and organize your project boards">
         <button
           onClick={() => setShowCreateModal(true)}
@@ -152,11 +79,12 @@ const BoardDashboard: React.FC = () => {
         </button>
         <UserAvatar />
       </PageHeader>
+
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
-        <BoardStats stats={stats} />
+        <BoardStats stats={dashboard.stats} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {boards.map((board, index) => (
+          {dashboard.boards.map((board, index) => (
             // `_id` is required on the model and the API always sends it. The
             // fallback this replaced ended in `temp-${Date.now()}`, which gave
             // every render a different React key and defeated reconciliation
@@ -164,36 +92,34 @@ const BoardDashboard: React.FC = () => {
             <BoardCard
               key={board._id}
               board={board}
-              color={resolveBoardColor(board.color, colorLookup)}
+              color={resolveBoardColor(board.color, dashboard.colorLookup)}
               delay={index * 0.08}
               menuOpen={menu.isOpen(board._id)}
-              isDeleting={deleteBoard.isPending && deleteBoard.variables === board._id}
+              isDeleting={dashboard.isDeleting(board._id)}
               onToggleMenu={() => menu.toggle(board._id)}
-              onAddMember={() => handleOpenAddMember(board._id)}
-              onDelete={() => handleDeleteBoard(board._id)}
+              onAddMember={() => openAddMember(board._id)}
+              onDelete={() => confirmAndDelete(board._id)}
             />
           ))}
         </div>
 
-        {/* Empty */}
-        {boards.length === 0 && !isLoading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Folder className="text-gray-400" size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No boards yet</h3>
-            <p className="text-gray-600 mb-6">Create your first board to get started with project management</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-lg hover:shadow-xl"
-            >
-              Create Your First Board
-            </button>
-          </motion.div>
+        {dashboard.boards.length === 0 && (
+          <EmptyState
+            icon={<Folder className="text-gray-400" size={24} />}
+            title="No boards yet"
+            description="Create your first board to get started with project management"
+            action={
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-lg hover:shadow-xl"
+              >
+                Create Your First Board
+              </button>
+            }
+          />
         )}
       </motion.div>
 
-      {/* Modals */}
       <CreateBoardModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -201,14 +127,11 @@ const BoardDashboard: React.FC = () => {
       />
 
       <AddMemberModal
-        open={showAddMemberModal}
-        onClose={() => {
-          setShowAddMemberModal(false);
-          setSelectedBoardForMembers(null);
-        }}
+        open={memberBoard !== null}
+        onClose={() => setMemberBoard(null)}
         onAddMembers={handleAddMembers}
-        boardTitle={selectedBoardForMembers?.title ?? ''}
-        boardId={selectedBoardForMembers?._id ?? ''}
+        boardTitle={memberBoard?.title ?? ''}
+        boardId={memberBoard?._id ?? ''}
       />
     </div>
   );
