@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { User, Palette, Flag } from 'lucide-react';
+import { User, Palette } from 'lucide-react';
 import { ColorService, UserService } from '@/services';
 import type { User as UserModel, Task } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
 import { Button, Drawer, Field, Input, Textarea } from '@/shared/ui';
 import { UserPicker } from '@/features/users';
-import { Checklist } from '@/features/tasks';
+import { Checklist, PrioritySelect } from '@/features/tasks';
 import type { ChecklistItemData } from '@/features/tasks';
 
 // The legend of a group carries the same weight as a Field's label, so the
@@ -209,12 +209,6 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData, open, draft.write]);
 
-  const priorities = [
-    { value: 'low', label: 'Low', color: 'bg-green-100 text-green-800' },
-    { value: 'medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'high', label: 'High', color: 'bg-red-100 text-red-800' },
-  ];
-
   // Validate form function
   const validateForm = (): boolean => {
     const newErrors: { title?: string; description?: string; owner?: string; color?: string } = {};
@@ -346,32 +340,10 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
           )}
         </Field>
 
-        <fieldset>
-          <legend className={LEGEND_CLASSES}>
-            <Flag size={16} className="inline mr-1" aria-hidden="true" />
-            Priority
-          </legend>
-          <div className="flex gap-2">
-            {priorities.map(priority => (
-              <label
-                key={priority.value}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer bg-gray-100 text-gray-600 hover:bg-gray-200 has-[:checked]:${priority.color} has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500`}
-              >
-                <input
-                  type="radio"
-                  name="priority"
-                  value={priority.value}
-                  className="sr-only"
-                  checked={formData.priority === priority.value}
-                  onChange={() =>
-                    setFormData(prev => ({ ...prev, priority: priority.value as 'low' | 'medium' | 'high' }))
-                  }
-                />
-                {priority.label}
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <PrioritySelect
+          value={formData.priority}
+          onChange={priority => setFormData(prev => ({ ...prev, priority }))}
+        />
 
         <fieldset>
           <legend className={LEGEND_CLASSES}>
