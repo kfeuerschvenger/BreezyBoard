@@ -5,13 +5,15 @@ import { Link } from 'react-router-dom';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
 import {
+  resolveBoardColor,
+  toColorLookup,
   useAddBoardMembers,
   useBoards,
   useCreateBoard,
   useDashboardStats,
   useDeleteBoard,
-} from '@/features/boards/queries';
-import { resolveColorValue, resolveColorValueSync } from '@/utils/colorUtils';
+} from '@/features/boards';
+import { useColors } from '@/features/colors';
 import type { Board, User } from '@/models';
 import { resolveIcon } from '@/shared/lib/lucideIcons';
 import PageHeader from '../components/PageHeader';
@@ -62,52 +64,12 @@ const BoardDashboard: React.FC = () => {
   const deleteBoard = useDeleteBoard();
   const addBoardMembers = useAddBoardMembers();
 
-  // map boardId -> colorHex
-  const [boardColors, setBoardColors] = useState<Record<string, string>>({});
-
-  // Pre-resolve colors for all boards when boards change
-  useEffect(() => {
-    let mounted = true;
-
-    if (!boards || boards.length === 0) {
-      setBoardColors({});
-      return;
-    }
-    (async () => {
-      try {
-        const entries = await Promise.all(
-          boards.map(async b => {
-            const id = b._id;
-            // quick sync value (may be actual hex)
-            const sync = resolveColorValueSync(b.color, '#64748B');
-            if (sync && sync !== '#64748B') {
-              return [id, sync] as [string, string];
-            }
-            // otherwise try async resolution (id or object)
-            try {
-              const hex = await resolveColorValue(b.color, '#64748B');
-              return [id, hex] as [string, string];
-            } catch {
-              return [id, '#64748B'] as [string, string];
-            }
-          })
-        );
-        if (!mounted) return;
-
-        const map: Record<string, string> = {};
-        entries.forEach(([id, hex]) => {
-          if (id) map[id] = hex;
-        });
-        setBoardColors(prev => ({ ...prev, ...map }));
-      } catch {
-        // console.warn('Failed to preload board colors');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [boards]);
+  // The whole board palette in one request, rather than resolving each
+  // board's colour with a request of its own. The colours a board can carry
+  // are a fixed seeded list, so a dashboard of twelve boards was making up to
+  // twelve calls to fetch parts of a list it could have had in one.
+  const { data: palette } = useColors('board');
+  const colorLookup = useMemo(() => toColorLookup(palette ?? []), [palette]);
 
   // There is no refreshData any more. Every write below invalidates the two
   // keys it affects and the cache refetches them, which is the same thing
@@ -327,7 +289,7 @@ const BoardDashboard: React.FC = () => {
             const id = board._id;
             const template = typeof board.template === 'object' ? board.template : null;
             const IconFromTemplate = resolveIcon(template?.iconName);
-            const colorHex = boardColors[id] ?? resolveColorValueSync(board.color, '#64748B');
+            const colorHex = resolveBoardColor(board.color, colorLookup);
 
             const safeBoard = {
               id,
