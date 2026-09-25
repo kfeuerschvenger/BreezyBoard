@@ -1,183 +1,27 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Calendar, Camera, Mail, MapPin, Save, User } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
-import FormInput from '@/components/FormInput';
 import SuccessModal from '@/components/SuccessModal';
 import { useAuth } from '@/hooks/useAuth';
-import { useUpdateUser, useUploadAvatar, useUser } from '@/features/users/queries';
-import type { User as UserModel } from '@/models';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-
-/**
- * Schema for profile form using zod.
- * - firstName and lastName required
- * - email must be a valid email
- * - other fields optional
- */
-const profileSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email('Email is invalid'),
-  location: z.string().optional().or(z.literal('')),
-  role: z.string().optional().or(z.literal('')),
-  department: z.string().optional().or(z.literal('')),
-  avatar: z.string().optional().or(z.literal('')),
-  createdAt: z.string().optional().or(z.literal('')), // for display only
-});
-
-type ProfileFormValues = z.infer<typeof profileSchema>;
+import { ProfileActions, ProfileForm, ProfileSummary, useProfile } from '@/features/users';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth(); // expects the auth hook to expose current user (with _id)
-  const userId = user?._id ?? null;
+  const { user } = useAuth();
 
-  const profileQuery = useUser(userId);
-  const updateUser = useUpdateUser(userId);
-  const uploadAvatar = useUploadAvatar(userId);
-
-  const loading = profileQuery.isPending && Boolean(userId);
-  const avatarUploading = uploadAvatar.isPending;
-
-  // Only failures this page causes itself. A failed read is reported by the
-  // query rather than kept in a second piece of state to be cleared by hand.
-  const [writeError, setWriteError] = useState<string | null>(null);
-  const apiError = !userId
-    ? 'User not found in auth context.'
-    : (writeError ?? (profileQuery.isError ? 'Failed to load profile. Please try again later.' : null));
-
-  const [successOpen, setSuccessOpen] = useState(false);
-
-  // file input ref to trigger file dialog programmatically
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // react-hook-form setup
+  const profile = useProfile(user?._id ?? null);
+  const { form, save, cancel, uploadAvatar } = profile;
   const {
-    register,
     handleSubmit,
-    reset,
-    formState: { errors, isDirty, isValid, isSubmitting },
     watch,
-    setValue,
-  } = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
-    mode: 'onChange',
-    defaultValues: {
-      firstName: '',
-      lastName: '',
-      email: '',
-      location: '',
-      role: '',
-      department: '',
-      avatar: '',
-      createdAt: '',
-    },
+    formState: { isDirty, isValid, isSubmitting },
+  } = form;
+
+  const [savedOpen, setSavedOpen] = React.useState(false);
+
+  const onSubmit = handleSubmit(async values => {
+    if (await save(values)) setSavedOpen(true);
   });
-
-  // One mapping, used by the reset below and by cancel. It used to be
-  // written out twice, once in the fetching effect and once in the cancel
-  // handler, with the second copy quietly missing `createdAt`.
-  const toFormValues = (data: UserModel): ProfileFormValues => ({
-    firstName: data.firstName ?? '',
-    lastName: data.lastName ?? '',
-    email: data.email ?? '',
-    location: data.location ?? '',
-    role: data.role ?? '',
-    department: data.department ?? '',
-    avatar: data.avatar ?? '',
-    createdAt: data.createdAt ?? '',
-  });
-
-  // Fill the form from whatever the cache holds. This also runs after the
-  // window regains focus and the record turns out to have changed
-  // elsewhere, which the previous fetch-once effect could not do.
-  useEffect(() => {
-    if (!profileQuery.data) return;
-    reset(toFormValues(profileQuery.data), { keepDirty: false });
-  }, [profileQuery.data, reset]);
-
-  /**
-   * A record with no joined date reached `new Date('')`, which formats as the
-   * literal string "Invalid Date". Every other missing field on this page has
-   * a fallback; this one printed the error to the person. Finding P4-10.
-   */
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Unknown';
-    const date = new Date(dateString);
-    if (Number.isNaN(date.getTime())) return 'Unknown';
-
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  };
-
-  // handle avatar selection and upload
-  const onAvatarSelected = async (file?: File | null) => {
-    if (!file || !userId) return;
-    setWriteError(null);
-
-    try {
-      const avatarUrl = await uploadAvatar.mutateAsync(file);
-      setValue('avatar', avatarUrl, { shouldDirty: true, shouldValidate: true });
-    } catch (err) {
-      console.error('Avatar upload failed:', err);
-      setWriteError('Avatar upload failed. Please try again.');
-    }
-  };
-
-  const onAvatarInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    onAvatarSelected(file);
-  };
-
-  // Save profile handler
-  const onSave = async (values: ProfileFormValues) => {
-    if (!userId) {
-      setWriteError('User not available.');
-      return;
-    }
-    setWriteError(null);
-    try {
-      // send only allowed fields
-      const payload: Partial<UserModel> = {
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-        location: values.location,
-        role: values.role,
-        department: values.department,
-        avatar: values.avatar,
-      };
-
-      await updateUser.mutateAsync(payload);
-      // reset form state to reflect that changes were saved
-      reset(values, { keepDirty: false });
-      setSuccessOpen(true);
-    } catch (err) {
-      console.error('Failed to update profile:', err);
-      setWriteError('Failed to update profile. Please try again.');
-    }
-  };
-
-  // Cancel resets from the cache rather than refetching. The cached record
-  // is the last thing the server confirmed, since every write here
-  // invalidates it, and that is precisely what cancel means: put the form
-  // back to what is actually stored.
-  //
-  // It also fixes a defect in the version this replaces, which refetched and
-  // then rebuilt the form from a second, hand-written copy of the field
-  // mapping. That copy was missing `createdAt`, so cancelling silently blanked
-  // the joined date until the page was reloaded.
-  const onCancel = () => {
-    if (!profileQuery.data) return;
-    setWriteError(null);
-    reset(toFormValues(profileQuery.data), { keepDirty: false });
-  };
-
-  const avatarValue = watch('avatar');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -187,201 +31,31 @@ const ProfilePage: React.FC = () => {
         showBackButton
         onBack={() => navigate('/')}
       >
-        {/* Show actions only when there are unsaved changes */}
-        {!loading && isDirty && (
+        {/* The header pair appears only once there is something to save. */}
+        {!profile.isLoading && isDirty && (
           <div className="flex items-center gap-3">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              Cancel
-            </button>
-
-            <button
-              onClick={handleSubmit(onSave)}
-              disabled={!isValid || isSubmitting}
-              className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Save size={16} />
-              )}
-              <span className="md:hidden">{isSubmitting ? 'Saving...' : 'Save'}</span>
-              <span className="hidden md:inline">{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
-            </button>
+            <ProfileActions
+              isDirty={isDirty}
+              isValid={isValid}
+              isSubmitting={isSubmitting}
+              onCancel={cancel}
+              onSave={onSubmit}
+            />
           </div>
         )}
       </PageHeader>
 
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Profile Card */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div className="text-center mb-6">
-                <div className="relative inline-block">
-                  <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 overflow-hidden">
-                    {avatarValue ? (
-                      // avatarValue is expected to be a URL
-                      <img src={avatarValue} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      <span>{(watch('firstName')?.charAt(0) ?? '') + (watch('lastName')?.charAt(0) ?? '')}</span>
-                    )}
-                  </div>
+          <ProfileSummary values={watch()} isUploadingAvatar={profile.isUploadingAvatar} onAvatarSelected={uploadAvatar} />
 
-                  {/*
-                    The input is hidden with sr-only rather than with `hidden`,
-                    which compiles to display:none and takes a control out of
-                    the focus order altogether. It did, so changing an avatar
-                    was mouse-only. Finding P4-11.
-
-                    The focus ring lives on the label, since that is what is
-                    drawn, and focus-within is what puts it there when the
-                    input behind it takes focus.
-                  */}
-                  <label className="absolute -bottom-0 -right-0 translate-x-1/4 translate-y-1/4 bg-white border-2 border-gray-200 rounded-full p-2 cursor-pointer hover:bg-gray-50 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500">
-                    <Camera size={16} className="text-gray-600" aria-hidden="true" />
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      aria-label="Change avatar"
-                      onChange={onAvatarInputChange}
-                      className="sr-only"
-                    />
-                  </label>
-                </div>
-
-                <h2 className="text-xl font-bold text-gray-900 font-heading">
-                  {watch('firstName')} {watch('lastName')}
-                </h2>
-                <p className="text-gray-600 font-body">{watch('role')}</p>
-                <p className="text-sm text-gray-500">{watch('department')}</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 text-sm">
-                  <Calendar size={16} className="text-gray-400" />
-                  <span className="text-gray-600">Joined {formatDate(watch('createdAt'))}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <MapPin size={16} className="text-gray-400" />
-                  <span className="text-gray-600">{watch('location') || 'Unknown'}</span>
-                </div>
-                {avatarUploading && <div className="text-sm text-gray-500">Uploading avatar…</div>}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Profile Form */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="lg:col-span-2"
-          >
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 font-heading mb-6">Personal Information</h3>
-
-              <form className="space-y-6" onSubmit={handleSubmit(onSave)}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <FormInput
-                      label="First Name"
-                      placeholder="Enter first name"
-                      {...register('firstName')}
-                      icon={<User size={16} className="text-gray-400" />}
-                      error={errors.firstName?.message as string | undefined}
-                    />
-                  </div>
-                  <div>
-                    <FormInput
-                      label="Last Name"
-                      placeholder="Enter last name"
-                      {...register('lastName')}
-                      icon={<User size={16} className="text-gray-400" />}
-                      error={errors.lastName?.message as string | undefined}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <FormInput
-                    label="Email Address"
-                    placeholder="Enter email address"
-                    type="email"
-                    {...register('email')}
-                    icon={<Mail size={16} className="text-gray-400" />}
-                    error={errors.email?.message as string | undefined}
-                  />
-                </div>
-
-                <div>
-                  <FormInput
-                    label="Location"
-                    placeholder="Enter location"
-                    {...register('location')}
-                    icon={<MapPin size={16} className="text-gray-400" />}
-                    error={errors.location?.message as string | undefined}
-                  />
-                </div>
-
-                <div>
-                  <FormInput
-                    label="Role"
-                    placeholder="Enter your role"
-                    {...register('role')}
-                    error={errors.role?.message as string | undefined}
-                  />
-                </div>
-
-                <div>
-                  <FormInput
-                    label="Department"
-                    placeholder="Enter department"
-                    {...register('department')}
-                    error={errors.department?.message as string | undefined}
-                  />
-                </div>
-
-                {/* Show API error if any */}
-                {apiError && <div className="text-sm text-red-600">{apiError}</div>}
-
-                {/* Inline actions at bottom of form for mobile */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={onCancel}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                    disabled={isSubmitting || !isDirty}
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={!isValid || !isDirty || isSubmitting}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    {isSubmitting ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Save size={16} />
-                    )}
-                    <span className="md:hidden">{isSubmitting ? 'Saving...' : 'Save'}</span>
-                    <span className="hidden md:inline">{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </motion.div>
+          <ProfileForm form={form} error={profile.error} onSubmit={onSubmit} onCancel={cancel} />
         </div>
       </div>
-      {/* Success modal shown after saving changes */}
+
       <SuccessModal
-        open={successOpen}
-        onClose={() => setSuccessOpen(false)}
+        open={savedOpen}
+        onClose={() => setSavedOpen(false)}
         title="Profile saved"
         message="Your profile has been updated successfully."
       />
