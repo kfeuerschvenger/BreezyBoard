@@ -5,3 +5,11 @@ export { Checklist } from './components/Checklist';
 export type { ChecklistItemData, ChecklistProps } from './components/Checklist';
 export { PrioritySelect } from './components/PrioritySelect';
 export type { PrioritySelectProps, TaskPriority } from './components/PrioritySelect';
+export { useTaskForm, resolveColorId } from './hooks/useTaskForm';
+export type {
+  TaskColorOption,
+  TaskFormValues,
+  TaskFormErrors,
+  UseTaskFormOptions,
+  UseTaskFormResult,
+} from './hooks/useTaskForm';

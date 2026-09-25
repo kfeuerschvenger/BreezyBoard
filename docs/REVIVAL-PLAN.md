@@ -429,7 +429,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, owner picker extracted | Done | `features/users/UserPicker` with the resolution on the feature query. `TaskDrawer` 852 to 588 |
 | 5d, checklist extracted | Done | `features/tasks/Checklist` owns its sensors and its four edits, 6 tests of its own. `TaskDrawer` 588 to 442 |
 | 5d, priority select extracted | Done | `features/tasks/PrioritySelect`, and its selected state now exists in the stylesheet (P4-6) |
-| 5d, remaining decomposition | Open | SwatchPicker and `useTaskForm` still inside `TaskDrawer`. See section 12.5 |
+| 5d, task form hook | Done | `useTaskForm` owns the values, the errors, the draft and the submit. 10 tests, 6 mutations caught |
+| 5d, remaining decomposition | Open | `SwatchPicker` to `shared/ui`, then the `TaskForm` and shell split. See section 12.5 |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1042,7 +1043,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 
 | Current | Lines | Becomes |
 |---|---|---|
-| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `tasks/Checklist` and `tasks/PrioritySelect` (done, 414 left), `shared/ui/SwatchPicker`, `useTaskForm` |
+| `TaskDrawer.tsx` | 852 | `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `tasks/Checklist` and `tasks/PrioritySelect` and `useTaskForm` (done, 196 left), `shared/ui/SwatchPicker`, `useTaskForm` |
 | `BoardDashboard.tsx` | 505 | `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoards`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
@@ -1155,6 +1156,14 @@ The three priority chips composed their selected styling at runtime, as `has-[:c
 The composition also splits wrongly. Only the first of the two classes inherits the variant, so `text-green-800` applied unconditionally. The result is three chips permanently tinted and no indication of which one is selected, which is the same failure as having no selected state at all.
 
 Every class is written out in full now, and the six rules appear in the build. The guard is an assertion about class names, which is normally the wrong way to test a selection and is the only way here: the markup was always correct and the missing piece was a stylesheet the test environment does not consult.
+
+**`useTaskForm`, and the one property that had to survive it.** The form's state machine moved out of the drawer into `features/tasks/hooks`, which takes `TaskDrawer` to 196 lines from 852. The hook owns the values, the errors, the draft and the submit together, and owning them together is the point: four effects write to these values, and splitting the writers between a hook and its caller is what produces the defect this form has already hit twice, where one writer rebuilds the whole object over what another just put in it.
+
+The submit gate reads error values rather than error keys. That is the whole of P0-1, the regression that made task creation impossible for a year: clearing an error writes `undefined` under a key that stays in the object, and choosing an owner is what creates that key, so a gate counting keys is closed by the very act of completing the form. Reintroducing the key count fails five tests, which is how the move was judged safe rather than by reading it.
+
+Six mutations were run against the extracted hook and all six are caught: the key count, the two whitespace trims, the single member preselect, the guard that stops a hand picked colour being overwritten, and the stored colour resolution. Two of them were not caught on the first attempt, and both failures were in the tests rather than in the code. One asserted on a form with several fields blank, so removing a single check still left the form invalid and the test green. The other passed an empty colour list, so the effect it meant to exercise returned before doing anything. A test that cannot fail is worse than no test, because it is counted.
+
+One inconsistency is preserved rather than fixed, and named in the hook: only the owner clears its own error as it changes, while the title and the description keep theirs until the next submit. That is an accident rather than a rule, and changing it belongs with a validation rewrite, not with a move.
 
 ### 12.7 Sequencing
 
