@@ -76,10 +76,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             </div>
           </div>
 
-          {/* Action area */}
-          <div className="flex items-center gap-4" aria-label="page actions">
-            {children}
-          </div>
+          {/*
+            A layout wrapper, so it carries no aria-label. ARIA prohibits one
+            on an element with no role, and the actions inside already name
+            themselves. The axe gate reported it the first time a surface
+            rendering this header with an empty action area was scanned.
+          */}
+          <div className="flex items-center gap-4">{children}</div>
         </div>
       </div>
     </header>
