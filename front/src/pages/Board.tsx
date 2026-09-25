@@ -180,50 +180,45 @@ const Board = () => {
     setDrawerOpen(true);
   };
 
+  /**
+   * Deliberately does not catch. The drawer reports a failed save and keeps
+   * itself open holding the draft, and it can only do that if the failure
+   * reaches it. A catch here returns normally, which tells the drawer the
+   * save succeeded, so it clears the draft and closes over work that was
+   * never written. That is finding P4-9.
+   *
+   * Closing on success is the drawer's job too, through onSaved.
+   */
   const handleTaskSave = async (taskData: Partial<Task>) => {
-    if (!boardId) {
-      console.error('No boardId available for creating task.');
-      return;
+    if (!boardId) throw new Error('No board was specified in the address.');
+
+    const result = taskData._id
+      ? await TaskService.update(taskData._id, taskData)
+      : await TaskService.create(boardId, taskData);
+
+    if (taskData._id) {
+      taskCache.replace(result);
+    } else {
+      taskCache.write([...(taskCache.read() ?? []), result]);
     }
 
-    try {
-      let result: Task;
+    // A task whose checklist is entirely done moves itself to the last
+    // column. `status` holds a column id, so comparing it to the literal
+    // 'done' never matched; the last column is resolved by order instead.
+    const isChecklistComplete = Boolean(result.checklist?.length) && result.checklist.every(item => item.completed);
+    if (!isChecklistComplete || columns.length === 0) return;
 
-      if (taskData._id) {
-        result = await TaskService.update(taskData._id, taskData);
-      } else {
-        result = await TaskService.create(boardId, taskData);
-      }
+    const doneColumn = columns.reduce((last, column) => (column.order > last.order ? column : last), columns[0]);
+    if (result.status === doneColumn.id) return;
 
-      if (taskData._id) {
-        taskCache.replace(result);
-      } else {
-        taskCache.write([...(taskCache.read() ?? []), result]);
-      }
-
-      // Only move to done if there are checklist items AND all are completed
-      const hasChecklist = result.checklist && result.checklist.length > 0;
-      const allCompleted = hasChecklist && result.checklist.every(item => item.completed);
-
-      if (hasChecklist && allCompleted && columns.length > 0) {
-        // status holds a column id, so comparing it to the literal 'done' never matches.
-        // Resolve the last column and compare against its id instead.
-        const doneColumn = columns.reduce((max, col) => (col.order > max.order ? col : max), columns[0]);
-
-        if (doneColumn && result.status !== doneColumn.id) {
-          // Completing a checklist sends the task to the bottom of the last
-          // column, which is the only neighbour that needs naming.
-          const doneTasks = tasks.filter(task => task.status === doneColumn.id).sort(byOrder);
-          await handleTaskMove(result._id, doneColumn.id, {
-            afterId: doneTasks.length > 0 ? doneTasks[doneTasks.length - 1]._id : null,
-          });
-        }
-      }
-
-      setDrawerOpen(false);
-    } catch (error) {
-      console.error('Error saving task:', error);
-    }
+    // Completing a checklist sends the task to the bottom of that column,
+    // which is the only neighbour that needs naming. Its own failure is
+    // reported and swallowed: the task was saved, and telling the person it
+    // was not because a follow-up move failed would be a worse answer.
+    const doneTasks = tasks.filter(task => task.status === doneColumn.id).sort(byOrder);
+    await handleTaskMove(result._id, doneColumn.id, {
+      afterId: doneTasks.length > 0 ? doneTasks[doneTasks.length - 1]._id : null,
+    });
   };
 
   const handleAddTask = () => {
