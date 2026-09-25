@@ -6,7 +6,7 @@ import AddMemberModal from '../components/AddMemberModal';
 import { BoardCard, BoardStats, resolveBoardColor, useBoardDashboard, useBoardMenu } from '@/features/boards';
 import type { NewBoard } from '@/features/boards';
 import type { Board, User } from '@/models';
-import { EmptyState } from '@/shared/ui';
+import { EmptyState, LoadingScreen } from '@/shared/ui';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
 
@@ -40,16 +40,7 @@ const BoardDashboard: React.FC = () => {
     void dashboard.deleteBoard(boardId);
   };
 
-  if (dashboard.isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
-          <p className="text-gray-600">Loading boards...</p>
-        </div>
-      </div>
-    );
-  }
+  if (dashboard.isLoading) return <LoadingScreen label="Loading boards..." showLabel />;
 
   if (dashboard.error) {
     return (

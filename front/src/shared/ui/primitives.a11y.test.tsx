@@ -2,7 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { Button, Drawer, EmptyState, Field, IconButton, Input, Modal, StatTile, SwatchPicker, Textarea } from './index';
+import {
+  Button,
+  Drawer,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  LoadingScreen,
+  Modal,
+  StatTile,
+  SwatchPicker,
+  Textarea,
+} from './index';
 import type { SwatchOption } from './index';
 
 /**
@@ -341,5 +353,30 @@ describe('EmptyState', () => {
     expect(screen.getByRole('heading', { name: 'Nothing here' })).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     await noViolations(container);
+  });
+});
+
+describe('LoadingScreen', () => {
+  // A rotating border says nothing. The role and the name are what make a
+  // page with no content yet distinguishable from a page with none at all.
+  it('announces what is being waited for', async () => {
+    const { container } = render(<LoadingScreen label="Loading boards" />);
+
+    expect(screen.getByRole('status', { name: 'Loading boards' })).toBeInTheDocument();
+    await noViolations(container);
+  });
+
+  it('keeps the name when the label is also drawn as text', async () => {
+    const { container } = render(<LoadingScreen label="Loading boards" showLabel />);
+
+    expect(screen.getByRole('status', { name: 'Loading boards' })).toBeInTheDocument();
+    expect(screen.getByText('Loading boards')).toBeInTheDocument();
+    await noViolations(container);
+  });
+
+  it('still announces itself when no label was given', () => {
+    render(<LoadingScreen />);
+
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
   });
 });

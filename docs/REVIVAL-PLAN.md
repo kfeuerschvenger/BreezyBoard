@@ -440,6 +440,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, board card extracted | Done | `BoardCard`, `BoardCardMenu` and `useBoardMenu`. `BoardDashboard` 403 to 217 |
 | 5d, dashboard composed | Done | `useBoardDashboard` and `shared/ui/EmptyState`. `BoardDashboard` 217 to 140, section 12.5 row closed |
 | 5d, failed task save | Done | The board page stopped swallowing the error, so the drawer can report it and keep the draft (P4-9) |
+| 5d, board drag extracted | Done | `useTaskDragAndDrop` with 13 tests and 8 mutations caught, P2-6 covered at last. `Board` 344 to 233 |
+| 5d, board page composed | Done | `useBoardData`, `BoardColumns` and `shared/ui/LoadingScreen`. `Board` 233 to 153 |
 | 5d, remaining decomposition | Open | `Profile` 380, `Board` 348, `AddMemberModal` 335, and the smaller rows of section 12.5 |
 | 6 onward | Not started | |
 
@@ -1057,7 +1059,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `BoardDashboard.tsx` | 513 | Done, 140 left. `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoardDashboard`, `useBoardMenu`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 410 | `users/ProfileSummary`, `users/ProfileForm`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
-| `Board.tsx` | 326 | `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop` |
+| `Board.tsx` | 348 | Done, 153 left. `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop`, `shared/ui/LoadingScreen` |
 | `CreateBoardModal.tsx` | 281 | `boards/CreateBoardForm` over `Modal`, `TemplatePicker`, `SwatchPicker` |
 | `RegisterForm.tsx` | 247 | `auth/RegisterForm` over `Field`, plus `PasswordInput` for the toggle repeated 3 times |
 | `Login.tsx` | 242 | `auth/LoginForm` on React Hook Form and Zod, its inline modal replaced by `Modal` |
@@ -1075,7 +1077,7 @@ A page should read as composition and nothing else: route params in, hooks for d
 |---|---|---|
 | `BoardDashboard.tsx` | 140, from 513 | Under 70, not reached. See 12.6b |
 | `Profile.tsx` | 410 | Under 60 |
-| `Board.tsx` | 326 | Under 80 |
+| `Board.tsx` | 153, from 348 | Under 80, not reached. See 12.6b |
 | `Login.tsx` | 242 | Under 40 |
 | `Register.tsx` | 26 | Unchanged |
 
@@ -1232,6 +1234,16 @@ The buttons are a real migration and were left out on purpose: two of the three 
 The two full-page states are the more interesting one. `Board.tsx` has the same pair behind the same `min-h-screen bg-gray-50 flex items-center justify-center` wrapper, which is four instances across two pages, so a primitive for them is justified rather than speculative. It was still not written here: it would save the dashboard twenty lines and leave it at 120, so it does not reach the target either, and building it while only one of the two pages can use it repeats the mistake this section already records under `UserPicker`. It is worth doing when `Board.tsx` migrates, with both callers in hand.
 
 Two things the decomposition surfaced that were not decomposition. The first is P4-8 above. The second is the board colours: the page resolved each board's colour with a request of its own, through the same `resolveColorValue` that `TaskCard` still uses per card, where `GET /colors?type=board` returns the list whole. It now reads that one palette through `useColors`, which is why that hook takes the colour type as an argument, and an end to end run against the live stack makes zero requests to `/colors/:id`. `TaskCard` has the same defect and keeps its own row in section 12.5 rather than being pulled into this one.
+
+**`Board`, and what moving the drag logic actually bought.** The page went from 348 lines to 153: `useTaskDragAndDrop`, `useBoardData`, `tasks/BoardColumns` and `shared/ui/LoadingScreen`.
+
+This section predicted that moving `handleDragEnd` into a hook is what makes it testable, and that is the one claim here worth checking rather than repeating. It was right. The ninety lines had no unit coverage of any kind, and could not have any: reaching them meant simulating a pointer drag over a layout jsdom does not compute, so the only thing exercising them was a single end to end run. The hook takes the two event shapes as plain objects, and thirteen tests now cover every branch, including two that were findings before they were code. P2-6, that a second drag aborts the first and the abandoned request must not touch the board afterwards, had never been asserted anywhere but in the comment explaining it. Eight mutations were run against the hook and all eight are caught.
+
+One of those tests was wrong on the first run while the code was right, and it is worth recording which way that was resolved. A card released onto the first card of a column lands above it, so its neighbours are nothing above and the displaced card below; the test had expected the card after that one. It was corrected against `arrangeColumn`, not against whatever the run produced, because a test rewritten to match the output it just saw asserts nothing.
+
+`shared/ui/LoadingScreen` is the primitive the `BoardDashboard` entry above declined to write for one caller. Both pages have a full-page loading state, so it has two, and it closes a gap that was sitting in a test file as a comment rather than in the markup: the spinner carried no role and no name, so a page with nothing on it yet was indistinguishable from an empty one to anyone not looking at the screen. Both pages' tests now assert the accessible name rather than a spinning class.
+
+The target is under 80 and 153 is not that, for the same reasons as the dashboard and one more. The error screens stayed: the two pages' versions differ enough, one an alert card with two buttons and one a red box with one, that a shared component would be a switch over presentation with no behaviour in common, which is the merge this section argues against under `UserPicker`. The rest is the header, three hand-rolled buttons and the save handler, which is genuine page logic about what a completed checklist means.
 
 One simplification went in with the last commit and is named because it is a behaviour change rather than a move. The add member modal was held open by a `showAddMemberModal` boolean beside a `selectedBoardForMembers` board, two pieces of state that had to agree. They are one now, and the modal is open when there is a board. The old pair could open the modal with no board, showing an empty title, which nothing reached in practice because the id always came from a rendered card. It is the same shape as P4-8: a second copy of a fact that something has to keep in step.
 
