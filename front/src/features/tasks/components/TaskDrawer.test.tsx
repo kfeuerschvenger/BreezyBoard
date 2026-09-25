@@ -379,6 +379,41 @@ describe('TaskDrawer owner suggestions, by keyboard alone', () => {
   });
 });
 
+// Characterization, written before the shell and the form were split apart.
+// Choosing the title is the only decision the shell keeps after that split,
+// and nothing pinned it, so the split could have dropped it and left every
+// other test in this file green.
+describe('TaskDrawer title', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  // Asserted as the dialog's accessible name rather than as text on the page,
+  // which is both what assistive technology announces and the thing section
+  // 10.2 records as having been missing here.
+  it('announces a task with no id as a creation', async () => {
+    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+
+    expect(await screen.findByRole('dialog', { name: 'Create New Task' })).toBeInTheDocument();
+  });
+
+  it('announces a task that already exists as an edit', async () => {
+    renderWithQuery(
+      <TaskDrawer
+        open
+        task={{ _id: 'task-1', boardId: 'board-1', title: 'Existing' }}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole('dialog', { name: 'Edit Task' })).toBeInTheDocument();
+  });
+});
+
 describe('TaskDrawer reference data fetching', () => {
   beforeEach(() => {
     window.localStorage.clear();
