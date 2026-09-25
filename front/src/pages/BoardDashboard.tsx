@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Users, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Folder } from 'lucide-react';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
 import {
+  BoardCard,
   BoardStats,
   resolveBoardColor,
   toColorLookup,
@@ -12,32 +12,20 @@ import {
   useBoards,
   useCreateBoard,
   useDashboardStats,
+  useBoardMenu,
   useDeleteBoard,
 } from '@/features/boards';
 import { useColors } from '@/features/colors';
 import type { Board, User } from '@/models';
-import { resolveIcon } from '@/shared/lib/lucideIcons';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
-
-const safeFormatDate = (dateString?: string) => {
-  if (!dateString) return 'N/A';
-  try {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return 'Invalid date';
-  }
-};
 
 const BoardDashboard: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedBoardForMembers, setSelectedBoardForMembers] = useState<Board | null>(null);
 
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menu = useBoardMenu();
   // Only failures the page causes itself. A failed read is reported by the
   // query below rather than kept in a second piece of state that has to be
   // cleared by hand.
@@ -76,27 +64,6 @@ const BoardDashboard: React.FC = () => {
   // said once in features/boards/queries.ts instead of at four call sites,
   // and is also what runs when the window regains focus.
 
-  // close menu on Escape
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenuId(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  // close menu on outside click
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const tgt = e.target as HTMLElement | null;
-      if (!tgt) return;
-      if (tgt.closest('[data-board-menu]') || tgt.closest('[data-board-menu-btn]')) return;
-      setOpenMenuId(null);
-    };
-    window.addEventListener('click', onClick);
-    return () => window.removeEventListener('click', onClick);
-  }, []);
-
   const handleCreateBoard = async (newBoard: Pick<Board, 'title' | 'description' | 'color' | 'template'>) => {
     try {
       await createBoard.mutateAsync(newBoard);
@@ -106,14 +73,6 @@ const BoardDashboard: React.FC = () => {
       console.error('Error creating board:', err);
       setWriteError('Failed to create board. Please try again.');
     }
-  };
-
-  // None of these stop propagation any more. They used to, because the whole
-  // card was a click handler that would navigate away underneath them; the
-  // card is a container now and the navigation lives in a link, so there is
-  // nothing left to stop.
-  const handleToggleMenu = (boardId: string) => {
-    setOpenMenuId(prev => (prev === boardId ? null : boardId));
   };
 
   const handleDeleteBoard = async (boardId: string) => {
@@ -132,7 +91,7 @@ const BoardDashboard: React.FC = () => {
     const board = boards.find(b => b._id === boardId) ?? null;
     setSelectedBoardForMembers(board);
     setShowAddMemberModal(true);
-    setOpenMenuId(null);
+    menu.close();
   };
 
   const handleAddMembers = async (members: User[]) => {
@@ -150,16 +109,6 @@ const BoardDashboard: React.FC = () => {
     } finally {
       setShowAddMemberModal(false);
       setSelectedBoardForMembers(null);
-    }
-  };
-
-  const calculateProgress = (board: Board) => {
-    try {
-      if (typeof board.progress === 'number') return board.progress;
-      if (typeof board.progress === 'object' && Object.keys(board.progress).length === 0) return 0;
-      return 0;
-    } catch {
-      return 0;
     }
   };
 
@@ -206,163 +155,24 @@ const BoardDashboard: React.FC = () => {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
         <BoardStats stats={stats} />
 
-        {/* Boards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {boards.map((board, index) => {
-            // `_id` is required on the model and the API always sends it.
-            // The fallback this replaced ended in `temp-${Date.now()}`,
-            // which produced a different React key on every render and
-            // defeated reconciliation for the whole grid. Finding P2-8.
-            const id = board._id;
-            const template = typeof board.template === 'object' ? board.template : null;
-            const IconFromTemplate = resolveIcon(template?.iconName);
-            const colorHex = resolveBoardColor(board.color, colorLookup);
-
-            const safeBoard = {
-              id,
-              title: board.title || 'Untitled Board',
-              description: board.description || 'No description',
-              color: colorHex,
-              progress: calculateProgress(board),
-              taskCount: typeof board.taskCount === 'number' ? board.taskCount : 0,
-              memberCount: typeof board.memberCount === 'number' ? board.memberCount : 0,
-              lastUpdated: board.updatedAt || new Date().toISOString(),
-            };
-
-            const isMenuOpen = openMenuId === id;
-            // Read from the mutation rather than mirrored into state beside
-            // it. The mirror was the defect: nothing ever wrote a board id
-            // into it, so the disabled state and the "Deleting..." label
-            // below could not appear, and a slow cascade invited a second
-            // click that started another one.
-            const isDeleting = deleteBoard.isPending && deleteBoard.variables === id;
-
-            return (
-              <motion.div
-                key={safeBoard.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.08 }}
-                // Not a button any more. It used to be role="button" with a
-                // tabIndex and a key handler, wrapping the options button and
-                // the menu inside it, which is interactive content nested in
-                // an interactive element: invalid, and it is what put the two
-                // stopPropagation handlers below in the markup that the
-                // accessibility lint was reporting.
-                //
-                // The card is now a plain container and the board title is a
-                // real link whose hit area is stretched over the whole card
-                // by a pseudo element. A mouse keeps the large target, the
-                // keyboard gets one link per card instead of a button holding
-                // buttons, and nothing needs to stop a parent handler from
-                // firing because there is no parent handler.
-                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300 group overflow-visible relative"
-              >
-                {/* Header */}
-                <div className="p-6 border-b border-gray-100">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      {/* Icon colored with the board color */}
-                      <div className="flex items-center justify-center p-1 rounded">
-                        <IconFromTemplate size={22} style={{ color: safeBoard.color }} aria-hidden="true" />
-                      </div>
-                      <h3 className="font-semibold text-gray-900 font-heading group-hover:text-blue-600 transition-colors">
-                        {/* after:absolute after:inset-0 is what stretches this
-                            link over the card. Everything else that is
-                            clickable sits above it on z-10. */}
-                        <Link
-                          to={`/board/${safeBoard.id}`}
-                          className="after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-                        >
-                          {safeBoard.title}
-                        </Link>
-                      </h3>
-                    </div>
-
-                    {/* Options + Add member */}
-                    <div className="flex items-center gap-2">
-                      <div className="relative z-10">
-                        <button
-                          data-board-menu-btn
-                          onClick={() => handleToggleMenu(id)}
-                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                          aria-label={`Options for ${safeBoard.title}`}
-                        >
-                          <MoreHorizontal size={16} className="text-gray-400" />
-                        </button>
-
-                        {isMenuOpen && (
-                          <div
-                            data-board-menu
-                            className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
-                          >
-                            <button
-                              onClick={() => handleOpenAddMember(id)}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
-                            >
-                              <Users size={14} />
-                              Add Member
-                            </button>
-
-                            <button
-                              onClick={() => handleDeleteBoard(id)}
-                              disabled={isDeleting}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
-                            >
-                              <Trash2 size={14} className="text-red-600" />
-                              <span className="text-red-600">{isDeleting ? 'Deleting...' : 'Delete'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-600 font-body mb-4 min-h-[3rem]">{safeBoard.description}</p>
-
-                  {/* Progress */}
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-500">Progress</span>
-                      <span className="text-xs text-gray-700 font-medium">{safeBoard.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all duration-300"
-                        style={{
-                          backgroundColor: safeBoard.color,
-                          width: `${Math.min(100, Math.max(0, safeBoard.progress))}%`,
-                        }}
-                        aria-valuenow={safeBoard.progress}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        role="progressbar"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stats */}
-                <div className="p-6">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <div className="w-3 h-3 bg-gray-300 rounded" aria-hidden="true" />
-                        <span>{safeBoard.taskCount} tasks</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <Users size={12} aria-hidden="true" />
-                        <span>{safeBoard.memberCount}</span>
-                      </div>
-                    </div>
-                    <div className="text-gray-500">
-                      <span>Updated {safeFormatDate(safeBoard.lastUpdated)}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+          {boards.map((board, index) => (
+            // `_id` is required on the model and the API always sends it. The
+            // fallback this replaced ended in `temp-${Date.now()}`, which gave
+            // every render a different React key and defeated reconciliation
+            // for the whole grid. Finding P2-8.
+            <BoardCard
+              key={board._id}
+              board={board}
+              color={resolveBoardColor(board.color, colorLookup)}
+              delay={index * 0.08}
+              menuOpen={menu.isOpen(board._id)}
+              isDeleting={deleteBoard.isPending && deleteBoard.variables === board._id}
+              onToggleMenu={() => menu.toggle(board._id)}
+              onAddMember={() => handleOpenAddMember(board._id)}
+              onDelete={() => handleDeleteBoard(board._id)}
+            />
+          ))}
         </div>
 
         {/* Empty */}
