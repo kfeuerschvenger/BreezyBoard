@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Users, Calendar, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
+import { Plus, Users, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CreateBoardModal from '../components/CreateBoardModal';
 import AddMemberModal from '../components/AddMemberModal';
 import {
+  BoardStats,
   resolveBoardColor,
   toColorLookup,
   useAddBoardMembers,
@@ -206,78 +207,7 @@ const BoardDashboard: React.FC = () => {
         <UserAvatar />
       </PageHeader>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Folder className="text-blue-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalBoards}</p>
-                <p className="text-sm text-gray-600">Total Boards</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Users className="text-green-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalMembers}</p>
-                <p className="text-sm text-gray-600">Team Members</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Calendar className="text-orange-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalTasks}</p>
-                <p className="text-sm text-gray-600">Total Tasks</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full" />
-                </div>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.avgProgress}%</p>
-                <p className="text-sm text-gray-600">Avg Progress</p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+        <BoardStats stats={stats} />
 
         {/* Boards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

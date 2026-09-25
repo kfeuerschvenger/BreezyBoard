@@ -19,3 +19,12 @@ export interface Board {
   createdAt?: string;
   updatedAt?: string;
 }
+
+/** The totals across every board the current user can see. */
+export interface DashboardStats {
+  totalBoards: number;
+  totalMembers: number;
+  totalTasks: number;
+  /** A whole percentage, averaged over the boards. */
+  avgProgress: number;
+}

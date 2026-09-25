@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { Button, Drawer, Field, IconButton, Input, Modal, SwatchPicker, Textarea } from './index';
+import { Button, Drawer, Field, IconButton, Input, Modal, StatTile, SwatchPicker, Textarea } from './index';
 import type { SwatchOption } from './index';
 
 /**
@@ -264,5 +264,40 @@ describe('SwatchPicker', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading colours');
     await noViolations(container);
+  });
+});
+
+describe('StatTile', () => {
+  it('reads as the figure and the word for what it counts, in every tone', async () => {
+    const { container } = render(
+      <div>
+        <StatTile icon={<span>folder</span>} tone="blue" value={7} label="Total Boards" />
+        <StatTile icon={<span>people</span>} tone="green" value={12} label="Team Members" />
+        <StatTile icon={<span>calendar</span>} tone="orange" value={34} label="Total Tasks" />
+        <StatTile icon={<span>ring</span>} tone="purple" value="58%" label="Avg Progress" />
+      </div>
+    );
+
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText('Total Boards')).toBeInTheDocument();
+    expect(screen.getByText('58%')).toBeInTheDocument();
+    await noViolations(container);
+  });
+
+  // The icon repeats what the label says. Left exposed it is announced a
+  // second time, under whatever name assistive technology can guess.
+  it('hides its icon from assistive technology', () => {
+    render(<StatTile icon={<span>folder</span>} tone="blue" value={7} label="Total Boards" />);
+
+    expect(screen.getByText('folder').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  // The tone picks a whole class name out of a map rather than building one,
+  // which is the P4-6 failure: a composed class is not in the stylesheet at
+  // all, and the tile renders unstyled while every assertion above passes.
+  it('applies the whole background class its tone names', () => {
+    render(<StatTile icon={<span>folder</span>} tone="orange" value={34} label="Total Tasks" />);
+
+    expect(screen.getByText('folder').parentElement).toHaveClass('bg-orange-100');
   });
 });
