@@ -18,3 +18,6 @@ export type { ModalProps, ModalSize } from './Modal';
 
 export { Drawer } from './Drawer';
 export type { DrawerProps, DrawerSize } from './Drawer';
+
+export { SwatchPicker } from './SwatchPicker';
+export type { SwatchLayout, SwatchOption, SwatchPickerProps } from './SwatchPicker';

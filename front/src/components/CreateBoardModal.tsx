@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { resolveIcon } from '@/shared/lib/lucideIcons';
 import { TemplateService, ColorService } from '@/services';
 import type { Template, Color } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
-import { Button, Field, Input, Modal, Textarea } from '@/shared/ui';
+import { Button, Field, Input, Modal, SwatchPicker, Textarea } from '@/shared/ui';
 
 const boardSchema = z.object({
   title: z.string().trim().min(1, 'A board needs a name'),
@@ -27,7 +27,7 @@ const EMPTY: BoardFormData = { title: '', description: '', color: '', template: 
 
 // The legend carries the same weight as a Field's label, so the two groups
 // below read as part of the same form rather than as decoration.
-const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2';
+const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-heading';
 
 // Selection is expressed with real radio inputs inside labels, hidden from
 // sight but not from the accessibility tree. That is what buys keyboard
@@ -49,6 +49,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -239,21 +240,24 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
           )}
         </Field>
 
-        <fieldset>
-          <legend className={LEGEND_CLASSES}>Board Color</legend>
-          <div className="grid grid-cols-4 gap-3">
-            {boardColors.map(color => {
-              const value = color._id ?? color.value;
-              return (
-                <label key={value} className={`${OPTION_CLASSES} p-3`}>
-                  <input type="radio" value={value} className="sr-only" {...register('color')} />
-                  <span className="block w-full h-8 rounded" style={{ backgroundColor: color.value }} />
-                  <span className="block text-xs text-gray-600 mt-2 text-center">{color.name}</span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
+        <Controller
+          name="color"
+          control={control}
+          render={({ field }) => (
+            <SwatchPicker
+              name={field.name}
+              legend="Board Color"
+              layout="grid"
+              options={boardColors.map(color => ({
+                id: color._id ?? color.value,
+                label: color.name ?? color.value,
+                color: color.value,
+              }))}
+              value={field.value}
+              onChange={field.onChange}
+            />
+          )}
+        />
 
         <fieldset>
           <legend className={LEGEND_CLASSES}>Board Template</legend>
