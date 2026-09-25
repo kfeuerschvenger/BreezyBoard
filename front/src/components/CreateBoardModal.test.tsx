@@ -300,3 +300,36 @@ describe('CreateBoardModal when the colours and templates cannot be loaded', () 
     await waitFor(() => expect(submit()).toBeEnabled());
   });
 });
+
+describe('CreateBoardModal when a keystroke lands while the defaults are applied', () => {
+  // A board name typed while the colours and templates are still in flight
+  // has to survive the moment they arrive. Losing it leaves the form in its
+  // worst possible shape: every other field selected and valid, no error on
+  // screen, and a submit button that is disabled with nothing to explain why.
+  //
+  // The name is lost when the value sits in the input and the form does not
+  // know about it, which is what a change event leaves behind when it lands
+  // while the field registry is being rebuilt. Writing straight to the DOM
+  // node without notifying React produces that state directly. Driving it
+  // through the timing instead is not possible here, because act() flushes
+  // the write and the re-render together and the window never opens.
+  it('does not throw away a board name the form has not recorded', async () => {
+    let resolveColors: (value: Color[]) => void = () => {};
+    mockedColorService.getByType.mockReturnValue(
+      new Promise<Color[]>(resolve => {
+        resolveColors = resolve;
+      })
+    );
+
+    render(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={vi.fn()} />);
+
+    const input = screen.getByPlaceholderText('Enter board name') as HTMLInputElement;
+    input.value = 'Typed during the load';
+
+    resolveColors(COLORS);
+
+    await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+
+    expect(input.value).toBe('Typed during the load');
+  });
+});
