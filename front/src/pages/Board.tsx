@@ -1,27 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
-import { arrangeColumn, byOrder, neighboursOf } from '@/features/board';
+import { byOrder } from '@/features/board';
 import { useBoard, useBoardTasks, useTaskCacheWriter } from '@/features/tasks/queries';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import {
-  closestCorners,
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { closestCorners, DndContext, DragOverlay } from '@dnd-kit/core';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import Column from '../components/Column';
 import PageHeader from '../components/PageHeader';
 import TaskCard from '../components/TaskCard';
-import { TaskDrawer } from '@/features/tasks';
+import { TaskDrawer, useTaskDragAndDrop } from '@/features/tasks';
 import UserAvatar from '../components/UserAvatar';
 
 interface ColumnData {
@@ -35,7 +25,6 @@ interface ColumnData {
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -70,110 +59,11 @@ const Board = () => {
     [currentBoard]
   );
 
-  // The move request currently in flight, if any. A second drag started
-  // before the first one answers aborts it rather than racing it: without
-  // this, a slow first request can resolve after a second one and roll its
-  // own stale snapshot back over an update the user has already seen
-  // applied. That is finding P2-6.
-  const inFlightMove = useRef<AbortController | null>(null);
-
-  useEffect(() => () => inFlightMove.current?.abort(), []);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    setActiveTask(tasks.find(task => task._id === active.id) || null);
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { over } = event;
-
-    // If dropping outside any container or no active task
-    if (!over || !activeTask) {
-      setActiveTask(null);
-      return;
-    }
-
-    // Check if we're dropping on a column or a task
-    const isOverColumn = columns.some(col => col.id === over.id);
-    const overTask = tasks.find(task => task._id === over.id);
-
-    // Determine the target column ID
-    let targetColumnId: string;
-    if (isOverColumn) {
-      targetColumnId = over.id as string;
-    } else if (overTask) {
-      targetColumnId = overTask.status;
-    } else {
-      setActiveTask(null);
-      return;
-    }
-
-    // Build the column exactly as it will look after the drop, then read the
-    // dropped card's neighbours out of it. One arrangement drives both the
-    // optimistic render and the request, so the two cannot disagree.
-    //
-    // This is also what fixes the cross-column drop. The previous version
-    // computed one past the maximum order of the target column, so a card
-    // dropped halfway down another column always landed at the bottom of it,
-    // wherever it was released.
-    const arranged = arrangeColumn(tasks, activeTask, targetColumnId, overTask);
-
-    if (!arranged) {
-      setActiveTask(null);
-      return;
-    }
-
-    const { column } = arranged;
-
-    inFlightMove.current?.abort();
-    const controller = new AbortController();
-    inFlightMove.current = controller;
-
-    // Straight into the query cache rather than into component state. This
-    // is the external write path the data layer exists for: the same one a
-    // server-sent event would use, exercised every time somebody drags a
-    // card.
-    taskCache.write([
-      ...tasks.filter(task => task.status !== targetColumnId && task._id !== activeTask._id),
-      ...column,
-    ]);
-    setActiveTask(null);
-
-    try {
-      const moved = await TaskService.move(activeTask._id, targetColumnId, neighboursOf(arranged), controller.signal);
-
-      // The server owns the ordering key, so the card is replaced with what
-      // it actually wrote rather than left holding the placeholder used for
-      // the optimistic render.
-      taskCache.replace(moved);
-    } catch (error) {
-      // A move this client abandoned because a newer one replaced it. The
-      // newer one owns the board's state now, so touching it here is exactly
-      // the rollback-over-a-newer-update this guard exists to prevent.
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      // Anything else, including the 409 the server sends when the
-      // neighbours have moved, is answered by asking the server what the
-      // board actually looks like. Restoring a snapshot taken before the
-      // drag would be wrong for the same reason: by now it may be older
-      // than changes that did land.
-      console.error('Error moving task:', error);
-      await taskCache.refetch();
-    } finally {
-      if (inFlightMove.current === controller) {
-        inFlightMove.current = null;
-      }
-    }
-  };
+  const { activeTask, sensors, onDragStart, onDragEnd } = useTaskDragAndDrop({
+    tasks,
+    columnIds: columns.map(column => column.id),
+    cache: taskCache,
+  });
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
@@ -306,8 +196,8 @@ const Board = () => {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           >
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {columns.map(column => (
