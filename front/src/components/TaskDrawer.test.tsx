@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { renderWithQuery } from '@/test/renderWithQuery';
 import TaskDrawer from './TaskDrawer';
 import { ColorService, UserService } from '@/services';
 import type { Color, User } from '@/models';
@@ -64,7 +65,7 @@ const waitForColorsLoaded = async () => {
 
 const renderDrawer = (onSave = vi.fn()) => {
   const onClose = vi.fn();
-  render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+  renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
   return { onSave, onClose };
 };
 
@@ -174,7 +175,7 @@ describe('TaskDrawer form state versus the async color fetch', () => {
     );
 
     const user = userEvent.setup();
-    render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
 
     // Let the mount effects settle. The colors request is still pending on
     // purpose: this test types into the form before it resolves.
@@ -203,7 +204,7 @@ describe('TaskDrawer form state versus the async color fetch', () => {
       })
     );
 
-    render(
+    renderWithQuery(
       <TaskDrawer
         open
         task={{ _id: 'task-1', boardId: 'board-1', title: 'Existing', description: 'Existing', color: '#EF4444' }}
@@ -252,7 +253,7 @@ describe('TaskDrawer draft persistence', () => {
       })
     );
 
-    render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     expect(getTitleInput()).toHaveValue('Draft title');
@@ -263,7 +264,7 @@ describe('TaskDrawer draft persistence', () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
-    render(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
     await waitForColorsLoaded();
 
     await user.type(getTitleInput(), 'Ship the release notes');

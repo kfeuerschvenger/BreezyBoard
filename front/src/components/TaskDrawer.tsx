@@ -1,8 +1,7 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
-import { X, Plus, Trash2, User, Palette, Flag, GripVertical } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Plus, Trash2, User, Palette, Flag, GripVertical } from 'lucide-react';
 import { ColorService, UserService } from '@/services';
 import type { User as UserModel, Task } from '@/models';
-import SimpleUserAvatar from './SimpleUserAvatar';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import {
@@ -15,7 +14,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useDraft } from '@/shared/hooks/useDraft';
 import { Button, Drawer, Field, Input, Textarea } from '@/shared/ui';
-import type { FieldControlProps } from '@/shared/ui';
+import { UserPicker } from '@/features/users';
 
 // The legend of a group carries the same weight as a Field's label, so the
 // three grouped controls below read as part of the same form.
@@ -30,14 +29,6 @@ const SWATCH_CLASSES =
   'border-gray-300 hover:border-gray-400 has-[:checked]:border-gray-900 has-[:checked]:scale-110 ' +
   'has-[:checked]:ring-2 has-[:checked]:ring-blue-500 ' +
   'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
-
-interface UserSearchInputProps {
-  /** Supplied by the Field that labels this control: id, aria-invalid, aria-describedby. */
-  controlProps?: FieldControlProps;
-  value: string;
-  onChange: (value: string) => void;
-  members: UserModel[];
-}
 
 interface TaskDrawerProps {
   open: boolean;
@@ -113,261 +104,6 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onU
       >
         <Trash2 size={14} />
       </button>
-    </div>
-  );
-};
-
-// ----------------------
-// User search component
-// ----------------------
-const UserSearchInput: React.FC<UserSearchInputProps> = ({ value, onChange, members, controlProps }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState<UserModel[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserModel | null>(null);
-  const debounceRef = useRef<number | null>(null);
-  // Which suggestion the keyboard is on. -1 means none, which is also the
-  // state a mouse user is always in.
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const listboxId = useId();
-  const optionId = (index: number) => `${listboxId}-option-${index}`;
-
-  // Initialize selected user when value (owner id) or members change
-  useEffect(() => {
-    let mounted = true;
-    if (!value) {
-      if (mounted) {
-        setSelectedUser(null);
-        setSearchTerm('');
-      }
-      return;
-    }
-
-    const found = members.find(m => String(m._id) === String(value));
-    if (found) {
-      setSelectedUser(found);
-      setSearchTerm(`${found.firstName} ${found.lastName}`);
-      setSuggestions([]);
-      return;
-    }
-
-    // If not in members, attempt to fetch the user by id
-    (async () => {
-      try {
-        setIsSearching(true);
-        const user = await UserService.getById(value);
-        if (!mounted) return;
-        setSelectedUser(user);
-        setSearchTerm(`${user.firstName} ${user.lastName}`);
-        setSuggestions([]);
-      } catch {
-        if (!mounted) return;
-        setSelectedUser(null);
-        setSearchTerm('');
-        setSuggestions([]);
-      } finally {
-        if (mounted) setIsSearching(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [value, members]);
-
-  // Debounced filtering of members
-  useEffect(() => {
-    if (debounceRef.current) {
-      window.clearTimeout(debounceRef.current);
-    }
-
-    const query = searchTerm.trim();
-    if (query.length < 2) {
-      setSuggestions([]);
-      setIsSearching(false);
-      return;
-    }
-
-    if (selectedUser) {
-      const fullName = `${selectedUser.firstName} ${selectedUser.lastName}`.trim();
-      if (query === fullName.toLowerCase() || query === fullName) {
-        setSuggestions([]);
-        setIsSearching(false);
-        return;
-      }
-    }
-
-    setIsSearching(true);
-    debounceRef.current = window.setTimeout(() => {
-      const lowerCaseQuery = query.toLowerCase();
-      const filtered = members.filter(member => {
-        const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
-        return (
-          fullName.includes(lowerCaseQuery) ||
-          (member.email && member.email.toLowerCase().includes(lowerCaseQuery)) ||
-          (member.role && String(member.role).toLowerCase().includes(lowerCaseQuery))
-        );
-      });
-      setSuggestions(filtered.slice(0, 10));
-      setIsSearching(false);
-    }, 220);
-
-    return () => {
-      if (debounceRef.current) {
-        window.clearTimeout(debounceRef.current);
-      }
-    };
-  }, [searchTerm, members, selectedUser]);
-
-  useEffect(() => {
-    setActiveIndex(-1);
-  }, [suggestions]);
-
-  /**
-   * Keyboard operation for the suggestion list.
-   *
-   * The list used to be a stack of divs with click handlers, reachable by
-   * mouse alone: finding 44 and 15 of them is what P4-3 records, and the
-   * near-identical list in AddMemberModal already did this correctly, which
-   * is the usual sign that the pattern was known and this one was missed.
-   *
-   * Down and up move the highlight, Enter takes it, Escape dismisses the
-   * list without clearing what was typed. Enter is only intercepted while a
-   * suggestion is highlighted, so it still submits the form otherwise.
-   */
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (suggestions.length === 0) return;
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setActiveIndex(previous => (previous + 1) % suggestions.length);
-      return;
-    }
-
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setActiveIndex(previous => (previous <= 0 ? suggestions.length - 1 : previous - 1));
-      return;
-    }
-
-    if (event.key === 'Enter' && activeIndex >= 0) {
-      event.preventDefault();
-      handleSelectUser(suggestions[activeIndex]);
-      return;
-    }
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setSuggestions([]);
-    }
-  };
-
-  const handleInputChange = (inputValue: string) => {
-    if (selectedUser) {
-      const fullName = `${selectedUser.firstName} ${selectedUser.lastName}`.trim();
-      if (inputValue !== fullName) {
-        setSelectedUser(null);
-        onChange('');
-      }
-    }
-    setSearchTerm(inputValue);
-  };
-
-  const handleSelectUser = (user: UserModel) => {
-    setSelectedUser(user);
-    setSearchTerm(`${user.firstName} ${user.lastName}`);
-    setSuggestions([]);
-    onChange(user._id);
-  };
-
-  const handleClear = () => {
-    setSelectedUser(null);
-    setSearchTerm('');
-    setSuggestions([]);
-    onChange('');
-  };
-
-  return (
-    <div className="relative">
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <User size={16} className="text-gray-400" />
-        </div>
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={e => handleInputChange(e.target.value)}
-          placeholder="Search team members..."
-          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          role="combobox"
-          aria-expanded={suggestions.length > 0}
-          aria-controls={listboxId}
-          aria-autocomplete="list"
-          aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
-          onKeyDown={handleKeyDown}
-          {...controlProps}
-        />
-        {selectedUser && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
-            aria-label="Clear selected user"
-          >
-            <X size={16} />
-          </button>
-        )}
-      </div>
-
-      {suggestions.length > 0 && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label="Matching team members"
-          className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-        >
-          {suggestions.map((user, index) => (
-            // The option carries the click handler and the role, and the
-            // input keeps the focus throughout, which is what the combobox
-            // pattern asks for: aria-activedescendant above points here
-            // rather than focus moving into the list.
-            //
-            // The rule below wants a keyboard handler on whatever is
-            // clickable, and following it here would make the component
-            // worse. Options in a combobox are never focused, so a key
-            // handler on one could not fire; the keyboard lives on the input
-            // and is covered by its own tests. This is the rule failing to
-            // see a pattern rather than the pattern being wrong, which is
-            // the only reason worth silencing one for.
-            // eslint-disable-next-line jsx-a11y/click-events-have-key-events
-            <li
-              key={user._id}
-              id={optionId(index)}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={`p-3 cursor-pointer flex items-center gap-3 ${
-                index === activeIndex ? 'bg-blue-50' : 'hover:bg-gray-100'
-              }`}
-              onClick={() => handleSelectUser(user)}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              <SimpleUserAvatar user={user} size="sm" />
-              <div>
-                <p className="font-medium">
-                  {user.firstName} {user.lastName}
-                </p>
-                <p className="text-sm text-gray-600">{user.email}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {isSearching && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-          <p className="text-gray-600 text-center">Searching users...</p>
-        </div>
-      )}
     </div>
   );
 };
@@ -720,7 +456,7 @@ const TaskDrawer: React.FC<TaskDrawerProps> = ({ open, onClose, task = null, onS
 
         <Field label="Owner" required error={errors.owner} icon={<User size={16} className="text-gray-400" />}>
           {props => (
-            <UserSearchInput
+            <UserPicker
               value={formData.owner}
               onChange={handleOwnerChange}
               members={boardMembers}
