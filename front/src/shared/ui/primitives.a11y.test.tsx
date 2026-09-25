@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
-import { Button, Drawer, Field, IconButton, Input, Modal, StatTile, SwatchPicker, Textarea } from './index';
+import { Button, Drawer, EmptyState, Field, IconButton, Input, Modal, StatTile, SwatchPicker, Textarea } from './index';
 import type { SwatchOption } from './index';
 
 /**
@@ -299,5 +299,47 @@ describe('StatTile', () => {
     render(<StatTile icon={<span>folder</span>} tone="orange" value={34} label="Total Tasks" />);
 
     expect(screen.getByText('folder').parentElement).toHaveClass('bg-orange-100');
+  });
+});
+
+describe('EmptyState', () => {
+  // The title is a heading rather than styled text, because this replaces the
+  // content of a region and someone navigating by headings has to be able to
+  // reach the explanation of why there is none.
+  it('announces its title as a heading, with the action reachable', async () => {
+    const user = userEvent.setup();
+    let pressed = 0;
+
+    const { container } = render(
+      <EmptyState
+        icon={<span>folder</span>}
+        title="No boards yet"
+        description="Create your first board to get started"
+        action={<button onClick={() => (pressed += 1)}>Create Your First Board</button>}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: 'No boards yet' })).toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Create Your First Board' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(pressed).toBe(1);
+
+    await noViolations(container);
+  });
+
+  it('hides its icon from assistive technology', () => {
+    render(<EmptyState icon={<span>folder</span>} title="No boards yet" />);
+
+    expect(screen.getByText('folder').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('renders without a description or an action', async () => {
+    const { container } = render(<EmptyState icon={<span>folder</span>} title="Nothing here" />);
+
+    expect(screen.getByRole('heading', { name: 'Nothing here' })).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    await noViolations(container);
   });
 });
