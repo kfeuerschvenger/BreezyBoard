@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BoardService, DashboardService } from '@/services';
+import { BoardService, DashboardService, TemplateService } from '@/services';
 import type { Board } from '@/models';
 
 /**
@@ -14,7 +14,25 @@ export const boardKeys = {
   all: ['boards'] as const,
   list: () => [...boardKeys.all, 'list'] as const,
   stats: () => ['dashboard', 'stats'] as const,
+  templates: () => ['templates'] as const,
 };
+
+/**
+ * The board templates. Seeded reference data that no part of the product
+ * writes to, so an infinite stale time states the fact and stops a second
+ * consumer asking for a list the first one already holds.
+ */
+export const useTemplates = (enabled = true) =>
+  useQuery({
+    queryKey: boardKeys.templates(),
+    queryFn: () => TemplateService.getAll(),
+    staleTime: Infinity,
+    // Gated, because the only thing that needs templates is the create board
+    // dialog and that dialog is mounted closed on every dashboard load.
+    // Ungated it costs a request on every visit for a list most visits never
+    // look at, which the effect it replaced avoided by fetching on open.
+    enabled,
+  });
 
 export const useBoards = () =>
   useQuery({
