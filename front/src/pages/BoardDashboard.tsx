@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Folder, Plus } from 'lucide-react';
-import CreateBoardModal from '../components/CreateBoardModal';
-import { BoardCard, BoardStats, useBoardDashboard, useBoardMenu } from '@/features/boards';
+import { BoardCard, BoardStats, CreateBoardModal, useBoardDashboard, useBoardMenu } from '@/features/boards';
 import { resolveColor } from '@/features/colors';
 import { AddMemberModal } from '@/features/users';
 import type { NewBoard } from '@/features/boards';

@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { resolveIcon } from '@/shared/lib/lucideIcons';
 import { useColors } from '@/features/colors';
-import { useTemplates } from '@/features/boards';
+import { useTemplates } from '../queries';
+import { TemplatePicker } from './TemplatePicker';
 import type { Template, Color } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
 import { Button, Field, Input, Modal, SwatchPicker, Textarea } from '@/shared/ui';
@@ -30,21 +30,6 @@ const EMPTY: BoardFormData = { title: '', description: '', color: '', template: 
 // the defaults effect below is not re-run by a fresh literal every render.
 const NO_COLORS: Color[] = [];
 const NO_TEMPLATES: Template[] = [];
-
-// The legend carries the same weight as a Field's label, so the two groups
-// below read as part of the same form rather than as decoration.
-const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-heading';
-
-// Selection is expressed with real radio inputs inside labels, hidden from
-// sight but not from the accessibility tree. That is what buys keyboard
-// operation: arrow keys move within the group, the group is announced as a
-// group, and the legend names it, all from the browser and none of it from
-// code here. The buttons this replaced were a grid of clickable divs under
-// an orphan label, which is two of the ten label-has-associated-control
-// warnings the gate was holding.
-const OPTION_CLASSES =
-  'relative block cursor-pointer rounded-lg border-2 transition-all border-gray-200 hover:border-gray-300 ' +
-  'has-[:checked]:border-blue-500 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
 
 const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCreateBoard }) => {
   // Both lists come from the cache rather than from an effect here. The board
@@ -270,45 +255,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
           )}
         />
 
-        <fieldset>
-          <legend className={LEGEND_CLASSES}>Board Template</legend>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {templates.map(template => {
-              const value = template._id ?? template.name;
-              const IconComponent = resolveIcon(template.iconName);
-              const isSelected = selectedTemplate === value;
-
-              return (
-                <label key={value} className={`${OPTION_CLASSES} p-4 text-left has-[:checked]:bg-blue-50`}>
-                  <input type="radio" value={value} className="sr-only" {...register('template')} />
-                  <span className="flex items-start gap-3">
-                    <span className={`p-2 rounded-lg ${isSelected ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                      <IconComponent
-                        size={20}
-                        aria-hidden="true"
-                        className={isSelected ? 'text-blue-600' : 'text-gray-600'}
-                      />
-                    </span>
-                    <span className="flex-1">
-                      {/* h3, not h4. The modal's own title is an h2, and
-                          jumping a level is what axe reports as
-                          heading-order. */}
-                      <h3 className="font-medium text-gray-900 mb-1">{template.name}</h3>
-                      <span className="block text-sm text-gray-600 mb-2">{template.description}</span>
-                      <span className="flex flex-wrap gap-1">
-                        {template.columns.map((column, index) => (
-                          <span key={index} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                            {typeof column === 'string' ? column : column.title}
-                          </span>
-                        ))}
-                      </span>
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
+        <TemplatePicker templates={templates} value={selectedTemplate} registration={register('template')} />
       </form>
     </Modal>
   );
