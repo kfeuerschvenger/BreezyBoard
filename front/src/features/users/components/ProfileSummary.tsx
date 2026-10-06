@@ -33,7 +33,7 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({ values, isUpload
       <div className="text-center mb-6">
         <AvatarUploader
           avatarUrl={values.avatar}
-          initials={(values.firstName?.charAt(0) ?? '') + (values.lastName?.charAt(0) ?? '')}
+          name={`${values.firstName ?? ''} ${values.lastName ?? ''}`}
           onFileSelected={onAvatarSelected}
         />
 

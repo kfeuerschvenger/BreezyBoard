@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Check, Search, X } from 'lucide-react';
 import type { User } from '@/models';
+import { Avatar } from '@/shared/ui';
 
 export interface MemberSearchResultsProps {
   members: User[];
@@ -108,16 +109,7 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
               immediately before the name they are initials of.
             */}
             <div className="relative" aria-hidden="true">
-              {member.avatar ? (
-                <img src={member.avatar} alt="" className="w-12 h-12 rounded-full object-cover" />
-              ) : (
-                <div className="bg-gray-200 border-2 border-dashed rounded-xl w-12 h-12 flex items-center justify-center">
-                  <span className="text-gray-400 text-xl font-bold">
-                    {member.firstName?.[0]}
-                    {member.lastName?.[0]}
-                  </span>
-                </div>
-              )}
+              <Avatar name={fullName(member)} src={member.avatar} size="lg" decorative />
               {isSelected && (
                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
                   <Check size={12} className="text-white" />

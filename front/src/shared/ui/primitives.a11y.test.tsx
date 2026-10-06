@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import {
+  Avatar,
   Button,
   Drawer,
   EmptyState,
@@ -433,5 +434,64 @@ describe('PasswordInput', () => {
     expect(screen.getByLabelText('Password')).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('button', { name: 'Show password' })).toHaveFocus();
+  });
+});
+
+describe('Avatar', () => {
+  it('names itself after the person when it stands alone', async () => {
+    const { container } = render(<Avatar name="Ada Lovelace" />);
+
+    expect(screen.getByRole('img', { name: 'Ada Lovelace' })).toBeInTheDocument();
+    expect(screen.getByText('AL')).toBeInTheDocument();
+    await noViolations(container);
+  });
+
+  // Hidden rather than named, for the common case: a row or a chip with the
+  // person's name written right next to the picture. Every hand-written copy
+  // this replaced announced the name twice.
+  it('says nothing when the name is already beside it', async () => {
+    const { container } = render(
+      <div>
+        <Avatar name="Ada Lovelace" decorative />
+        <span>Ada Lovelace</span>
+      </div>
+    );
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    await noViolations(container);
+  });
+
+  it('shows the picture instead of the initials when there is one', () => {
+    const { container } = render(<Avatar name="Ada Lovelace" src="/uploads/ada.png" />);
+
+    expect(container.querySelector('img')).toHaveAttribute('src', '/uploads/ada.png');
+    expect(screen.queryByText('AL')).not.toBeInTheDocument();
+  });
+
+  // The image carries no alt of its own: the wrapper is either named or
+  // hidden, and an alt as well would announce the person twice inside one
+  // element or leak out of a hidden one.
+  it('leaves the naming to the wrapper rather than to the image', () => {
+    const { container } = render(<Avatar name="Ada Lovelace" src="/uploads/ada.png" />);
+
+    expect(container.querySelector('img')).toHaveAttribute('alt', '');
+  });
+
+  it.each([
+    ['Ada Lovelace', 'AL'],
+    ['Ada', 'A'],
+    ['Ada Byron King Lovelace', 'AL'],
+    ['  ada   lovelace  ', 'AL'],
+  ])('takes the initials of %s as %s', (name, expected) => {
+    render(<Avatar name={name} />);
+
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it('falls back to a question mark rather than an empty circle', () => {
+    render(<Avatar name="   " />);
+
+    expect(screen.getByText('?')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Unknown user' })).toBeInTheDocument();
   });
 });

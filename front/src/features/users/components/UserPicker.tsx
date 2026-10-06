@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { User, X } from 'lucide-react';
 import type { User as UserModel } from '@/models';
-import SimpleUserAvatar from '@/components/SimpleUserAvatar';
+import { Avatar } from '@/shared/ui';
 import type { FieldControlProps } from '@/shared/ui';
 import { useUser } from '../queries';
 
@@ -243,7 +243,7 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
               onClick={() => handleSelectUser(user)}
               onMouseEnter={() => setActiveIndex(index)}
             >
-              <SimpleUserAvatar user={user} size="sm" />
+              <Avatar name={`${user.firstName ?? ''} ${user.lastName ?? ''}`} src={user.avatar} size="sm" decorative />
               <div>
                 <p className="font-medium">
                   {user.firstName} {user.lastName}

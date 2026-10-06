@@ -1,11 +1,12 @@
 import React from 'react';
 import { Camera } from 'lucide-react';
+import { Avatar } from '@/shared/ui';
 
 export interface AvatarUploaderProps {
   /** The stored image, when there is one. */
   avatarUrl?: string;
-  /** Shown in its place when there is not. */
-  initials: string;
+  /** The whole name. The avatar takes its initials from it when there is no image. */
+  name: string;
   onFileSelected: (file: File) => void;
 }
 
@@ -20,7 +21,7 @@ export interface AvatarUploaderProps {
  * the input is the control; the focus ring is on the label, because the label
  * is what is drawn.
  */
-export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ avatarUrl, initials, onFileSelected }) => {
+export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ avatarUrl, name, onFileSelected }) => {
   const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) onFileSelected(file);
@@ -28,13 +29,11 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ avatarUrl, initi
 
   return (
     <div className="relative inline-block">
-      <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 overflow-hidden">
-        {avatarUrl ? (
-          <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
-        ) : (
-          <span>{initials}</span>
-        )}
-      </div>
+      {/*
+        Decorative: the name is written directly underneath this card, and
+        the control that changes the picture carries its own name.
+      */}
+      <Avatar name={name} src={avatarUrl} size="xl" decorative className="mx-auto mb-4" />
 
       <label className="absolute -bottom-0 -right-0 translate-x-1/4 translate-y-1/4 bg-white border-2 border-gray-200 rounded-full p-2 cursor-pointer hover:bg-gray-50 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500">
         <Camera size={16} className="text-gray-600" aria-hidden="true" />

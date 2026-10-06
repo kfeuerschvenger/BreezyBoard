@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, LogOut, User as UserIcon } from 'lucide-react';
-import SimpleUserAvatar from '@/components/SimpleUserAvatar';
+import { Avatar } from '@/shared/ui';
 import type { User } from '@/models';
 
 export interface UserMenuProps {
@@ -92,7 +92,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout })
         aria-label={`Account menu for ${fullName}`}
         className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer"
       >
-        <SimpleUserAvatar user={user} size="md" showTooltip={false} />
+        <Avatar name={fullName} src={user.avatar} size="md" decorative />
         <span className="hidden md:block text-sm font-medium text-gray-700">{fullName}</span>
         <ChevronDown
           size={16}
@@ -116,7 +116,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout })
           >
             <div className="px-4 py-3 border-b border-gray-100">
               <div className="flex items-center gap-3">
-                <SimpleUserAvatar user={user} size="lg" showTooltip={false} />
+                <Avatar name={fullName} src={user.avatar} size="lg" decorative />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{fullName}</p>
                   <p className="text-xs text-gray-500 truncate">{user.email ?? ''}</p>
