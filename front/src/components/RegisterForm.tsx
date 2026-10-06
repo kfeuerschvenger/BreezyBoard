@@ -5,10 +5,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
+import { Mail, Lock, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-import FormInput from '@/components/FormInput';
+import { Field, Input, PasswordInput } from '@/shared/ui';
 import LegalModal from '@/components/LegalModal';
 import { useAuth } from '@/hooks/useAuth';
 import type { RegisterCredentials } from '@/models';
@@ -43,8 +43,6 @@ const RegisterForm: React.FC = () => {
   const navigate = useNavigate();
   const { register: authRegister } = useAuth(); // rename to avoid conflict with react-hook-form's register
   const [openModal, setOpenModal] = useState<'terms' | 'privacy' | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
   // react-hook-form setup
@@ -97,85 +95,44 @@ const RegisterForm: React.FC = () => {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <FormInput
-              label="First name"
-              placeholder="John"
-              {...register('firstName')}
-              icon={<User className="h-5 w-5 text-gray-400" />}
-              error={errors.firstName?.message}
+          <Field label="First name" error={errors.firstName?.message} icon={<User className="h-5 w-5 text-gray-400" />}>
+            {props => <Input {...props} {...register('firstName')} placeholder="John" className="pl-10" />}
+          </Field>
+
+          <Field label="Last name" error={errors.lastName?.message} icon={<User className="h-5 w-5 text-gray-400" />}>
+            {props => <Input {...props} {...register('lastName')} placeholder="Doe" className="pl-10" />}
+          </Field>
+        </div>
+
+        <Field label="Email address" error={errors.email?.message} icon={<Mail className="h-5 w-5 text-gray-400" />}>
+          {props => (
+            <Input {...props} {...register('email')} type="email" placeholder="john@example.com" className="pl-10" />
+          )}
+        </Field>
+
+        <Field label="Password" error={errors.password?.message}>
+          {props => (
+            <PasswordInput
+              {...props}
+              {...register('password')}
+              placeholder="Create a strong password"
+              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              toggleLabel="password"
             />
-          </div>
+          )}
+        </Field>
 
-          <div>
-            <FormInput
-              label="Last name"
-              placeholder="Doe"
-              {...register('lastName')}
-              icon={<User className="h-5 w-5 text-gray-400" />}
-              error={errors.lastName?.message}
+        <Field label="Confirm password" error={errors.confirmPassword?.message}>
+          {props => (
+            <PasswordInput
+              {...props}
+              {...register('confirmPassword')}
+              placeholder="Confirm your password"
+              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              toggleLabel="confirm password"
             />
-          </div>
-        </div>
-
-        <div>
-          <FormInput
-            label="Email address"
-            placeholder="john@example.com"
-            type="email"
-            {...register('email')}
-            icon={<Mail className="h-5 w-5 text-gray-400" />}
-            error={errors.email?.message}
-          />
-        </div>
-
-        <div>
-          <FormInput
-            label="Password"
-            placeholder="Create a strong password"
-            type={showPassword ? 'text' : 'password'}
-            {...register('password')}
-            icon={<Lock className="h-5 w-5 text-gray-400" />}
-            error={errors.password?.message}
-            className="pr-12"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(prev => !prev)}
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
-            className="absolute right-3 top-1/2 -translate-y-1/2"
-          >
-            {showPassword ? (
-              <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-            ) : (
-              <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-            )}
-          </button>
-        </div>
-
-        <div>
-          <FormInput
-            label="Confirm password"
-            placeholder="Confirm your password"
-            type={showConfirmPassword ? 'text' : 'password'}
-            {...register('confirmPassword')}
-            icon={<Lock className="h-5 w-5 text-gray-400" />}
-            error={errors.confirmPassword?.message}
-            className="pr-12"
-          />
-          <button
-            type="button"
-            onClick={() => setShowConfirmPassword(prev => !prev)}
-            aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-            className="absolute right-3 top-1/2 -translate-y-1/2"
-          >
-            {showConfirmPassword ? (
-              <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-            ) : (
-              <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-            )}
-          </button>
-        </div>
+          )}
+        </Field>
 
         <div className="flex items-center">
           <input

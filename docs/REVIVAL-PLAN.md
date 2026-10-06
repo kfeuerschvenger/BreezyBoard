@@ -450,6 +450,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, member search retry | Done | Try again refetches instead of clearing an already empty term (P4-12) |
 | 5d, task card colours | Done | Resolved by the board and passed in. `colorUtils` deleted with its uninvalidated cache. Zero `/colors/:id` in a full run |
 | 5a, legacy a11y list empty | Done | The drag handle is a real button and the priority badge is announced (P4-3). The warn list is deleted and the three rules are errors everywhere |
+| 5d, password toggles | Done | `shared/ui/PasswordInput` replaces three copies. Two were rendered off their fields and stacked (P4-13), one had no name |
+| 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
+| 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, remaining decomposition | Open | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
 | 6 onward | Not started | |
 
@@ -1069,7 +1072,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `AddMemberModal.tsx` | 335 | Done, 130 left. `users/AddMemberModal` over `shared/ui/Modal`, plus `useMemberSearch`, `MemberSearchResults` and `SelectedMembers`. Keeps its own search, see above |
 | `Board.tsx` | 348 | Done, 153 left. `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop`, `shared/ui/LoadingScreen` |
 | `CreateBoardModal.tsx` | 281 | `boards/CreateBoardForm` over `Modal`, `TemplatePicker`, `SwatchPicker` |
-| `RegisterForm.tsx` | 247 | `auth/RegisterForm` over `Field`, plus `PasswordInput` for the toggle repeated 3 times |
+| `RegisterForm.tsx` | 247 | On `Field` and `PasswordInput`, 196 left. Still to move into `features/auth` |
 | `Login.tsx` | 242 | `auth/LoginForm` on React Hook Form and Zod, its inline modal replaced by `Modal` |
 | `UserAvatar.tsx` | 234 | `users/UserMenu` over `shared/ui/Menu` and `Avatar` |
 | `TaskCard.tsx` | 222 | Colour fetching dropped, 199 left. Priority map still duplicated with `PrioritySelect`, see 12.6b |
@@ -1272,6 +1275,18 @@ P4-12 came out of a surviving mutation rather than out of reading. "Try again", 
 That is the second defect this session found by writing a mutation rather than by reading code, and both were the same shape: an assertion that a control exists, with nothing asserting it does anything. The mutation that deletes the handler is the cheapest way to find them.
 
 The decomposition also dropped a duplicate Escape handler. The modal registered its own window listener calling the raw `onClose` prop, while the shared `Modal` underneath it already handles Escape and calls the handler that resets the selection first. Both fired, and the component's own one bypassed the reset.
+
+**P4-13, two controls rendered in the wrong place, and the gate that could not have caught them.** The register page's two password reveal toggles were positioned with `absolute` inside a parent that was never made `relative`, so both resolved against an ancestor further up the page. Measured on the running application before anything was changed: the password toggle at y=441 against a field spanning 459 to 509, the confirm toggle at y=440 against a field spanning 560 to 610, and the two of them one pixel apart. They were stacked on each other, above the first field, and neither was on the field it belonged to. Whichever painted last took every click, so the control a person could see and press toggled the other field.
+
+This is worth more than its own fix, because of what could not see it. The markup is correct, the classes are correct, the behaviour is correct, and every component test passes: the defect exists only once a browser computes layout, and nothing below a browser does. The static lint cannot see it, axe does not report it, and jsdom has no layout at all.
+
+So it has a standing script now, `e2e/verify/rendered-layout.mjs`, asserting that a control sits inside the box of the field it belongs to. Containment rather than coordinates, so a redesign does not break it, with two pixels of slack because a control stretched with `inset-y-0` lands on fractional coordinates. It failed four of four before the fix and passes four of four after.
+
+The fix is `shared/ui/PasswordInput`, which section 12.5 asked for by name. Three hand-written copies existed: two on the register page with the positioning defect, and one on the login page that was positioned correctly and had no accessible name at all, which is the `button-name` the gate was carrying on that surface. All three are gone and the login baseline drops a line.
+
+`RegisterForm` moved onto `Field` and `Input` in the same change, and `ProfileForm` followed, which leaves `FormInput` with no consumers. It is deleted. That closes the `FormInput` half of P4-3 recorded above: labels there are associated through `Field`'s `useId` and `htmlFor` rather than sitting beside an input hoping a placeholder names it.
+
+**A measurement about P2-6a, recorded because it is new.** The drag test failed once during this work, by its own assertion, and then passed eight times out of eight run on its own with retries off. The failures seen this session have all been inside a full run of the spec rather than in isolation, which points at state carried between tests or at contention rather than at the sensor alone. The drag handle became a real button in this session, so it was worth checking whether that moved the rate; eight clean runs say it did not make it worse, and cannot prove it made it better.
 
 **The legacy accessibility list reached zero and was deleted, which is what it was for.** The lint config held three rules at warn for `src/components` and `src/pages`, with a note saying each file drops out as it migrates and the list is expected to reach empty and be deleted. It has, and it is. Those three rules are errors everywhere now and nothing violates them.
 

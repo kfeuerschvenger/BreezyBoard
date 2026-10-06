@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Mail, MapPin, User } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
-import FormInput from '@/components/FormInput';
+import { Field, Input } from '@/shared/ui';
 import type { ProfileFormValues } from '../hooks/useProfile';
 import { ProfileActions } from './ProfileActions';
 
@@ -41,33 +41,31 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ form, error, onSubmit,
         <form className="space-y-6" onSubmit={onSubmit}>
           {/* The two names sit side by side; everything below is full width. */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormInput
-              label="First Name"
-              placeholder="Enter first name"
-              {...register('firstName')}
-              icon={<User size={16} className="text-gray-400" />}
-              error={errors.firstName?.message}
-            />
-            <FormInput
-              label="Last Name"
-              placeholder="Enter last name"
-              {...register('lastName')}
-              icon={<User size={16} className="text-gray-400" />}
-              error={errors.lastName?.message}
-            />
+            <Field label="First Name" error={errors.firstName?.message} icon={<User size={16} className="text-gray-400" />}>
+              {props => <Input {...props} {...register('firstName')} placeholder="Enter first name" className="pl-10" />}
+            </Field>
+            <Field label="Last Name" error={errors.lastName?.message} icon={<User size={16} className="text-gray-400" />}>
+              {props => <Input {...props} {...register('lastName')} placeholder="Enter last name" className="pl-10" />}
+            </Field>
           </div>
 
-          {FIELDS.map(field => (
-            <FormInput
-              key={field.name}
-              label={field.label}
-              placeholder={field.placeholder}
-              type={'type' in field ? field.type : undefined}
-              {...register(field.name)}
-              icon={'icon' in field ? field.icon : undefined}
-              error={errors[field.name]?.message}
-            />
-          ))}
+          {FIELDS.map(field => {
+            const icon = 'icon' in field ? field.icon : undefined;
+
+            return (
+              <Field key={field.name} label={field.label} error={errors[field.name]?.message} icon={icon}>
+                {props => (
+                  <Input
+                    {...props}
+                    {...register(field.name)}
+                    type={'type' in field ? field.type : undefined}
+                    placeholder={field.placeholder}
+                    className={icon ? 'pl-10' : undefined}
+                  />
+                )}
+              </Field>
+            );
+          })}
 
           {error && <div className="text-sm text-red-600">{error}</div>}
 
