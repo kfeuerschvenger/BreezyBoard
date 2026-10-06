@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
-import AuthLayout from '@/components/AuthLayout';
+import { AuthLayout } from '@/app/layouts';
 import { ForgotPasswordModal, LoginForm } from '@/features/auth';
 import type { LoginCredentials } from '@/models';
 

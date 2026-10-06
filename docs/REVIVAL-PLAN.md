@@ -454,6 +454,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 5d, auth layout moved | Done | `app/layouts` with `AuthIllustration` and `FeatureItem`. One heading level closed `heading-order` on three surfaces |
 | 5d, priority colours shared | Done | `features/tasks/priority` decides them once, in both spellings P4-7 requires (P3-6) |
 | 5d, avatar promoted | Done | `shared/ui/Avatar` replaces five hand-written copies and the one-caller component built for it (P3-6) |
 | 5d, user menu extracted | Done | `users/UserMenu`, named independently of a breakpoint (P4-15). `UserAvatar` 232 to 45 |
@@ -461,7 +462,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, create board on the cache | Done | `useColors` and `useTemplates` replace an effect that refetched a palette the dashboard already held |
 | 5d, remember me removed | Done | A checkbox nothing read and nothing sent, so ticking it did nothing (P4-14) |
 | 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
-| 5d, remaining decomposition | Open | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
+| 5d, section 12.5 | **Done** | Every row closed. What remains is the line targets in 12.6 and the smaller notes recorded above |
+| 5d, remaining decomposition | Closed | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1084,7 +1086,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `Login.tsx` | 231 | Done, 61 left. `auth/LoginForm` on React Hook Form and Zod, the inline modal replaced by `auth/ForgotPasswordModal` over `Modal` |
 | `UserAvatar.tsx` | 232 | Done, 45 left. `users/UserMenu` over the existing `SimpleUserAvatar`. No `shared/ui/Menu`, see 12.6b |
 | `TaskCard.tsx` | 222 | Colour fetching dropped, 199 left. Priority map still duplicated with `PrioritySelect`, see 12.6b |
-| `AuthLayout.tsx` | 167 | Moves to `app/layouts`, its two nested components split out |
+| `AuthLayout.tsx` | 167 | Done, 52 left. In `app/layouts` with `AuthIllustration` and `FeatureItem` split out |
 
 `Column`, `Footer`, `PageHeader` and `FormInput` are the four that are already roughly right. `PageHeader` is the closest thing to a real primitive in the codebase and should move to `shared/ui` unchanged.
 
@@ -1301,6 +1303,12 @@ Both lists come from the cache now, and the measurement after says what was want
 The templates query is gated on the dialog being open, and that gate is the interesting half. Ungated it moved the request earlier rather than removing it: the dialog is mounted closed on every dashboard load, so every visit paid for a list most visits never look at. The effect it replaced had that right with its `if (open)`, and the first version of this migration quietly lost it. The measurement is what noticed.
 
 One defect was introduced by this change and caught by the suite written before it. The effect that applies the defaults and restores the draft marks itself done once it has run, and the old code reset that flag whenever the retry counter changed. Splitting the fetch out dropped the reset, so a retry landed the data and changed nothing: the colour and template arrived, the effect refused to run, and the create button stayed disabled with no visible reason. It now refuses to mark itself done until both lists are in hand, which says the intent directly and needs no retry signal.
+
+**`AuthLayout`, and one heading level that was three violations.** The layout moved to `app/layouts` with its two nested components split into `AuthIllustration` and `FeatureItem`, which is what section 12.5 asked for. What it also found is better value than the move.
+
+The three feature titles beside the sign in form were `h3` under the layout's `h1`. A jump from h1 to h3 is a level skipped, and that single fact was the entire `heading-order` budget the gate carried on the login page, the register page and the dialog over them. They are `h2` now and all three rules went to zero in one change. Three baseline lines are gone rather than sitting at zero.
+
+Two pieces of dead configuration went with it. Every icon carried both `aria-hidden` and `role="img"`, which is a role on an element nothing can reach; the role is gone and the wrapper is hidden. And `FeatureItem` took a `decorativeSvgAriaHidden` flag that defaulted to false and was passed true at all three call sites, so the default was unreachable and the only thing the prop could ever do was produce an unnamed `role="img"` for whoever forgot it. The icon is simply decoration.
 
 **The priority colours, decided in two files.** P3-6 names the priority colour map as duplicated between the task card and the task drawer. It is `features/tasks/priority` now, and which colour a priority is gets decided once.
 

@@ -32,7 +32,11 @@ const BASELINE = {
   // It was the password reveal toggle, written out by hand with no accessible
   // name at all. It comes from shared/ui/PasswordInput now, which cannot be
   // rendered without one.
-  login: { 'heading-order': 1 },
+  // heading-order was 1 here too and its line is gone rather than sitting at
+  // zero. The auth layout's feature list was a set of h3 headings under the
+  // layout's h1, and a jump from h1 to h3 is a level skipped. They are h2.
+  // One change closed this rule on all three surfaces below.
+  login: {},
   // Added on 2026-10-05, the first time this dialog was ever scanned. Its one
   // number is the login page's own heading-order showing through from behind
   // it, the `h3` in the auth layout: the dialog contributes nothing of its
@@ -40,8 +44,8 @@ const BASELINE = {
   // P3-4 missed, so it had no dialog role, no accessible name, no focus trap
   // and a close button with no name. It comes from the shared Modal now, and
   // that is the whole argument of P3-4 in one measurement.
-  'login, forgot password open': { 'heading-order': 1 },
-  register: { 'heading-order': 1 },
+  'login, forgot password open': {},
+  register: {},
   dashboard: { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
   // button-name was 1 here and its line is gone rather than sitting at zero:
   // the create board modal now uses the shared Modal, whose close control is
@@ -63,7 +67,7 @@ const BASELINE = {
   // div with no role and carried an aria-label, which ARIA does not allow.
   // It only ever surfaced here because this is the first scanned page that
   // renders that header with an empty action area.
-  profile: { 'landmark-one-main': 1, region: 18 },
+  profile: { 'landmark-one-main': 1, region: 17 },
 };
 
 // There is deliberately no colour-contrast entry anywhere above. The first
