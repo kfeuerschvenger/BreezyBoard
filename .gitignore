@@ -1,3 +1,6 @@
 
 # Local agent tooling
 .atl/
+
+# A marker that has to exist at the project root and must never be committed.
+.no-telemetry
