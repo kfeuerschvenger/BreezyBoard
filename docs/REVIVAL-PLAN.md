@@ -448,6 +448,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, profile composed | Done | `useProfile`, `ProfileSummary`, `ProfileForm`, `ProfileActions`, `AvatarUploader`. `Profile` 380 to 66 |
 | 5d, add member modal | Done | `features/users/AddMemberModal` over `useMemberSearch`, `MemberSearchResults`, `SelectedMembers`. 335 to 130 |
 | 5d, member search retry | Done | Try again refetches instead of clearing an already empty term (P4-12) |
+| 5d, task card colours | Done | Resolved by the board and passed in. `colorUtils` deleted with its uninvalidated cache. Zero `/colors/:id` in a full run |
+| 5a, legacy a11y list empty | Done | The drag handle is a real button and the priority badge is announced (P4-3). The warn list is deleted and the three rules are errors everywhere |
 | 5d, remaining decomposition | Open | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
 | 6 onward | Not started | |
 
@@ -1070,7 +1072,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `RegisterForm.tsx` | 247 | `auth/RegisterForm` over `Field`, plus `PasswordInput` for the toggle repeated 3 times |
 | `Login.tsx` | 242 | `auth/LoginForm` on React Hook Form and Zod, its inline modal replaced by `Modal` |
 | `UserAvatar.tsx` | 234 | `users/UserMenu` over `shared/ui/Menu` and `Avatar` |
-| `TaskCard.tsx` | 222 | Stays presentational, drops its own color fetching and priority map |
+| `TaskCard.tsx` | 222 | Colour fetching dropped, 199 left. Priority map still duplicated with `PrioritySelect`, see 12.6b |
 | `AuthLayout.tsx` | 167 | Moves to `app/layouts`, its two nested components split out |
 
 `Column`, `Footer`, `PageHeader` and `FormInput` are the four that are already roughly right. `PageHeader` is the closest thing to a real primitive in the codebase and should move to `shared/ui` unchanged.
@@ -1270,6 +1272,14 @@ P4-12 came out of a surviving mutation rather than out of reading. "Try again", 
 That is the second defect this session found by writing a mutation rather than by reading code, and both were the same shape: an assertion that a control exists, with nothing asserting it does anything. The mutation that deletes the handler is the cheapest way to find them.
 
 The decomposition also dropped a duplicate Escape handler. The modal registered its own window listener calling the raw `onClose` prop, while the shared `Modal` underneath it already handles Escape and calls the handler that resets the selection first. Both fired, and the component's own one bypassed the reset.
+
+**The legacy accessibility list reached zero and was deleted, which is what it was for.** The lint config held three rules at warn for `src/components` and `src/pages`, with a note saying each file drops out as it migrates and the list is expected to reach empty and be deleted. It has, and it is. Those three rules are errors everywhere now and nothing violates them.
+
+What was left in it was the task card's drag handle, a div carrying a role. As a div it relied on dnd-kit to supply the role, the tab stop and the key handling through a spread, none of which static analysis can see, so it sat under two warnings that could not be answered without rewriting it. It is a `button` now. It needs none of those to be reachable, and dnd-kit's attributes sit on top unchanged, in the same spread-last order that finding P0-3 is about.
+
+P4-3 closed its last visible item in the same change. The whole priority badge was `aria-hidden`, which hid real information rather than a decorative icon: it is the only place a task shows its priority, so a card said nothing about it at all. The badge is exposed, the icon inside it is hidden instead, and the word gains a subject carried for assistive technology only, so it still reads as one word on screen.
+
+One piece of P4-3 stays open and is worth naming precisely, because neither gate catches it. `FormInput` renders a label with no `htmlFor` and threads no id, so every field in the registration flow and on the profile page is an unassociated label beside an input. The static rule does not fire on it: the label's content is a `{label}` expression, and the rule cannot decide statically whether a control is nested inside one. A probe with a literal label in the same file tree does fire, so the rule works and this specific shape is invisible to it. Axe does not report it either, because each of those inputs carries a placeholder and a placeholder counts as an accessible name of last resort, which is exactly why relying on one is poor practice: it disappears the moment somebody types. Closing it means threading an id through the primitive, and it belongs with the `RegisterForm` and `Login` rows rather than here.
 
 **The unit suite flakes under CPU contention, and this is what was measured.** Worth recording before someone spends a session chasing it as a regression.
 

@@ -118,13 +118,27 @@ describe('TaskCard priority', () => {
     expect(badge).toHaveTextContent(priority);
   });
 
-  // Asserted on the attribute rather than by querying for the text. A text
-  // query reads the DOM and finds it either way; only the role queries
-  // consult the accessibility tree, and a span has no role to query.
-  it('pins current behaviour (finding P4-3): the priority is hidden from assistive technology', () => {
+  // P4-3 recorded the whole badge as aria-hidden, which hid real information
+  // rather than a decorative icon: this is the only place a task shows its
+  // priority, so hiding it left the card saying nothing about it at all.
+  //
+  // Asserted on the attribute and on the text, because a plain text query
+  // reads the DOM and finds the content either way. Only role queries consult
+  // the accessibility tree, and a badge has no role to query.
+  it('announces the priority instead of hiding it (P4-3)', () => {
     renderCard(makeTask({ priority: 'high' }));
 
-    expect(card().querySelector('.bg-red-100')).toHaveAttribute('aria-hidden', 'true');
+    const badge = card().querySelector('.bg-red-100');
+    expect(badge).not.toHaveAttribute('aria-hidden');
+    // "high" on its own is a word with no subject. The prefix is carried for
+    // assistive technology only, so the badge still reads as one word.
+    expect(badge).toHaveTextContent('Priority: high');
+  });
+
+  it('keeps the icon out of it, since the word beside it already says so', () => {
+    renderCard(makeTask({ priority: 'high' }));
+
+    expect(card().querySelector('.bg-red-100 svg')).toHaveAttribute('aria-hidden', 'true');
   });
 });
 
@@ -164,10 +178,20 @@ describe('TaskCard drag handle', () => {
     renderCard(makeTask({}));
 
     const handle = screen.getByLabelText('Drag handle');
-    // dnd-kit sets these itself, and the spread order in the card is what
-    // keeps them: a duplicate prop after the spread silently replaces the
-    // sensor activators, which is what finding P0-3 was.
+    // dnd-kit sets the role and tabindex itself, and the spread order in the
+    // card is what keeps them: a duplicate prop after the spread silently
+    // replaces the sensor activators, which is what finding P0-3 was.
     expect(handle).toHaveAttribute('role', 'button');
     expect(handle).toHaveAttribute('tabindex', '0');
+  });
+
+  // A real button rather than a div dressed as one. The div needed dnd-kit to
+  // supply the role, the tab stop and the key handling, none of which static
+  // analysis can see through a spread, so it sat under two permanent
+  // accessibility warnings that could not be answered without rewriting it.
+  it('is a real button, so the keyboard reaches it without dnd-kit saying so', () => {
+    renderCard(makeTask({}));
+
+    expect(screen.getByLabelText('Drag handle').tagName).toBe('BUTTON');
   });
 });
