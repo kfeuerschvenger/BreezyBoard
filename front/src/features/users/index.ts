@@ -15,6 +15,8 @@ export { ProfileForm } from './components/ProfileForm';
 export type { ProfileFormProps } from './components/ProfileForm';
 export { ProfileSummary } from './components/ProfileSummary';
 export type { ProfileSummaryProps } from './components/ProfileSummary';
+export { UserMenu } from './components/UserMenu';
+export type { UserMenuProps } from './components/UserMenu';
 export { UserPicker } from './components/UserPicker';
 export type { UserPickerProps } from './components/UserPicker';
 export { useMemberSearch } from './hooks/useMemberSearch';

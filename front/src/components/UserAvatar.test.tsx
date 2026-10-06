@@ -75,9 +75,34 @@ describe('UserAvatar menu', () => {
   it('shows the avatar image instead of initials when there is one', () => {
     mockedAuthService.getCurrentUser.mockReturnValue({ ...ADA, avatar: '/uploads/ada.png' });
 
+    const { container } = renderMenu();
+
+    // Queried as an element rather than by role: the shared avatar wraps the
+    // image in a `role="img"` of its own, whose children are presentational,
+    // so the inner image is not in the accessibility tree to be found.
+    expect(container.querySelector('img')).toHaveAttribute('src', '/uploads/ada.png');
+    expect(screen.queryByText('AL')).not.toBeInTheDocument();
+  });
+
+  // The trigger's visible contents are an avatar and a name that is hidden
+  // below the medium breakpoint, so a name taken from them disappears on a
+  // phone. Measured at 390 pixels before the fix, where the button read as
+  // the two initials and nothing else, and as nothing at all once an avatar
+  // image replaced them.
+  it('names itself without depending on text that a narrow screen hides', () => {
     renderMenu();
 
-    expect(screen.getAllByRole('img', { hidden: true })[0]).toHaveAttribute('src', '/uploads/ada.png');
+    expect(screen.getByRole('button', { name: 'Account menu for Ada Lovelace' })).toBeInTheDocument();
+  });
+
+  it('points the menu back at the control that opened it', async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(trigger());
+
+    const menu = screen.getByRole('menu');
+    expect(menu).toHaveAttribute('aria-labelledby', screen.getByRole('button', { expanded: true }).id);
   });
 
   it('announces itself as a collapsed menu until it is opened', async () => {
@@ -113,6 +138,23 @@ describe('UserAvatar menu', () => {
 
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     expect(trigger()).toHaveFocus();
+  });
+
+  // The outside-click handler listens on mousedown and the toggle runs on
+  // click, so without the guard that ignores presses on the trigger itself,
+  // the first event closes the menu and the second reopens it. The menu then
+  // cannot be dismissed by the control that opened it, and nothing about
+  // opening it looks wrong.
+  it('closes again when the control that opened it is pressed a second time', async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(trigger());
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { expanded: true }));
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
 
   it('closes when the click lands anywhere else', async () => {

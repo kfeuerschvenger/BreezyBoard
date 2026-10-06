@@ -454,6 +454,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 5d, user menu extracted | Done | `users/UserMenu`, named independently of a breakpoint (P4-15). `UserAvatar` 232 to 45 |
 | 5d, create board composed | Done | `TemplatePicker` out, the dialog in `features/boards`. 306 to 264 |
 | 5d, create board on the cache | Done | `useColors` and `useTemplates` replace an effect that refetched a palette the dashboard already held |
 | 5d, remember me removed | Done | A checkbox nothing read and nothing sent, so ticking it did nothing (P4-14) |
@@ -1079,7 +1080,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `CreateBoardModal.tsx` | 306 | Done, 264 left. In `features/boards` over `Modal`, `Field`, `SwatchPicker` and `boards/TemplatePicker`. The rest is the draft machinery |
 | `RegisterForm.tsx` | 247 | Done, 196 left. On `Field` and `PasswordInput`, in `features/auth` |
 | `Login.tsx` | 231 | Done, 61 left. `auth/LoginForm` on React Hook Form and Zod, the inline modal replaced by `auth/ForgotPasswordModal` over `Modal` |
-| `UserAvatar.tsx` | 234 | `users/UserMenu` over `shared/ui/Menu` and `Avatar` |
+| `UserAvatar.tsx` | 232 | Done, 45 left. `users/UserMenu` over the existing `SimpleUserAvatar`. No `shared/ui/Menu`, see 12.6b |
 | `TaskCard.tsx` | 222 | Colour fetching dropped, 199 left. Priority map still duplicated with `PrioritySelect`, see 12.6b |
 | `AuthLayout.tsx` | 167 | Moves to `app/layouts`, its two nested components split out |
 
@@ -1298,6 +1299,14 @@ Both lists come from the cache now, and the measurement after says what was want
 The templates query is gated on the dialog being open, and that gate is the interesting half. Ungated it moved the request earlier rather than removing it: the dialog is mounted closed on every dashboard load, so every visit paid for a list most visits never look at. The effect it replaced had that right with its `if (open)`, and the first version of this migration quietly lost it. The measurement is what noticed.
 
 One defect was introduced by this change and caught by the suite written before it. The effect that applies the defaults and restores the draft marks itself done once it has run, and the old code reset that flag whenever the retry counter changed. Splitting the fetch out dropped the reset, so a retry landed the data and changed nothing: the colour and template arrived, the effect refused to run, and the create button stayed disabled with no visible reason. It now refuses to mark itself done until both lists are in hand, which says the intent directly and needs no retry signal.
+
+**P4-15, a control with no name on a phone, and the breakpoint nobody scans.** The account control in the page header draws an avatar, a name that is `hidden md:block`, and a chevron. Below the medium breakpoint the name is `display:none` and therefore out of the accessibility tree, the chevron is `aria-hidden`, and the avatar wrapper carried `aria-hidden={!!user.avatar}`, so for anybody who had uploaded a picture the control had no accessible name at all. Measured at 390 pixels, where the button read as the two initials with no avatar and as nothing once one was set.
+
+The gate scans at 1440 by 900 and only there, so every one of its eight surfaces is a desktop. Section 10.4 asks for responsive behaviour and nothing measures it. That is the same shape as the profile page being outside the surface list and the register page's layout being outside any browser: the defect was not hard to see, it was in a place nothing looked.
+
+The fix is a name that does not depend on text a breakpoint can remove: the trigger carries its own `aria-label` naming the person, so the visible name is free to come and go. Verified at 390 pixels with an avatar image in place, where the control is now findable by that name.
+
+Two smaller things went with it. The menu's `aria-labelledby` was written as `buttonRef.current ? undefined : undefined`, which is `undefined` either way, so the menu had no name; it points at the trigger now. And the avatar markup, written out twice in this one component, is the `SimpleUserAvatar` that already existed for it and had exactly one caller. P3-6 records that fallback as written three times; it is written more often than that, and the other call sites are a commit of their own.
 
 **P4-13, two controls rendered in the wrong place, and the gate that could not have caught them.** The register page's two password reveal toggles were positioned with `absolute` inside a parent that was never made `relative`, so both resolved against an ancestor further up the page. Measured on the running application before anything was changed: the password toggle at y=441 against a field spanning 459 to 509, the confirm toggle at y=440 against a field spanning 560 to 610, and the two of them one pixel apart. They were stacked on each other, above the first field, and neither was on the field it belonged to. Whichever painted last took every click, so the control a person could see and press toggled the other field.
 
