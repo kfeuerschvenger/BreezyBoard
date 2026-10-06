@@ -10,6 +10,7 @@ import {
   IconButton,
   Input,
   LoadingScreen,
+  PasswordInput,
   Modal,
   StatTile,
   SwatchPicker,
@@ -378,5 +379,59 @@ describe('LoadingScreen', () => {
     render(<LoadingScreen />);
 
     expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+  });
+});
+
+describe('PasswordInput', () => {
+  it('hides the value until the toggle is pressed, and says which state it is in', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<PasswordInput aria-label="Password" />);
+
+    const input = screen.getByLabelText('Password');
+    expect(input).toHaveAttribute('type', 'password');
+
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(input).toHaveAttribute('type', 'text');
+
+    // The name states what pressing it will do next, which is what makes two
+    // presses distinguishable without looking at the field.
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(input).toHaveAttribute('type', 'password');
+
+    await noViolations(container);
+  });
+
+  // Two password fields on one form both offering "Show password" names
+  // neither of them, which is the register page exactly.
+  it('takes a name for its toggle, so two fields on one form are distinguishable', () => {
+    render(
+      <div>
+        <PasswordInput aria-label="Password" toggleLabel="password" />
+        <PasswordInput aria-label="Confirm password" toggleLabel="confirm password" />
+      </div>
+    );
+
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show confirm password' })).toBeInTheDocument();
+  });
+
+  // The toggle has to be inside a positioned wrapper. Two of the three
+  // hand-written copies this replaces were not, so they rendered against an
+  // ancestor further up the page. Asserted as a class, because the layout it
+  // produces exists only in a browser. Finding P4-13.
+  it('keeps the toggle inside a positioned wrapper', () => {
+    render(<PasswordInput aria-label="Password" />);
+
+    expect(screen.getByRole('button', { name: 'Show password' }).parentElement).toHaveClass('relative');
+  });
+
+  it('is reachable by keyboard without leaving the field', async () => {
+    const user = userEvent.setup();
+    render(<PasswordInput aria-label="Password" />);
+
+    await user.tab();
+    expect(screen.getByLabelText('Password')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Show password' })).toHaveFocus();
   });
 });
