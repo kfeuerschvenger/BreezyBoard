@@ -5,8 +5,8 @@ import { motion } from 'framer-motion';
 import { User, CircleCheck, AlertCircle, GripVertical, ShieldAlert } from 'lucide-react';
 import type { Task } from '@/models';
 import { COLOR_FALLBACK } from '@/features/colors';
-
-type Priority = 'low' | 'medium' | 'high';
+import { asTaskPriority, PRIORITY_BADGE_CLASSES } from '@/features/tasks';
+import type { TaskPriority } from '@/features/tasks';
 
 interface TaskCardProps {
   task: Task;
@@ -24,15 +24,11 @@ interface TaskCardProps {
 }
 
 /**
- * Priority visual mappings kept outside the component to avoid recreating them every render.
+ * The icons are the card's own. The colours are not: which colour a priority
+ * is gets decided once, in features/tasks/priority, because it used to be
+ * decided here and again in the picker. That is the priority half of P3-6.
  */
-const PRIORITY_STYLES: Record<Priority, string> = {
-  low: 'bg-green-100 text-green-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-red-100 text-red-800',
-};
-
-const PRIORITY_ICONS: Record<Priority, React.ElementType> = {
+const PRIORITY_ICONS: Record<TaskPriority, React.ElementType> = {
   low: CircleCheck,
   medium: AlertCircle,
   high: ShieldAlert,
@@ -70,10 +66,10 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, color = COLOR_FALLBACK, onCli
     return totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
   }, [completedItems, totalItems]);
 
-  // Priority guards: ensure we only use known keys
-  const priority = (task.priority as Priority) ?? 'low';
-  const PriorityIcon = PRIORITY_ICONS[priority] ?? CircleCheck;
-  const priorityClass = PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.low;
+  // Anything unrecognised reads as the least urgent rather than crashing.
+  const priority = asTaskPriority(task.priority);
+  const PriorityIcon = PRIORITY_ICONS[priority];
+  const priorityClass = PRIORITY_BADGE_CLASSES[priority];
 
   // Owner name resolution (owner can be an object or an id)
   const ownerName = useMemo(() => {

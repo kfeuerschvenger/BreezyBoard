@@ -195,3 +195,21 @@ describe('TaskCard drag handle', () => {
     expect(screen.getByLabelText('Drag handle').tagName).toBe('BUTTON');
   });
 });
+
+describe('TaskCard priority it does not recognise', () => {
+  // The API constrains this field, so a value outside the three is a bug
+  // somewhere else. The card still has to draw something rather than render
+  // an unstyled badge or fall over.
+  // The word and the colour are normalised together rather than the raw
+  // value being printed in a colour that means something else. A badge
+  // reading "urgent" in the green that means low is a worse answer than one
+  // reading "low": the colour is what anybody scanning a board actually
+  // reads, so the two have to agree.
+  it('falls back to the least urgent, in both the word and the colour', () => {
+    renderCard(makeTask({ priority: 'urgent' as never }));
+
+    const badge = card().querySelector('.bg-green-100');
+    expect(badge).not.toBeNull();
+    expect(badge).toHaveTextContent('Priority: low');
+  });
+});
