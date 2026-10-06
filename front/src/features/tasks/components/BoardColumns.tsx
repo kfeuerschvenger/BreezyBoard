@@ -3,6 +3,8 @@ import { closestCorners, DndContext, DragOverlay } from '@dnd-kit/core';
 import Column from '@/components/Column';
 import TaskCard from '@/components/TaskCard';
 import type { Task } from '@/models';
+import { resolveColor } from '@/features/colors';
+import type { ColorLookup } from '@/features/colors';
 import type { ColumnData } from '../hooks/useBoardData';
 import type { UseTaskDragAndDropResult } from '../hooks/useTaskDragAndDrop';
 
@@ -10,6 +12,8 @@ export interface BoardColumnsProps {
   columns: ColumnData[];
   tasks: Task[];
   drag: UseTaskDragAndDropResult;
+  /** The task palette, so no card has to resolve its own colour. */
+  taskColors: ColorLookup;
   onTaskClick: (task: Task) => void;
 }
 
@@ -19,7 +23,9 @@ export interface BoardColumnsProps {
  * The context wraps the grid rather than the page, because the overlay has to
  * render inside it and nothing outside the grid is draggable.
  */
-export const BoardColumns: React.FC<BoardColumnsProps> = ({ columns, tasks, drag, onTaskClick }) => {
+export const BoardColumns: React.FC<BoardColumnsProps> = ({ columns, tasks, drag, taskColors, onTaskClick }) => {
+  const colorOf = (task: Task) => resolveColor(task.color, taskColors);
+
   if (columns.length === 0) {
     return (
       <div className="text-center py-12">
@@ -43,11 +49,14 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({ columns, tasks, drag
             column={column}
             tasks={tasks.filter(task => task.status === column.id)}
             onTaskClick={onTaskClick}
+            colorOf={colorOf}
           />
         ))}
       </div>
 
-      <DragOverlay>{drag.activeTask ? <TaskCard task={drag.activeTask} isDragging /> : null}</DragOverlay>
+      <DragOverlay>
+        {drag.activeTask ? <TaskCard task={drag.activeTask} color={colorOf(drag.activeTask)} isDragging /> : null}
+      </DragOverlay>
     </DndContext>
   );
 };

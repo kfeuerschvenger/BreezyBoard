@@ -4,7 +4,6 @@ import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
 import TaskCard from './TaskCard';
 import { ColorService } from '@/services';
-import { clearColorCache } from '@/utils/colorUtils';
 import type { Task } from '@/models';
 
 // Characterization, written against the card as it stands before section
@@ -31,7 +30,7 @@ const makeTask = (overrides: Partial<Task>): Task => ({
 
 // useSortable needs both contexts above it. Without them the card renders,
 // but the drag attributes it is asserted on below are never applied.
-const renderCard = (task: Task, props: { onClick?: () => void; isDragging?: boolean } = {}) =>
+const renderCard = (task: Task, props: { color?: string; onClick?: () => void; isDragging?: boolean } = {}) =>
   render(
     <DndContext>
       <SortableContext items={[task._id]}>
@@ -43,7 +42,6 @@ const renderCard = (task: Task, props: { onClick?: () => void; isDragging?: bool
 const card = () => screen.getByRole('article');
 
 beforeEach(() => {
-  clearColorCache();
   mockedColorService.getById.mockReset().mockResolvedValue({ _id: 'color-red', name: 'Red', value: '#EF4444' });
 });
 
@@ -131,21 +129,33 @@ describe('TaskCard priority', () => {
 });
 
 describe('TaskCard colour', () => {
-  it('paints the progress bar with a colour already given as a hex value', () => {
-    renderCard(makeTask({ color: '#3B82F6', checklist: [{ text: 'One', completed: true }] }));
+  const withChecklist = (color: string | undefined) =>
+    makeTask({ color: color as never, checklist: [{ text: 'One', completed: true }] });
 
-    expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#3B82F6' });
+  it('paints the progress bar with the colour it was handed', () => {
+    renderCard(withChecklist('#3B82F6'), { color: '#10B981' });
+
+    expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#10B981' });
   });
 
-  // One request per card. A board of thirty tasks asks the colour endpoint
-  // thirty times for parts of a list it serves whole at /colors?type=task.
-  it('pins current behaviour: a colour held as an id costs this card its own request', async () => {
-    renderCard(makeTask({ color: 'color-red', checklist: [{ text: 'One', completed: true }] }));
+  it('falls back to the neutral when it was handed none', () => {
+    renderCard(withChecklist('#3B82F6'));
 
-    await waitFor(() => expect(mockedColorService.getById).toHaveBeenCalledWith('color-red'));
+    expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#64748B' });
+  });
+
+  // The card used to resolve its own colour, which cost a request for any
+  // task whose colour was stored as an id. A board of thirty tasks asked the
+  // colour endpoint thirty times for parts of a list served whole at
+  // /colors?type=task. Whoever renders the board reads it once now.
+  it('asks the colour endpoint for nothing', async () => {
+    renderCard(withChecklist('color-red'), { color: '#EF4444' });
+
     await waitFor(() =>
       expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#EF4444' })
     );
+    expect(mockedColorService.getById).not.toHaveBeenCalled();
+    expect(mockedColorService.getByType).not.toHaveBeenCalled();
   });
 });
 

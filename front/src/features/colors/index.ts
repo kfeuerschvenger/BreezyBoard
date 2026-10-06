@@ -3,3 +3,5 @@
 // dependency direction rule in the lint config enforces.
 export { colorKeys, useColors } from './queries';
 export type { ColorType } from './queries';
+export { COLOR_FALLBACK, resolveColor, toColorLookup } from './resolveColor';
+export type { ColorLookup } from './resolveColor';

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Folder, Plus } from 'lucide-react';
 import CreateBoardModal from '../components/CreateBoardModal';
-import { BoardCard, BoardStats, resolveBoardColor, useBoardDashboard, useBoardMenu } from '@/features/boards';
+import { BoardCard, BoardStats, useBoardDashboard, useBoardMenu } from '@/features/boards';
+import { resolveColor } from '@/features/colors';
 import { AddMemberModal } from '@/features/users';
 import type { NewBoard } from '@/features/boards';
 import type { Board, User } from '@/models';
@@ -83,7 +84,7 @@ const BoardDashboard: React.FC = () => {
             <BoardCard
               key={board._id}
               board={board}
-              color={resolveBoardColor(board.color, dashboard.colorLookup)}
+              color={resolveColor(board.color, dashboard.colorLookup)}
               delay={index * 0.08}
               menuOpen={menu.isOpen(board._id)}
               isDeleting={dashboard.isDeleting(board._id)}

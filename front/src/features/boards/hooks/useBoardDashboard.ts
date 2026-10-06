@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
+import { toColorLookup } from '@/features/colors';
+import type { ColorLookup } from '@/features/colors';
 import { useColors } from '@/features/colors';
 import type { Board, DashboardStats, User } from '@/models';
-import { toColorLookup } from '../boardColor';
-import type { ColorLookup } from '../boardColor';
 import { useAddBoardMembers, useBoards, useCreateBoard, useDashboardStats, useDeleteBoard } from '../queries';
 
 export type NewBoard = Pick<Board, 'title' | 'description' | 'color' | 'template'>;

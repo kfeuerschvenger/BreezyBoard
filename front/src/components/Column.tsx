@@ -10,6 +10,11 @@ interface ColumnProps {
   column: ColumnType;
   tasks: Task[];
   onTaskClick: (task: Task) => void;
+  /**
+   * The hex value to paint one task with. Passed down rather than resolved in
+   * the card, which used to ask the colour endpoint once per card.
+   */
+  colorOf: (task: Task) => string;
 }
 
 /**
@@ -18,7 +23,7 @@ interface ColumnProps {
  * Represents a single Kanban column (e.g., "To Do", "In Progress", "Done").
  * It supports drag-and-drop reordering of tasks using dnd-kit.
  */
-const Column: React.FC<ColumnProps> = ({ column, tasks, onTaskClick }) => {
+const Column: React.FC<ColumnProps> = ({ column, tasks, onTaskClick, colorOf }) => {
   const { setNodeRef } = useDroppable({
     id: column._id,
   });
@@ -47,7 +52,7 @@ const Column: React.FC<ColumnProps> = ({ column, tasks, onTaskClick }) => {
       <div ref={setNodeRef} className="space-y-3 min-h-[500px]">
         <SortableContext items={tasks.map(task => task._id)} strategy={verticalListSortingStrategy}>
           {tasks.map(task => (
-            <TaskCard key={task._id} task={task} onClick={() => onTaskClick(task)} />
+            <TaskCard key={task._id} task={task} color={colorOf(task)} onClick={() => onTaskClick(task)} />
           ))}
         </SortableContext>
       </div>

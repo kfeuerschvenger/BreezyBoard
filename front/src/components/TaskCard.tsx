@@ -1,15 +1,24 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
 import { User, CircleCheck, AlertCircle, GripVertical, ShieldAlert } from 'lucide-react';
 import type { Task } from '@/models';
-import { resolveColorValue, resolveColorValueSync } from '@/utils/colorUtils';
+import { COLOR_FALLBACK } from '@/features/colors';
 
 type Priority = 'low' | 'medium' | 'high';
 
 interface TaskCardProps {
   task: Task;
+  /**
+   * The hex value to paint the progress bar with, already resolved.
+   *
+   * The card used to resolve this itself, which meant a request per card for
+   * any task whose colour was stored as an id: a board of thirty tasks asked
+   * the colour endpoint thirty times for parts of a list it serves whole.
+   * Whoever renders the board reads that list once and passes the answer.
+   */
+  color?: string;
   onClick?: () => void;
   isDragging?: boolean;
 }
@@ -29,12 +38,10 @@ const PRIORITY_ICONS: Record<Priority, React.ElementType> = {
   high: ShieldAlert,
 };
 
-const DEFAULT_COLOR = '#64748B';
-
 /**
  * TaskCard: presentational card for a single task with optional drag support.
  */
-const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isDragging = false }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, color = COLOR_FALLBACK, onClick, isDragging = false }) => {
   // Use the task id as the sortable id (must be stable)
   const sortableId = task._id;
 
@@ -67,34 +74,6 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isDragging = false }
   const priority = (task.priority as Priority) ?? 'low';
   const PriorityIcon = PRIORITY_ICONS[priority] ?? CircleCheck;
   const priorityClass = PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.low;
-
-  /**
-   * Color resolution:
-   * - We immediately set a sync fallback (fast), then try an async resolution.
-   * - This pattern prevents layout shifts and lets us gracefully fall back.
-   */
-  const [colorHex, setColorHex] = useState<string>(() => resolveColorValueSync(task.color, DEFAULT_COLOR));
-
-  useEffect(() => {
-    let mounted = true;
-    // immediate sync fallback
-    setColorHex(resolveColorValueSync(task.color, DEFAULT_COLOR));
-
-    // async resolution (if the util resolves from e.g. a token or remote source)
-    (async () => {
-      try {
-        const resolved = await resolveColorValue(task.color, DEFAULT_COLOR);
-        if (mounted && resolved) setColorHex(resolved);
-      } catch {
-        // keep fallback; avoid noisy logs in normal operation
-        // console.warn('Could not resolve task color');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [task.color]);
 
   // Owner name resolution (owner can be an object or an id)
   const ownerName = useMemo(() => {
@@ -165,7 +144,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, isDragging = false }
             <motion.div
               className="h-2 rounded-full"
               // use resolved color for progress bar
-              style={{ backgroundColor: colorHex }}
+              style={{ backgroundColor: color }}
               initial={{ width: 0 }}
               animate={{ width: `${Math.max(0, Math.min(100, progressPercentage))}%` }}
               transition={{ duration: 0.3 }}
