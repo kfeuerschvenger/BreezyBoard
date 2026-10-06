@@ -454,6 +454,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 5d, priority colours shared | Done | `features/tasks/priority` decides them once, in both spellings P4-7 requires (P3-6) |
 | 5d, avatar promoted | Done | `shared/ui/Avatar` replaces five hand-written copies and the one-caller component built for it (P3-6) |
 | 5d, user menu extracted | Done | `users/UserMenu`, named independently of a breakpoint (P4-15). `UserAvatar` 232 to 45 |
 | 5d, create board composed | Done | `TemplatePicker` out, the dialog in `features/boards`. 306 to 264 |
@@ -1300,6 +1301,14 @@ Both lists come from the cache now, and the measurement after says what was want
 The templates query is gated on the dialog being open, and that gate is the interesting half. Ungated it moved the request earlier rather than removing it: the dialog is mounted closed on every dashboard load, so every visit paid for a list most visits never look at. The effect it replaced had that right with its `if (open)`, and the first version of this migration quietly lost it. The measurement is what noticed.
 
 One defect was introduced by this change and caught by the suite written before it. The effect that applies the defaults and restores the draft marks itself done once it has run, and the old code reset that flag whenever the retry counter changed. Splitting the fetch out dropped the reset, so a retry landed the data and changed nothing: the colour and template arrived, the effect refused to run, and the create button stayed disabled with no visible reason. It now refuses to mark itself done until both lists are in hand, which says the intent directly and needs no retry signal.
+
+**The priority colours, decided in two files.** P3-6 names the priority colour map as duplicated between the task card and the task drawer. It is `features/tasks/priority` now, and which colour a priority is gets decided once.
+
+The duplication inside that module is deliberate and is the interesting part. It holds the three colour pairs twice, once plain for the card's badge and once as the `has-[:checked]` variant the picker's radios need, both written out in full. Deriving the second from the first at runtime is precisely finding P4-7: Tailwind emits a rule only for a class it can read in the source, so a composed variant names rules that were never generated, and composing from a value holding two classes is worse because only the first inherits the variant. The build output confirms both forms are present for all three colours. What was worth removing is the decision living in two files, not the two spellings of it.
+
+An unrecognised priority normalises to the least urgent in both the word and the colour, rather than the raw value being printed in a colour that means something else. The colour is what anybody scanning a board actually reads, so a badge saying "urgent" in the green that means low is a worse answer than one saying "low".
+
+Two mutations survived the first sweep and both were gaps rather than wrong code: nothing covered an unrecognised priority, and nothing pinned the order the three chips are offered in, so reversing it would have passed.
 
 **The avatar, written five times and already solved once.** P3-6 records the avatar-with-initials fallback as written three times while `SimpleUserAvatar` already existed for it. The count was low: it was hand-written in the user menu twice, in the selected member chips, in the member search rows, and on the profile card, while the component built for the job had exactly one caller.
 

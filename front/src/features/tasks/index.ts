@@ -4,7 +4,15 @@
 export { Checklist } from './components/Checklist';
 export type { ChecklistItemData, ChecklistProps } from './components/Checklist';
 export { PrioritySelect } from './components/PrioritySelect';
-export type { PrioritySelectProps, TaskPriority } from './components/PrioritySelect';
+export type { PrioritySelectProps } from './components/PrioritySelect';
+export {
+  asTaskPriority,
+  PRIORITY_BADGE_CLASSES,
+  PRIORITY_LABELS,
+  PRIORITY_SELECTED_CLASSES,
+  TASK_PRIORITIES,
+} from './priority';
+export type { TaskPriority } from './priority';
 export { default as TaskDrawer } from './components/TaskDrawer';
 export type { TaskDrawerProps } from './components/TaskDrawer';
 export { TaskForm } from './components/TaskForm';

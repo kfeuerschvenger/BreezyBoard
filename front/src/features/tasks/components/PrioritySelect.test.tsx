@@ -48,3 +48,18 @@ describe('PrioritySelect', () => {
     }
   });
 });
+
+describe('PrioritySelect ordering', () => {
+  // Least urgent first. Nothing else pinned the order, so reversing it was a
+  // change the whole suite would have let through, and a picker that reads
+  // high to low invites the wrong click from anyone who has used the old one.
+  it('offers the three in order of urgency, least first', () => {
+    render(<PrioritySelect value="medium" onChange={() => {}} />);
+
+    expect(screen.getAllByRole('radio').map(radio => (radio as HTMLInputElement).value)).toEqual([
+      'low',
+      'medium',
+      'high',
+    ]);
+  });
+});
