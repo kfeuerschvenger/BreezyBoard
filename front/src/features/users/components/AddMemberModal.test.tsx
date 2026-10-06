@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AddMemberModal from './AddMemberModal';
+import { renderWithQuery } from '@/test/renderWithQuery';
+import { AddMemberModal } from './AddMemberModal';
 import { UserService } from '@/services';
 import type { User } from '@/models';
 
@@ -37,7 +38,7 @@ const renderModal = (props: Partial<React.ComponentProps<typeof AddMemberModal>>
   const onClose = vi.fn();
   const onAddMembers = vi.fn();
 
-  render(
+  renderWithQuery(
     <AddMemberModal
       open
       onClose={onClose}
@@ -171,6 +172,24 @@ describe('AddMemberModal states with nothing to list', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
+  // Try again used to clear the search term and nothing else. On the search
+  // that runs as the modal opens, the term is already empty, so clearing it
+  // changed no state, ran no query, and the button did nothing at all in the
+  // one case it exists for.
+  it('actually searches again when Try again is pressed', async () => {
+    const user = userEvent.setup();
+    mockedUserService.search.mockRejectedValueOnce(new Error('network down')).mockResolvedValue([ADA]);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderModal();
+    await screen.findByText('Failed to load team members');
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(screen.queryByText('Failed to load team members')).not.toBeInTheDocument();
+  });
+
   it('says nobody matched rather than showing an empty panel', async () => {
     mockedUserService.search.mockResolvedValue([]);
 
@@ -261,18 +280,21 @@ describe('AddMemberModal leaving without adding anybody', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  // Reopening has to start clean. A selection left behind would be added to
-  // the next board the modal is opened for.
-  it('forgets the previous selection when it is reopened', async () => {
+  // Reopening has to start clean, in both senses. A selection left behind
+  // would be added to the next board the modal is opened for, and a search
+  // term left behind would open it showing results for a query about the
+  // previous one.
+  it('forgets the previous selection and the previous search when it is reopened', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onAddMembers = vi.fn();
 
-    const { rerender } = render(
+    const { rerender } = renderWithQuery(
       <AddMemberModal open onClose={onClose} onAddMembers={onAddMembers} boardTitle="Launch Plan" boardId="board-1" />
     );
     await screen.findByText('Ada Lovelace');
     await user.click(memberRow('Ada Lovelace'));
+    await user.type(screen.getByLabelText('Search team members'), 'grace');
 
     rerender(
       <AddMemberModal
@@ -289,8 +311,8 @@ describe('AddMemberModal leaving without adding anybody', () => {
 
     await screen.findByText('Ada Lovelace');
     expect(memberRow('Ada Lovelace')).toHaveAttribute('aria-pressed', 'false');
-    const footer = screen.getByRole('button', { name: /^Add Member/ });
-    expect(footer).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Add Member/ })).toBeDisabled();
     expect(within(screen.getByRole('dialog')).getByText('0 members selected')).toBeInTheDocument();
+    expect(screen.getByLabelText('Search team members')).toHaveValue('');
   });
 });

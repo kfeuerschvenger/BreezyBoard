@@ -5,6 +5,7 @@ import type { User } from '@/models';
 export const userKeys = {
   detail: (userId: string) => ['user', userId] as const,
   boardMembers: (boardId: string) => ['users', 'board-members', boardId] as const,
+  search: (term: string, boardId: string) => ['users', 'search', term, boardId] as const,
 };
 
 export const useUser = (userId: string | null) =>
