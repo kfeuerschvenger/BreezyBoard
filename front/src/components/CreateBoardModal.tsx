@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { resolveIcon } from '@/shared/lib/lucideIcons';
-import { TemplateService, ColorService } from '@/services';
+import { useColors } from '@/features/colors';
+import { useTemplates } from '@/features/boards';
 import type { Template, Color } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
 import { Button, Field, Input, Modal, SwatchPicker, Textarea } from '@/shared/ui';
@@ -25,6 +26,11 @@ interface CreateBoardModalProps {
 
 const EMPTY: BoardFormData = { title: '', description: '', color: '', template: '' };
 
+// Stable identities for the two lists while their requests are in flight, so
+// the defaults effect below is not re-run by a fresh literal every render.
+const NO_COLORS: Color[] = [];
+const NO_TEMPLATES: Template[] = [];
+
 // The legend carries the same weight as a Field's label, so the two groups
 // below read as part of the same form rather than as decoration.
 const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-heading';
@@ -41,12 +47,25 @@ const OPTION_CLASSES =
   'has-[:checked]:border-blue-500 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
 
 const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCreateBoard }) => {
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [boardColors, setBoardColors] = useState<Color[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [loadFailed, setLoadFailed] = useState(false);
-  // Bumped to ask the fetch below to run again.
-  const [loadAttempt, setLoadAttempt] = useState(0);
+  // Both lists come from the cache rather than from an effect here. The board
+  // palette in particular was being fetched twice on the same screen: the
+  // dashboard behind this modal already holds it, and opening the modal asked
+  // the server for it again. Measured before the change, one request on load
+  // and a second on open.
+  //
+  // What the failure branch below used to be is worth keeping in mind. It
+  // logged and said nothing else, so a failed load left both lists empty, the
+  // schema requires both, and the create button was disabled forever with no
+  // indication of why. The form looked ordinary and was permanently dead. It
+  // surfaced twice as "the submit button never became enabled" and was twice
+  // diagnosed as a timing problem.
+  const colorsQuery = useColors('board');
+  const templatesQuery = useTemplates(open);
+
+  const boardColors = colorsQuery.data ?? NO_COLORS;
+  const templates = templatesQuery.data ?? NO_TEMPLATES;
+  const isLoading = colorsQuery.isPending || templatesQuery.isPending;
+  const loadFailed = colorsQuery.isError || templatesQuery.isError;
 
   const {
     control,
@@ -80,36 +99,8 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   const wasOpenRef = useRef(open);
 
   useEffect(() => {
-    if (open) {
-      hasRestoredDraftRef.current = false;
-    }
-
-    const fetchData = async () => {
-      try {
-        const [templatesData, colorsData] = await Promise.all([
-          TemplateService.getAll(),
-          ColorService.getByType('board'),
-        ]);
-        setTemplates(templatesData ?? []);
-        setBoardColors(colorsData ?? []);
-        setLoadFailed(false);
-      } catch (error) {
-        // This used to log and say nothing else, which produced the worst
-        // possible failure: the colour and template lists stayed empty, the
-        // schema requires both, and so the create button was disabled
-        // forever with no indication of why. The form looked ordinary and
-        // was permanently dead. It showed up twice as an intermittent test
-        // failure reading "the submit button never became enabled", and was
-        // twice diagnosed as a timing problem before anybody looked here.
-        console.error('Error loading data:', error);
-        setLoadFailed(true);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (open) fetchData();
-  }, [open, loadAttempt]);
+    if (open) hasRestoredDraftRef.current = false;
+  }, [open]);
 
   // Defaults and restore in one effect rather than two, which is the one
   // real simplification the form library buys here. They used to be
@@ -137,6 +128,23 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   // keystroke racing this effect has nothing to collide with.
   useEffect(() => {
     if (!open || isLoading || hasRestoredDraftRef.current) return;
+
+    // Nothing to default from yet, so this effect has not done its job and
+    // must not mark itself as having done it. A failed load leaves both lists
+    // empty while `isLoading` is false, and marking done there is what makes
+    // the retry below land the data and change nothing: the colour and
+    // template arrive, the effect refuses to run, and the create button stays
+    // disabled with no visible reason.
+    //
+    // The previous version avoided this by resetting the flag whenever the
+    // retry counter changed, which worked and said nothing about why. Saying
+    // it here means a retry needs no signal of its own.
+    // Both, not either. The schema requires a colour and a template, so
+    // until both lists are in hand there is no complete set of defaults to
+    // apply, and a partial pass would mark the job done with one field still
+    // empty. A load where one request succeeds and the other fails is
+    // exactly the case the retry below exists for.
+    if (boardColors.length === 0 || templates.length === 0) return;
 
     const restored = draft.read();
     const firstColor = boardColors[0]?._id ?? boardColors[0]?.value ?? '';
@@ -221,7 +229,10 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
           The colours and templates could not be loaded, so a board cannot be created yet.{' '}
           <button
             type="button"
-            onClick={() => setLoadAttempt(attempt => attempt + 1)}
+            onClick={() => {
+              void colorsQuery.refetch();
+              void templatesQuery.refetch();
+            }}
             className="underline cursor-pointer"
           >
             Try again

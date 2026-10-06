@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { renderWithQuery } from '@/test/renderWithQuery';
 import userEvent from '@testing-library/user-event';
 import CreateBoardModal from './CreateBoardModal';
 import { ColorService, TemplateService } from '@/services';
@@ -58,7 +59,7 @@ afterEach(() => {
 });
 
 const open = (onCreateBoard = vi.fn(), onClose = vi.fn()) => {
-  const view = render(<CreateBoardModal open onClose={onClose} onCreateBoard={onCreateBoard} />);
+  const view = renderWithQuery(<CreateBoardModal open onClose={onClose} onCreateBoard={onCreateBoard} />);
   return { ...view, onCreateBoard, onClose };
 };
 
@@ -84,6 +85,15 @@ const storeDraft = (value: BoardDraft) =>
   window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), value }));
 
 describe('CreateBoardModal', () => {
+  // The endpoint serves three palettes and the mock answers the same list
+  // whichever one is asked for, so without this nothing says the board
+  // palette is the one being read.
+  it('asks for the board palette, not another one', async () => {
+    open();
+
+    await waitFor(() => expect(mockedColorService.getByType).toHaveBeenCalledWith('board'));
+  });
+
   it('cannot be submitted until it has a name', async () => {
     const user = userEvent.setup();
     open();
@@ -219,6 +229,36 @@ describe('CreateBoardModal', () => {
       });
     });
 
+    // The restore and a keystroke race on the same transition, and the test
+    // above cannot see the loser: it stores a draft and types nothing, so
+    // writing the restored value over an empty field looks identical to
+    // leaving the field alone. This one types first.
+    it('leaves a name typed before the restore alone, rather than replacing it', async () => {
+      storeDraft({ title: 'From yesterday', description: '', color: 'color-green', template: 'template-sprint' });
+
+      let releaseColors: (colors: Color[]) => void = () => {};
+      mockedColorService.getByType.mockReturnValue(
+        new Promise<Color[]>(resolve => {
+          releaseColors = resolve;
+        })
+      );
+
+      const user = userEvent.setup();
+      open();
+
+      // The restore waits on the colours, so there is a window here where
+      // the form is live and the stored draft has not been applied yet.
+      await user.type(titleBox(), 'Typed just now');
+
+      await act(async () => {
+        releaseColors(COLORS);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+      await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+
+      expect(titleBox()).toHaveValue('Typed just now');
+    });
+
     it('never writes an empty snapshot over a draft that has not been restored yet', async () => {
       // The documented trap: the autosave effect also fires the instant the
       // modal opens, before the async colour and template fetch resolves. If
@@ -235,7 +275,7 @@ describe('CreateBoardModal', () => {
     it('clears the draft once the board has been created and the modal has closed', async () => {
       const user = userEvent.setup();
       const onCreateBoard = vi.fn();
-      const { rerender } = render(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={onCreateBoard} />);
+      const { rerender } = renderWithQuery(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={onCreateBoard} />);
 
       await waitFor(() => expect(titleBox()).toBeInTheDocument());
       await user.type(titleBox(), 'Launch plan');
@@ -252,7 +292,7 @@ describe('CreateBoardModal', () => {
 
     it('keeps the draft when the modal is closed without submitting', async () => {
       const user = userEvent.setup();
-      const { rerender } = render(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={vi.fn()} />);
+      const { rerender } = renderWithQuery(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={vi.fn()} />);
 
       await waitFor(() => expect(titleBox()).toBeInTheDocument());
       await user.type(titleBox(), 'Changed my mind');
@@ -321,7 +361,7 @@ describe('CreateBoardModal when a keystroke lands while the defaults are applied
       })
     );
 
-    render(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={vi.fn()} />);
+    renderWithQuery(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={vi.fn()} />);
 
     const input = screen.getByPlaceholderText('Enter board name') as HTMLInputElement;
     input.value = 'Typed during the load';

@@ -454,6 +454,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 5d, create board on the cache | Done | `useColors` and `useTemplates` replace an effect that refetched a palette the dashboard already held |
 | 5d, remember me removed | Done | A checkbox nothing read and nothing sent, so ticking it did nothing (P4-14) |
 | 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
 | 5d, remaining decomposition | Open | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
@@ -1288,6 +1289,14 @@ The first unreachable branch is the custom "Email is invalid" message. The field
 The second is "Forgot password?", which was a `Link to="#"` whose own handler cancelled the navigation it had just asked for. It opens a dialog on this page and goes nowhere, so it is a button.
 
 **P4-14, a control that does nothing.** The "Remember me" checkbox on the login page appears four times in that one file and nowhere else in the frontend or the backend. It is uncontrolled, nothing reads it, nothing sends it, and ticking it has no effect anywhere in the product. Removed, on Kevin's call, rather than implemented. A session that outlives the tab is a decision about the session contract in section 9 and its two clocks, not a checkbox on a form, so shipping the checkbox would have meant promising something the session design has not been asked for. Leaving it was the one option that was certainly wrong.
+
+**The create board dialog, and a palette fetched twice on one screen.** The dialog loaded its colours and its templates with an effect of its own, and the colours it asked for are the list the dashboard behind it already holds in the cache. Measured before the change: one request for the board palette when the dashboard loads, and a second when the dialog opens, for the same list.
+
+Both lists come from the cache now, and the measurement after says what was wanted. The dashboard still makes its one palette request. Opening the dialog fetches the templates and does not touch the palette. Reopening it fetches nothing at all.
+
+The templates query is gated on the dialog being open, and that gate is the interesting half. Ungated it moved the request earlier rather than removing it: the dialog is mounted closed on every dashboard load, so every visit paid for a list most visits never look at. The effect it replaced had that right with its `if (open)`, and the first version of this migration quietly lost it. The measurement is what noticed.
+
+One defect was introduced by this change and caught by the suite written before it. The effect that applies the defaults and restores the draft marks itself done once it has run, and the old code reset that flag whenever the retry counter changed. Splitting the fetch out dropped the reset, so a retry landed the data and changed nothing: the colour and template arrived, the effect refused to run, and the create button stayed disabled with no visible reason. It now refuses to mark itself done until both lists are in hand, which says the intent directly and needs no retry signal.
 
 **P4-13, two controls rendered in the wrong place, and the gate that could not have caught them.** The register page's two password reveal toggles were positioned with `absolute` inside a parent that was never made `relative`, so both resolved against an ancestor further up the page. Measured on the running application before anything was changed: the password toggle at y=441 against a field spanning 459 to 509, the confirm toggle at y=440 against a field spanning 560 to 610, and the two of them one pixel apart. They were stacked on each other, above the first field, and neither was on the field it belonged to. Whichever painted last took every click, so the control a person could see and press toggled the other field.
 

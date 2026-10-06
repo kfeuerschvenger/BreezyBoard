@@ -8,6 +8,7 @@ export {
   useCreateBoard,
   useDeleteBoard,
   useAddBoardMembers,
+  useTemplates,
 } from './queries';
 export { BoardCard } from './components/BoardCard';
 export type { BoardCardProps } from './components/BoardCard';
