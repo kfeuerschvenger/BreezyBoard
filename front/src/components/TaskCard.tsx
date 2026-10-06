@@ -116,19 +116,30 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, color = COLOR_FALLBACK, onCli
           )}
         </div>
 
-        {/* Drag handle. The dnd-kit spreads MUST come last: they supply onPointerDown and
-            onKeyDown, which are the sensor activators, and a duplicate JSX prop declared
-            after a spread silently replaces them. aria-label survives because dnd-kit does
-            not set it, and onClick is not an activator. */}
-        <div
-          className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600"
+        {/*
+          A real button rather than a div carrying a role. As a div it relied
+          on dnd-kit to supply the role, the tab stop and the key handling,
+          none of which static analysis can see through a spread, so it sat
+          under two permanent accessibility warnings that could not be
+          answered without rewriting it. A button needs none of them to be
+          reachable, and dnd-kit's own attributes sit on top unchanged.
+
+          The dnd-kit spreads MUST still come last: they supply onPointerDown
+          and onKeyDown, which are the sensor activators, and a duplicate JSX
+          prop declared after a spread silently replaces them. That is finding
+          P0-3. aria-label survives because dnd-kit does not set it, and
+          onClick is not an activator.
+        */}
+        <button
+          type="button"
+          className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
           aria-label="Drag handle"
           onClick={stopAndHandle}
           {...attributes}
           {...listeners}
         >
           <GripVertical size={16} />
-        </div>
+        </button>
       </div>
 
       {/* Progress / checklist */}
@@ -155,11 +166,22 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, color = COLOR_FALLBACK, onCli
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {/*
+            Not aria-hidden any more. Finding P4-3 recorded this whole badge
+            as hidden, which hid real information rather than a decorative
+            icon: it is the only place a task shows its priority, so a card
+            said nothing about it at all.
+
+            The icon is hidden instead, because the word beside it already
+            says the same thing, and the word gains a subject that is carried
+            for assistive technology only, so the badge still reads as one
+            word on screen.
+          */}
           <span
             className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${priorityClass}`}
-            aria-hidden="true"
           >
-            <PriorityIcon size={12} />
+            <PriorityIcon size={12} aria-hidden="true" />
+            <span className="sr-only">Priority: </span>
             {priority}
           </span>
         </div>

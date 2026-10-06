@@ -85,35 +85,6 @@ const layerBoundaries = [
   },
 ];
 
-/**
- * The accessibility rules that the pre-migration code cannot satisfy yet,
- * held at warn in the directories that Phase 5c is going to rewrite anyway.
- *
- * This is a ratchet, not an amnesty. Everything written from here on lives
- * under `shared/`, `features/` and `app/`, where these same rules are errors
- * from birth, so new code cannot add to the pile. Each legacy file drops out
- * of this list as it migrates, and the list is expected to reach empty and
- * be deleted.
- *
- * As of the day the gate went in: ten unassociated labels across
- * CreateBoardModal and TaskDrawer, and four elements carrying a click
- * handler with no keyboard equivalent, in TaskCard, TaskDrawer and
- * BoardDashboard. Every one of them is already written up as P4-3.
- *
- * They are warnings rather than errors for one reason worth stating: two of
- * the four click handlers are the drag handle and the owner suggestion
- * list, and rewriting those means touching the code that P0-3 and P2-6a
- * live in. That belongs in a change about drag and dropdowns, judged on its
- * own, not smuggled into the commit that installs a linter.
- */
-const legacyAccessibilityDebt = {
-  files: ['src/components/**/*.{ts,tsx}', 'src/pages/**/*.{ts,tsx}'],
-  rules: {
-    'jsx-a11y/label-has-associated-control': 'warn',
-    'jsx-a11y/click-events-have-key-events': 'warn',
-    'jsx-a11y/no-static-element-interactions': 'warn',
-  },
-};
 
 export default tseslint.config([
   globalIgnores(['dist']),
@@ -136,5 +107,4 @@ export default tseslint.config([
     },
   },
   ...layerBoundaries,
-  legacyAccessibilityDebt,
 ]);
