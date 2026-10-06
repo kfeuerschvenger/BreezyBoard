@@ -386,7 +386,9 @@ Related: 10 or more source files import from `framer-motion`, which is not a dec
 
 ### Status
 
-Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
+Phases 0 through 5 are complete. Phases 6 and 7 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
+
+Five things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. `P2-6a`, the intermittent drag pickup, is still open with the measurements taken so far. The contrast of the colours the new `Avatar` introduced has not been measured. `shared/ui/Menu` was not written, and 12.6b says why. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
 
 | Phase | State | Evidence |
 |---|---|---|
@@ -462,8 +464,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, create board on the cache | Done | `useColors` and `useTemplates` replace an effect that refetched a palette the dashboard already held |
 | 5d, remember me removed | Done | A checkbox nothing read and nothing sent, so ticking it did nothing (P4-14) |
 | 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
-| 5d, section 12.5 | **Done** | Every row closed. What remains is the line targets in 12.6 and the smaller notes recorded above |
-| 5d, remaining decomposition | Closed | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
+| 5d, section 12.5 | **Done** | Every row closed. Nine pages and modals decomposed, five files deleted outright, eight findings opened and closed |
+| 5c and 5d overall | **Done** | Phase 5 is complete. What is left of it is three line targets in section 12.6, each recorded in 12.6b with the reason |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
