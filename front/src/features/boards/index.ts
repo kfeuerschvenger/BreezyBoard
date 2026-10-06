@@ -9,8 +9,6 @@ export {
   useDeleteBoard,
   useAddBoardMembers,
 } from './queries';
-export { BOARD_COLOR_FALLBACK, resolveBoardColor, toColorLookup } from './boardColor';
-export type { ColorLookup } from './boardColor';
 export { BoardCard } from './components/BoardCard';
 export type { BoardCardProps } from './components/BoardCard';
 export { BoardCardMenu } from './components/BoardCardMenu';

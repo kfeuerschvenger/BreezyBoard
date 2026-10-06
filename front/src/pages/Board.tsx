@@ -17,7 +17,7 @@ const Board = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Partial<Task> | null>(null);
 
-  const { board, columns, tasks, cache, isLoading, error } = useBoardData(boardId);
+  const { board, columns, tasks, taskColors, cache, isLoading, error } = useBoardData(boardId);
 
   const drag = useTaskDragAndDrop({
     tasks,
@@ -142,7 +142,7 @@ const Board = () => {
       </PageHeader>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
-        <BoardColumns columns={columns} tasks={tasks} drag={drag} onTaskClick={openTask} />
+        <BoardColumns columns={columns} tasks={tasks} drag={drag} taskColors={taskColors} onTaskClick={openTask} />
 
         <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />
       </motion.div>
