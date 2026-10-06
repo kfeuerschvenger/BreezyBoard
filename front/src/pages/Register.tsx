@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import AuthLayout from '@/components/AuthLayout';
-import RegisterForm from '@/components/RegisterForm';
+import { RegisterForm } from '@/features/auth';
 
 const RegisterPage: React.FC = () => {
   return (

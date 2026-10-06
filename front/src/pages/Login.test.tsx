@@ -47,6 +47,22 @@ describe('Login validation', () => {
     expect(login).not.toHaveBeenCalled();
   });
 
+  // The page's own message could not appear at all while the field was
+  // type="email" on a validating form: the browser blocked the submit before
+  // the handler ran, so the person got the browser's wording and none of the
+  // page's styling, and the branch that wrote this message was unreachable.
+  it('refuses something that is not an email, in its own words', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.type(emailField(), 'not-an-email');
+    await user.type(passwordField(), 'correct horse');
+    await user.click(submit());
+
+    expect(await screen.findByText('Email is invalid')).toBeInTheDocument();
+    expect(login).not.toHaveBeenCalled();
+  });
+
   it('refuses a password too short to be one', async () => {
     const user = userEvent.setup();
     renderLogin();
