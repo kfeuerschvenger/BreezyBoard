@@ -79,16 +79,19 @@ describe('Profile rendering', () => {
     renderProfile();
 
     expect(await screen.findByText('AL')).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: 'Profile' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
+  // Queried as an element rather than by role. The avatar is decorative here
+  // on purpose: the person's name is written directly underneath it, so
+  // naming the picture as well announces them twice.
   it('shows the avatar image once the profile has one', async () => {
     mockedUserService.getById.mockResolvedValue({ ...PROFILE, avatar: '/uploads/avatars/ada.png' });
 
-    renderProfile();
+    const { container } = renderProfile();
 
-    const image = await screen.findByRole('img', { name: 'Profile' });
-    expect(image).toHaveAttribute('src', '/uploads/avatars/ada.png');
+    await waitFor(() => expect(container.querySelector('img')).toHaveAttribute('src', '/uploads/avatars/ada.png'));
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
   // A record with no createdAt reached `new Date('')`, which formats as the
@@ -224,8 +227,9 @@ describe('Profile avatar', () => {
     await user.upload(screen.getByLabelText('Change avatar'), file);
 
     await waitFor(() => expect(mockedUserService.uploadAvatar).toHaveBeenCalledWith('user-ada', file));
-    const image = await screen.findByRole('img', { name: 'Profile' });
-    expect(image).toHaveAttribute('src', '/uploads/avatars/ada.png');
+    await waitFor(() =>
+      expect(document.querySelector('img')).toHaveAttribute('src', '/uploads/avatars/ada.png')
+    );
   });
 
   // The input was hidden with Tailwind's `hidden`, which compiles to

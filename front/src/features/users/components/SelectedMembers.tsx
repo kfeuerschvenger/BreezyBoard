@@ -1,6 +1,7 @@
 import React from 'react';
 import { UserPlus, X } from 'lucide-react';
 import type { User } from '@/models';
+import { Avatar } from '@/shared/ui';
 
 export interface SelectedMembersProps {
   members: User[];
@@ -27,17 +28,7 @@ export const SelectedMembers: React.FC<SelectedMembersProps> = ({ members, onRem
             key={member._id}
             className="flex items-center gap-2 bg-white px-3 py-1 rounded-full border border-blue-200"
           >
-            {member.avatar ? (
-              <img src={member.avatar} alt="" className="w-5 h-5 rounded-full object-cover" />
-            ) : (
-              <div
-                className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500"
-                aria-hidden="true"
-              >
-                {member.firstName?.[0]}
-                {member.lastName?.[0]}
-              </div>
-            )}
+            <Avatar name={fullName(member)} src={member.avatar} size="sm" decorative className="w-5 h-5 text-[10px]" />
             <span className="text-sm text-gray-700">{fullName(member)}</span>
             <button
               type="button"

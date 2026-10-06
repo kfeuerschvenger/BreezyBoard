@@ -454,6 +454,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 5d, avatar promoted | Done | `shared/ui/Avatar` replaces five hand-written copies and the one-caller component built for it (P3-6) |
 | 5d, user menu extracted | Done | `users/UserMenu`, named independently of a breakpoint (P4-15). `UserAvatar` 232 to 45 |
 | 5d, create board composed | Done | `TemplatePicker` out, the dialog in `features/boards`. 306 to 264 |
 | 5d, create board on the cache | Done | `useColors` and `useTemplates` replace an effect that refetched a palette the dashboard already held |
@@ -1299,6 +1300,12 @@ Both lists come from the cache now, and the measurement after says what was want
 The templates query is gated on the dialog being open, and that gate is the interesting half. Ungated it moved the request earlier rather than removing it: the dialog is mounted closed on every dashboard load, so every visit paid for a list most visits never look at. The effect it replaced had that right with its `if (open)`, and the first version of this migration quietly lost it. The measurement is what noticed.
 
 One defect was introduced by this change and caught by the suite written before it. The effect that applies the defaults and restores the draft marks itself done once it has run, and the old code reset that flag whenever the retry counter changed. Splitting the fetch out dropped the reset, so a retry landed the data and changed nothing: the colour and template arrived, the effect refused to run, and the create button stayed disabled with no visible reason. It now refuses to mark itself done until both lists are in hand, which says the intent directly and needs no retry signal.
+
+**The avatar, written five times and already solved once.** P3-6 records the avatar-with-initials fallback as written three times while `SimpleUserAvatar` already existed for it. The count was low: it was hand-written in the user menu twice, in the selected member chips, in the member search rows, and on the profile card, while the component built for the job had exactly one caller.
+
+It is `shared/ui/Avatar` now and the five copies are gone. Two things changed in the promotion rather than being carried across. It takes a name instead of a user, so a shared primitive does not need to know what a user is and the initials rule lives in one place. And it takes a `decorative` flag, because the two uses are genuinely different: an avatar standing alone needs a name, and one with the person's name written beside it must not announce it a second time. Every hand-written copy did one or the other by accident.
+
+Two of the copies drew grey text on a grey circle, which is the avatar half of the contrast risk P4-5 names. They are on the primitive's blue on light blue now. That is a change in the right direction rather than a measured pass, and the contrast of the result has not been measured.
 
 **P4-15, a control with no name on a phone, and the breakpoint nobody scans.** The account control in the page header draws an avatar, a name that is `hidden md:block`, and a chevron. Below the medium breakpoint the name is `display:none` and therefore out of the accessibility tree, the chevron is `aria-hidden`, and the avatar wrapper carried `aria-hidden={!!user.avatar}`, so for anybody who had uploaded a picture the control had no accessible name at all. Measured at 390 pixels, where the button read as the two initials with no avatar and as nothing once one was set.
 
