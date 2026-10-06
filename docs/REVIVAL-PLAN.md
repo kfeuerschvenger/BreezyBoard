@@ -454,6 +454,7 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
 | 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 5d, create board composed | Done | `TemplatePicker` out, the dialog in `features/boards`. 306 to 264 |
 | 5d, create board on the cache | Done | `useColors` and `useTemplates` replace an effect that refetched a palette the dashboard already held |
 | 5d, remember me removed | Done | A checkbox nothing read and nothing sent, so ticking it did nothing (P4-14) |
 | 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
@@ -1075,7 +1076,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `Profile.tsx` | 380 | Done, 66 left. `users/ProfileSummary`, `users/ProfileForm`, `users/ProfileActions`, `users/AvatarUploader`, `useProfile` |
 | `AddMemberModal.tsx` | 335 | Done, 130 left. `users/AddMemberModal` over `shared/ui/Modal`, plus `useMemberSearch`, `MemberSearchResults` and `SelectedMembers`. Keeps its own search, see above |
 | `Board.tsx` | 348 | Done, 153 left. `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop`, `shared/ui/LoadingScreen` |
-| `CreateBoardModal.tsx` | 281 | `boards/CreateBoardForm` over `Modal`, `TemplatePicker`, `SwatchPicker` |
+| `CreateBoardModal.tsx` | 306 | Done, 264 left. In `features/boards` over `Modal`, `Field`, `SwatchPicker` and `boards/TemplatePicker`. The rest is the draft machinery |
 | `RegisterForm.tsx` | 247 | Done, 196 left. On `Field` and `PasswordInput`, in `features/auth` |
 | `Login.tsx` | 231 | Done, 61 left. `auth/LoginForm` on React Hook Form and Zod, the inline modal replaced by `auth/ForgotPasswordModal` over `Modal` |
 | `UserAvatar.tsx` | 234 | `users/UserMenu` over `shared/ui/Menu` and `Avatar` |
