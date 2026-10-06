@@ -64,26 +64,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, error, onDirty, 
           )}
         </Field>
 
-        <div className="flex items-center justify-between">
-          {/*
-            Carried over unchanged, and it does nothing. The checkbox is
-            uncontrolled, nothing reads it and nothing sends it, so ticking it
-            has no effect anywhere in the product. That is finding P4-14, and
-            it is left exactly as it was because removing a control a person
-            can see is a product decision rather than part of a move.
-          */}
-          <div className="flex items-center">
-            <input
-              id="remember-me"
-              name="remember-me"
-              type="checkbox"
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-            />
-            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
-              Remember me
-            </label>
-          </div>
-
+        {/*
+          There was a "Remember me" checkbox here. It was uncontrolled, no
+          part of the frontend or the backend read it, and nothing ever sent
+          it, so ticking it had no effect of any kind. Finding P4-14, removed
+          rather than implemented: a session that outlives the tab is a
+          decision about the session contract in section 9, not a checkbox.
+        */}
+        <div className="flex items-center justify-end">
           {/*
             A button, not a link. It opens a dialog on this page and
             navigates nowhere, and it used to be a `Link to="#"` with the
