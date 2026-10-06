@@ -28,7 +28,11 @@ const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
  * zero, so introducing a new one fails even though no number changed.
  */
 const BASELINE = {
-  login: { 'button-name': 1, 'heading-order': 1 },
+  // button-name was 1 here and its line is gone rather than sitting at zero.
+  // It was the password reveal toggle, written out by hand with no accessible
+  // name at all. It comes from shared/ui/PasswordInput now, which cannot be
+  // rendered without one.
+  login: { 'heading-order': 1 },
   register: { 'heading-order': 1 },
   dashboard: { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
   // button-name was 1 here and its line is gone rather than sitting at zero:
