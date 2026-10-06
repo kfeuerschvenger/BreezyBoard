@@ -453,6 +453,8 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, password toggles | Done | `shared/ui/PasswordInput` replaces three copies. Two were rendered off their fields and stacked (P4-13), one had no name |
 | 5d, FormInput retired | Done | `RegisterForm` and `ProfileForm` on `Field` and `Input`. `FormInput` deleted, closing its half of P4-3 |
 | 5a, rendered layout gate | Done | A standing script asserting a control sits on the field it belongs to, which no layer below a browser can check |
+| 5d, login on a form library | Done | `features/auth/LoginForm` on React Hook Form and Zod. `Login` 231 to 61 |
+| 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
 | 5d, remaining decomposition | Open | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
 | 6 onward | Not started | |
 
@@ -1072,8 +1074,8 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `AddMemberModal.tsx` | 335 | Done, 130 left. `users/AddMemberModal` over `shared/ui/Modal`, plus `useMemberSearch`, `MemberSearchResults` and `SelectedMembers`. Keeps its own search, see above |
 | `Board.tsx` | 348 | Done, 153 left. `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop`, `shared/ui/LoadingScreen` |
 | `CreateBoardModal.tsx` | 281 | `boards/CreateBoardForm` over `Modal`, `TemplatePicker`, `SwatchPicker` |
-| `RegisterForm.tsx` | 247 | On `Field` and `PasswordInput`, 196 left. Still to move into `features/auth` |
-| `Login.tsx` | 242 | `auth/LoginForm` on React Hook Form and Zod, its inline modal replaced by `Modal` |
+| `RegisterForm.tsx` | 247 | Done, 196 left. On `Field` and `PasswordInput`, in `features/auth` |
+| `Login.tsx` | 231 | Done, 61 left. `auth/LoginForm` on React Hook Form and Zod, the inline modal replaced by `auth/ForgotPasswordModal` over `Modal` |
 | `UserAvatar.tsx` | 234 | `users/UserMenu` over `shared/ui/Menu` and `Avatar` |
 | `TaskCard.tsx` | 222 | Colour fetching dropped, 199 left. Priority map still duplicated with `PrioritySelect`, see 12.6b |
 | `AuthLayout.tsx` | 167 | Moves to `app/layouts`, its two nested components split out |
@@ -1089,7 +1091,7 @@ A page should read as composition and nothing else: route params in, hooks for d
 | `BoardDashboard.tsx` | 140, from 513 | Under 70, not reached. See 12.6b |
 | `Profile.tsx` | 66, from 380 | Under 60, six lines short |
 | `Board.tsx` | 153, from 348 | Under 80, not reached. See 12.6b |
-| `Login.tsx` | 242 | Under 40 |
+| `Login.tsx` | 61, from 231 | Under 40, not reached |
 | `Register.tsx` | 26 | Unchanged |
 
 The reduction is not deletion, it is relocation. The `handleDragEnd` block in `Board.tsx:92-183` is 91 lines of business logic in a page component, and it is also finding P2-6, the drag concurrency problem. Moving it into `useTaskDragAndDrop` is what makes it testable, which is what makes P2-6 fixable with confidence.
@@ -1275,6 +1277,16 @@ P4-12 came out of a surviving mutation rather than out of reading. "Try again", 
 That is the second defect this session found by writing a mutation rather than by reading code, and both were the same shape: an assertion that a control exists, with nothing asserting it does anything. The mutation that deletes the handler is the cheapest way to find them.
 
 The decomposition also dropped a duplicate Escape handler. The modal registered its own window listener calling the raw `onClose` prop, while the shared `Modal` underneath it already handles Escape and calls the handler that resets the selection first. Both fired, and the component's own one bypassed the reset.
+
+**`Login`, a fifth modal P3-4 never counted, and two more unreachable branches.** 231 lines to 61, with the form in `features/auth/LoginForm` on React Hook Form and Zod. `RegisterForm` moved into the same feature, so auth is one place now.
+
+The forgot password dialog was written out by hand inside the login page: a backdrop, a panel, an animation and a close button, with no dialog role, no accessible name, no focus trap, no focus restoration, no Escape and a close button with no name. P3-4 counted four copies of the modal shell and this was a fifth. It is `auth/ForgotPasswordModal` over the shared `Modal` now, and the gate scans it open for the first time: its only reported violation is the login page's own heading order showing through from behind it, so the dialog contributes nothing of its own. That is the argument of P3-4 in one measurement.
+
+The first unreachable branch is the custom "Email is invalid" message. The field was `type="email"` on a validating form, so the browser refused the submit before the handler ran: the person saw the browser's own wording with none of the page's styling, and the line that wrote the page's message could never execute. Confirmed in a real browser, where the field reported `valid=false` with the browser's text while the page's message never rendered. The form carries `noValidate` now and Zod owns every message, which is the only way the two can agree.
+
+The second is "Forgot password?", which was a `Link to="#"` whose own handler cancelled the navigation it had just asked for. It opens a dialog on this page and goes nowhere, so it is a button.
+
+**P4-14, a control that does nothing.** The "Remember me" checkbox on the login page appears four times in that one file and nowhere else in the frontend or the backend. It is uncontrolled, nothing reads it, nothing sends it, and ticking it has no effect anywhere in the product. It is carried through the migration unchanged and commented in place, because removing a control a person can see is a product decision rather than part of a move. Either implement it or take it off the page; leaving it is the one option that is certainly wrong.
 
 **P4-13, two controls rendered in the wrong place, and the gate that could not have caught them.** The register page's two password reveal toggles were positioned with `absolute` inside a parent that was never made `relative`, so both resolved against an ancestor further up the page. Measured on the running application before anything was changed: the password toggle at y=441 against a field spanning 459 to 509, the confirm toggle at y=440 against a field spanning 560 to 610, and the two of them one pixel apart. They were stacked on each other, above the first field, and neither was on the field it belonged to. Whichever painted last took every click, so the control a person could see and press toggled the other field.
 

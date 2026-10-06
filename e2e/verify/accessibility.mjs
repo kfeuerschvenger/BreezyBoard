@@ -33,6 +33,14 @@ const BASELINE = {
   // name at all. It comes from shared/ui/PasswordInput now, which cannot be
   // rendered without one.
   login: { 'heading-order': 1 },
+  // Added on 2026-10-05, the first time this dialog was ever scanned. Its one
+  // number is the login page's own heading-order showing through from behind
+  // it, the `h3` in the auth layout: the dialog contributes nothing of its
+  // own. It was the fifth hand-written modal until this change and the one
+  // P3-4 missed, so it had no dialog role, no accessible name, no focus trap
+  // and a close button with no name. It comes from the shared Modal now, and
+  // that is the whole argument of P3-4 in one measurement.
+  'login, forgot password open': { 'heading-order': 1 },
   register: { 'heading-order': 1 },
   dashboard: { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
   // button-name was 1 here and its line is gone rather than sitting at zero:
@@ -144,6 +152,13 @@ const scan = async surface => {
 await page.goto(`${FRONT}/login`);
 await page.waitForSelector('form');
 await scan('login');
+
+// The forgot password dialog was the fifth hand-written modal and the one
+// finding P3-4 missed, which is exactly what an unscanned state buys you. It
+// is scanned now, open.
+await page.getByRole('button', { name: /forgot password/i }).click();
+await page.waitForTimeout(400);
+await scan('login, forgot password open');
 
 await page.goto(`${FRONT}/register`);
 await page.waitForSelector('form').catch(() => {});
