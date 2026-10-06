@@ -1,0 +1,130 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
+import type { User } from '@/models';
+import { Button, Modal } from '@/shared/ui';
+import { useMemberSearch } from '../hooks/useMemberSearch';
+import { MemberSearchResults } from './MemberSearchResults';
+import { SelectedMembers } from './SelectedMembers';
+
+export interface AddMemberModalProps {
+  open: boolean;
+  onClose: () => void;
+  /** Called with the people chosen, once the choice is confirmed. */
+  onAddMembers: (members: User[]) => void;
+  boardTitle?: string;
+  boardId?: string;
+}
+
+/**
+ * Search for people and add them to a board.
+ *
+ * The backdrop, the panel, the animation, the escape handler and the close
+ * button come from the shared Modal, which also traps focus and restores it
+ * to whatever opened the dialog. That was finding P3-4, the modal shell
+ * written out four times.
+ */
+export const AddMemberModal: React.FC<AddMemberModalProps> = ({
+  open,
+  onClose,
+  onAddMembers,
+  boardTitle = '',
+  boardId,
+}) => {
+  const [selected, setSelected] = useState<User[]>([]);
+  const search = useMemberSearch(boardId, open);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setSelected([]);
+      return;
+    }
+
+    // Focus the search field shortly after opening, so typing works without
+    // reaching for the mouse first. The delay lets the Modal finish its own
+    // focus handling rather than fighting it.
+    const timer = setTimeout(() => searchInputRef.current?.focus(), 80);
+    return () => clearTimeout(timer);
+  }, [open]);
+
+  const toggle = (member: User) =>
+    setSelected(previous =>
+      previous.some(entry => entry._id === member._id)
+        ? previous.filter(entry => entry._id !== member._id)
+        : [...previous, member]
+    );
+
+  const confirm = () => {
+    if (selected.length === 0) return;
+    onAddMembers(selected);
+    setSelected([]);
+    onClose();
+  };
+
+  const close = () => {
+    setSelected([]);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Add Members"
+      subtitle={boardTitle ? `Add team members to "${boardTitle}"` : 'Add team members'}
+      footer={
+        <>
+          <p className="text-sm text-gray-600 font-body">
+            {selected.length} member{selected.length !== 1 ? 's' : ''} selected
+          </p>
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={close}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={confirm} disabled={selected.length === 0}>
+              Add {selected.length > 0 ? selected.length : ''} Member{selected.length !== 1 ? 's' : ''}
+            </Button>
+          </div>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="p-6 border-b border-gray-200">
+          <div className="relative">
+            <Search
+              size={20}
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              aria-hidden="true"
+            />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search team members..."
+              value={search.term}
+              onChange={event => search.setTerm(event.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-body"
+              aria-label="Search team members"
+            />
+          </div>
+        </div>
+
+        <SelectedMembers members={selected} onRemove={toggle} />
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6">
+            <MemberSearchResults
+              members={search.results}
+              selectedIds={selected.map(member => member._id)}
+              isLoading={search.isLoading}
+              error={search.error}
+              onToggle={toggle}
+              onRetry={search.retry}
+            />
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default AddMemberModal;

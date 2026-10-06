@@ -446,7 +446,9 @@ Phase 0 and Phase 1 are complete, and Phase 2 is in progress. Everything below t
 | 5d, profile accessibility | Done | Joined date no longer reads Invalid Date (P4-10), avatar upload reachable by keyboard (P4-11) |
 | 5a, gate covers the profile | Done | A seventh surface, measured and budgeted. Its first run found a prohibited aria-label in `PageHeader` |
 | 5d, profile composed | Done | `useProfile`, `ProfileSummary`, `ProfileForm`, `ProfileActions`, `AvatarUploader`. `Profile` 380 to 66 |
-| 5d, remaining decomposition | Open | `AddMemberModal` 335 and the smaller rows of section 12.5 |
+| 5d, add member modal | Done | `features/users/AddMemberModal` over `useMemberSearch`, `MemberSearchResults`, `SelectedMembers`. 335 to 130 |
+| 5d, member search retry | Done | Try again refetches instead of clearing an already empty term (P4-12) |
+| 5d, remaining decomposition | Open | The smaller rows of section 12.5: `CreateBoardModal`, `RegisterForm`, `Login`, `UserAvatar`, `TaskCard`, `AuthLayout` |
 | 6 onward | Not started | |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
@@ -1062,7 +1064,7 @@ Corrected on extraction: the two are not one component. The picker in the drawer
 | `TaskDrawer.tsx` | 852 | Done, 32 left. `tasks/TaskDrawer` shell, `tasks/TaskForm`, `tasks/Checklist`, `tasks/PrioritySelect`, `users/UserPicker`, `shared/ui/SwatchPicker`, `useTaskForm` and `useTaskDrawer` |
 | `BoardDashboard.tsx` | 513 | Done, 140 left. `boards/BoardCard`, `boards/BoardCardMenu`, `boards/BoardStats`, `useBoardDashboard`, `useBoardMenu`, `shared/ui/StatTile` and `EmptyState` |
 | `Profile.tsx` | 380 | Done, 66 left. `users/ProfileSummary`, `users/ProfileForm`, `users/ProfileActions`, `users/AvatarUploader`, `useProfile` |
-| `AddMemberModal.tsx` | 370 | `users/AddMemberModal` shell over `shared/ui/Modal` plus the shared `UserPicker` |
+| `AddMemberModal.tsx` | 335 | Done, 130 left. `users/AddMemberModal` over `shared/ui/Modal`, plus `useMemberSearch`, `MemberSearchResults` and `SelectedMembers`. Keeps its own search, see above |
 | `Board.tsx` | 348 | Done, 153 left. `tasks/BoardColumns`, `useBoardData`, `useTaskDragAndDrop`, `shared/ui/LoadingScreen` |
 | `CreateBoardModal.tsx` | 281 | `boards/CreateBoardForm` over `Modal`, `TemplatePicker`, `SwatchPicker` |
 | `RegisterForm.tsx` | 247 | `auth/RegisterForm` over `Field`, plus `PasswordInput` for the toggle repeated 3 times |
@@ -1258,6 +1260,16 @@ And the summary takes the form's current values as one object rather than seven 
 Twelve mutations were run across the four new files and eleven were caught first time. The survivor made `save` answer that it worked after being refused, which shows the confirmation and the failure side by side; the test asserted the failure half and never checked that the confirmation stayed away. It does now.
 
 Six lines short of the target, and the last six are not worth inventing a component for. What is left is the header block, the two card call sites and the success modal, which is a page composing its parts.
+
+**`AddMemberModal`, and P4-12, a retry that could not retry.** 335 lines to 130, over `useMemberSearch`, `MemberSearchResults` and `SelectedMembers`. The row in section 12.5 above already records why this modal keeps its own search rather than sharing `UserPicker`, and nothing here changes that reading.
+
+The search moved onto the query cache, and the point is what came out rather than what went in. A request id and a mounted flag were tracking which answer was allowed to win, by hand. Each term is its own cache key now, so a slow search resolving late lands under a key nobody is reading, and both refs are gone. The guard had never been tested either; it has a test now, written before the move and passing on both sides of it.
+
+P4-12 came out of a surviving mutation rather than out of reading. "Try again", offered beside a failed search, called nothing but a function that cleared the search term. The search that fails most often is the one that runs as the modal opens, where the term is already empty, so clearing it changed no state, moved no query key and ran nothing: the button did nothing at all in precisely the case it exists for. It refetches now.
+
+That is the second defect this session found by writing a mutation rather than by reading code, and both were the same shape: an assertion that a control exists, with nothing asserting it does anything. The mutation that deletes the handler is the cheapest way to find them.
+
+The decomposition also dropped a duplicate Escape handler. The modal registered its own window listener calling the raw `onClose` prop, while the shared `Modal` underneath it already handles Escape and calls the handler that resets the selection first. Both fired, and the component's own one bypassed the reset.
 
 **The unit suite flakes under CPU contention, and this is what was measured.** Worth recording before someone spends a session chasing it as a regression.
 
