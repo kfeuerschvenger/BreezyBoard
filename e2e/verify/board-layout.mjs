@@ -265,6 +265,73 @@ for (const viewport of VIEWPORTS) {
   );
 }
 
+log("\n--- a board with no tasks at all ---");
+
+const emptyBoard = await req("POST", "/boards", token, {
+  title: "Empty layout board",
+  description: "no tasks",
+  color: boardColors.body.data[0]._id,
+  template: templates.body.data[0]._id,
+});
+const emptyId = emptyBoard.body.data._id;
+
+for (const viewport of VIEWPORTS) {
+  await page.setViewportSize({
+    width: viewport.width,
+    height: viewport.height,
+  });
+  await page.goto(`${FRONT}/board/${emptyId}`);
+  await page.getByRole("region", { name: "Board columns" }).waitFor();
+  await settle();
+
+  const banner = page.getByRole("heading", { level: 2, name: /no tasks yet/i });
+  const add = page.getByRole("button", { name: "Add task", exact: true });
+  const addBox = await add.boundingBox();
+  const state = await page.evaluate(() => {
+    const doc = document.documentElement;
+    const row = document.querySelector(
+      '[role="region"][aria-label="Board columns"]',
+    );
+    const column = row
+      .querySelector("h2")
+      .closest('div[class*="shrink-0"]')
+      .parentElement.getBoundingClientRect();
+    return {
+      wide: doc.scrollWidth - doc.clientWidth,
+      tall: doc.scrollHeight - doc.clientHeight,
+      columnBottom: Math.round(column.bottom),
+      columnHeight: Math.round(column.height),
+      viewportHeight: window.innerHeight,
+    };
+  });
+
+  check(
+    `${viewport.name}: the empty board banner and its button are on screen`,
+    (await banner.isVisible()) &&
+      Boolean(addBox) &&
+      addBox.y + addBox.height <= viewport.height &&
+      addBox.x + addBox.width <= viewport.width,
+  );
+  check(
+    `${viewport.name}: the banner does not make the page scroll`,
+    state.wide <= 0 && state.tall <= 0,
+    `wide ${state.wide}, tall ${state.tall}`,
+  );
+  check(
+    `${viewport.name}: the columns are still there and still reach the bottom`,
+    state.columnHeight > 150 && state.columnBottom > state.viewportHeight - 40,
+    `column is ${state.columnHeight}px tall, ends at ${state.columnBottom}`,
+  );
+}
+
+await page.goto(`${FRONT}/board/${boardId}`);
+await page.getByRole("region", { name: "Board columns" }).waitFor();
+await page.getByText("Layout task 1", { exact: true }).waitFor();
+check(
+  "a board that has tasks shows no empty board banner",
+  (await page.getByRole("heading", { name: /no tasks yet/i }).count()) === 0,
+);
+
 log("\n--- dragging toward a column that is off screen ---");
 
 await page.setViewportSize({ width: 390, height: 844 });
