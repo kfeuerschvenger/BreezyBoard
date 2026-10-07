@@ -21,7 +21,7 @@ const Board = () => {
 
   const drag = useTaskDragAndDrop({
     tasks,
-    columnIds: columns.map(column => column.id),
+    columns,
     cache,
   });
 

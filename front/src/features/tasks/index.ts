@@ -30,6 +30,7 @@ export type { TaskMoveMenuProps } from './components/TaskMoveMenu';
 export { useTaskMover } from './hooks/useTaskMover';
 export type {
   FocusRequest,
+  FocusTarget,
   MoveOutcome,
   MoveTarget,
   UseTaskMoverOptions,

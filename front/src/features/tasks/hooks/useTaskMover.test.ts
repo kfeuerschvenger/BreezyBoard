@@ -15,6 +15,10 @@ const mockedTaskService = vi.mocked(TaskService);
 
 const TODO = 'col-todo';
 const DONE = 'col-done';
+const COLUMNS = [
+  { id: TODO, title: 'To Do' },
+  { id: DONE, title: 'Done' },
+];
 
 const makeTask = (overrides: Partial<Task>): Task => ({
   _id: 'task-default',
@@ -130,6 +134,26 @@ describe('useTaskMover moving a card to a column from the menu', () => {
     expect(result.current.focusRequest).toMatchObject({ taskId: 'task-first' });
     expect(result.current.focusRequest).not.toBe(firstRequest);
   });
+
+  it('aims a menu move at the menu button and a requested focus at whichever control was asked for', () => {
+    const { result } = renderHook(() => useTaskMover({ tasks: TASKS, cache: makeCache() }));
+
+    act(() => result.current.requestFocus('task-first', 'drag-handle'));
+    expect(result.current.focusRequest).toMatchObject({ taskId: 'task-first', target: 'drag-handle' });
+
+    act(() => {
+      void result.current.moveToColumn(FIRST, { id: DONE, title: 'Done' });
+    });
+    expect(result.current.focusRequest).toMatchObject({ taskId: 'task-first', target: 'move-trigger' });
+  });
+
+  it('says whatever it is asked to in its live region', () => {
+    const { result } = renderHook(() => useTaskMover({ tasks: TASKS, cache: makeCache() }));
+
+    act(() => result.current.announce('Could not move First to Done.'));
+
+    expect(result.current.announcement).toBe('Could not move First to Done.');
+  });
 });
 
 describe('useTaskMover sharing its in-flight guard with dragging', () => {
@@ -153,7 +177,7 @@ describe('useTaskMover sharing its in-flight guard with dragging', () => {
         }),
     );
 
-    const { result } = renderHook(() => useTaskDragAndDrop({ tasks: TASKS, columnIds: [TODO, DONE], cache }));
+    const { result } = renderHook(() => useTaskDragAndDrop({ tasks: TASKS, columns: COLUMNS, cache }));
 
     let menuMove: Promise<unknown> = Promise.resolve();
     act(() => {

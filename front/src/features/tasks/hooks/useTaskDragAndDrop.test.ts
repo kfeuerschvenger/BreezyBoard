@@ -14,7 +14,10 @@ const mockedTaskService = vi.mocked(TaskService);
 
 const TODO = 'col-todo';
 const DONE = 'col-done';
-const COLUMN_IDS = [TODO, DONE];
+const COLUMNS = [
+  { id: TODO, title: 'To Do' },
+  { id: DONE, title: 'Done' },
+];
 
 const makeTask = (overrides: Partial<Task>): Task => ({
   _id: 'task-default',
@@ -48,10 +51,11 @@ const makeCache = (): TaskCache => ({
 // logic used to be reachable only by simulating a pointer over a layout that
 // jsdom does not compute.
 const dragStart = (taskId: string) => ({ active: { id: taskId } }) as DragStartEvent;
-const dragEnd = (overId: string | null) => ({ over: overId ? { id: overId } : null }) as DragEndEvent;
+const dragEnd = (overId: string | null, activatorEvent?: Event) =>
+  ({ over: overId ? { id: overId } : null, activatorEvent }) as DragEndEvent;
 
 const renderDrag = (cache: TaskCache, tasks: Task[] = TASKS) =>
-  renderHook(() => useTaskDragAndDrop({ tasks, columnIds: COLUMN_IDS, cache }));
+  renderHook(() => useTaskDragAndDrop({ tasks, columns: COLUMNS, cache }));
 
 describe('useTaskDragAndDrop picking a card up', () => {
   beforeEach(() => {
@@ -165,6 +169,36 @@ describe('useTaskDragAndDrop dropping a card', () => {
     expect(result.current.activeTask).toBeNull();
   });
 
+  // Landing in another column replaces the card with a new element, and the
+  // handle the person was holding is gone with the old one.
+  it('asks for focus on the drag handle after a keyboard drop, and not after a pointer drop', async () => {
+    const { result } = renderDrag(makeCache());
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    await act(async () => {
+      await result.current.onDragEnd(dragEnd(DONE, new MouseEvent('pointerdown')));
+    });
+    expect(result.current.mover.focusRequest).toBeNull();
+
+    act(() => result.current.onDragStart(dragStart('task-second')));
+    await act(async () => {
+      await result.current.onDragEnd(dragEnd(DONE, new KeyboardEvent('keydown', { code: 'Space' })));
+    });
+    expect(result.current.mover.focusRequest).toMatchObject({ taskId: 'task-second', target: 'drag-handle' });
+  });
+
+  it('lets go of the card when the drag is cancelled, without moving anything', () => {
+    const cache = makeCache();
+    const { result } = renderDrag(cache);
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragCancel());
+
+    expect(result.current.activeTask).toBeNull();
+    expect(mockedTaskService.move).not.toHaveBeenCalled();
+    expect(cache.write).not.toHaveBeenCalled();
+  });
+
   it('does nothing at all when the card is released outside every column', async () => {
     const cache = makeCache();
     const { result } = renderDrag(cache);
@@ -202,6 +236,17 @@ describe('useTaskDragAndDrop when a move fails', () => {
 
   // Restoring a snapshot taken before the drag would be wrong: by the time
   // the failure arrives it may be older than changes that did land.
+  // dnd-kit announces the drop and cannot know it failed, so the failure is the
+  // mover's to say, once, in its own live region.
+  it('announces the failure by task and column name', async () => {
+    mockedTaskService.move.mockRejectedValue(new Error('409 conflict'));
+    const { result } = renderDrag(makeCache());
+
+    await drop(result, 'task-first', DONE);
+
+    expect(result.current.mover.announcement).toBe('Could not move First to Done.');
+  });
+
   it('asks the server what the board looks like rather than restoring a snapshot', async () => {
     const cache = makeCache();
     mockedTaskService.move.mockRejectedValue(new Error('409 conflict'));

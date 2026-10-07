@@ -1,4 +1,5 @@
-import { test, expect, logInThroughTheUi, columnCount } from './fixtures';
+import type { Page } from '@playwright/test';
+import { test, expect, logInThroughTheUi, columnCount, seedBoard } from './fixtures';
 
 /**
  * The product's core loop. This single spec covers the two defects that were
@@ -93,7 +94,7 @@ test.describe('board core loop', () => {
         .poll(async () => (await page.locator('[role="status"]').allInnerTexts()).join(' ').toLowerCase(), {
           timeout: 5_000,
         })
-        .toContain('draggable');
+        .toContain('picked up');
       expect(await page.locator('[role="article"]').count(), 'the drag overlay renders a second card').toBe(2);
 
       for (let step = 1; step <= 25; step++) {
@@ -154,7 +155,7 @@ test.describe('board core loop', () => {
     await page.keyboard.press('Space');
     await expect
       .poll(async () => (await page.locator('[role="status"]').allInnerTexts()).join(' ').toLowerCase())
-      .toContain('draggable');
+      .toContain('picked up');
     await page.keyboard.press('Escape');
 
     expect(pageErrors, 'activating the keyboard sensor must not throw').toEqual([]);
@@ -269,6 +270,185 @@ test.describe('board core loop', () => {
     });
 
     expect(pageErrors, 'using the menu must not throw').toEqual([]);
+  });
+
+  /**
+   * Dragging with the keyboard on a row of columns. The sensor steps through
+   * positions on the board rather than through screen geometry, so the
+   * assertions are about where a card ends up and what is announced, and the
+   * reload is what proves the drop went through the real move path.
+   */
+  test.describe('moving a card with the keyboard sensor', () => {
+    const columnsOf = (page: Page) =>
+      page.evaluate(() => {
+        const row = document.querySelector('[role="region"][aria-label="Board columns"]')!;
+        return [...row.querySelectorAll('h2')].map(heading => {
+          const column = heading.closest('div[class*="shrink-0"]')!.parentElement!;
+          return `${heading.textContent}: ${[...column.querySelectorAll('h3')].map(card => card.textContent).join(', ')}`;
+        });
+      });
+
+    const handleOf = (page: Page, title: string) =>
+      page.locator('[role="article"]', { hasText: title }).locator('[aria-label="Drag handle"]');
+
+    // The drag handle that has focus, by the title of its card. The overlay is a
+    // second copy of the card for a moment after a drop, so a locator by title
+    // can match two handles and says nothing about which one holds focus.
+    const focusedHandleOf = (page: Page) =>
+      page.evaluate(() => {
+        const focused = document.activeElement;
+        return focused?.getAttribute('aria-label') === 'Drag handle'
+          ? (focused.closest('[role="article"]')?.querySelector('h3')?.textContent ?? null)
+          : null;
+      });
+
+    const dndAnnouncement = (page: Page) => page.locator('[id^="DndLiveRegion"]');
+
+    const startOn = async (page: Page, boardId: string, title: string) => {
+      await page.goto(`/board/${boardId}`);
+      await expect(page.getByRole('heading', { name: title, level: 3 })).toBeVisible();
+      // The cards fade in, and a handle focused mid animation is a stale box.
+      await page.waitForTimeout(600);
+    };
+
+    test('Enter picks up, arrows move across columns, Enter drops, focus returns and the order persists', async ({
+      page,
+      authedUser,
+    }) => {
+      const pageErrors: string[] = [];
+      page.on('pageerror', error => pageErrors.push(String(error)));
+      const boardId = await seedBoard(page, authedUser.token!, [
+        ['A1', 'A2', 'A3'],
+        ['B1', 'B2'],
+      ]);
+      await logInThroughTheUi(page, authedUser);
+      await startOn(page, boardId, 'A1');
+
+      await handleOf(page, 'A1').focus();
+      await page.keyboard.press('Enter');
+      await expect(dndAnnouncement(page)).toHaveText('Picked up A1. Backlog, position 1 of 3.');
+
+      await page.keyboard.press('ArrowRight');
+      await expect(dndAnnouncement(page)).toHaveText('Up Next, position 1 of 3.');
+      await page.keyboard.press('ArrowDown');
+      await expect(dndAnnouncement(page)).toHaveText('Up Next, position 2 of 3.');
+
+      // Nothing has moved until the drop.
+      expect((await columnsOf(page))[0]).toBe('Backlog: A1, A2, A3');
+
+      await page.keyboard.press('Enter');
+      await expect(dndAnnouncement(page)).toHaveText('Dropped A1 in Up Next, position 2 of 3.');
+      expect(await columnsOf(page)).toEqual(['Backlog: A2, A3', 'Up Next: B1, A1, B2', 'In Progress: ', 'Done: ']);
+
+      // The card is a new element in another column, so focus has to be put
+      // back on its handle deliberately.
+      await expect.poll(() => focusedHandleOf(page)).toBe('A1');
+
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'A1', level: 3 })).toBeVisible();
+      expect(await columnsOf(page), 'the drop persisted in the same order').toEqual([
+        'Backlog: A2, A3',
+        'Up Next: B1, A1, B2',
+        'In Progress: ',
+        'Done: ',
+      ]);
+
+      expect(pageErrors).toEqual([]);
+    });
+
+    test('the arrows reach the end of another column and stop there', async ({ page, authedUser }) => {
+      const boardId = await seedBoard(page, authedUser.token!, [['A1', 'A2'], ['B1']]);
+      await logInThroughTheUi(page, authedUser);
+      await startOn(page, boardId, 'A1');
+
+      await handleOf(page, 'A1').focus();
+      await page.keyboard.press('Space');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowDown');
+      await expect(dndAnnouncement(page)).toHaveText('Up Next, position 2 of 2.');
+      await page.keyboard.press('ArrowDown');
+      await expect(dndAnnouncement(page), 'nothing below the end of the column').toHaveText(
+        'Up Next, position 2 of 2.'
+      );
+      await page.keyboard.press('Space');
+
+      await expect.poll(async () => (await columnsOf(page))[1]).toBe('Up Next: B1, A1');
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'A1', level: 3 })).toBeVisible();
+      expect((await columnsOf(page))[1]).toBe('Up Next: B1, A1');
+    });
+
+    test('Escape puts the card back and sends no request', async ({ page, authedUser }) => {
+      const boardId = await seedBoard(page, authedUser.token!, [['A1', 'A2', 'A3'], ['B1']]);
+      const moves: string[] = [];
+      page.on('request', request => {
+        if (request.url().endsWith('/move')) moves.push(request.url());
+      });
+      await logInThroughTheUi(page, authedUser);
+      await startOn(page, boardId, 'A2');
+      const before = await columnsOf(page);
+
+      await handleOf(page, 'A2').focus();
+      await page.keyboard.press('Space');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('Escape');
+
+      await expect(dndAnnouncement(page)).toHaveText('Move cancelled. A2 is back in Backlog, position 2 of 3.');
+      await expect.poll(() => focusedHandleOf(page)).toBe('A2');
+      expect(await columnsOf(page)).toEqual(before);
+
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'A2', level: 3 })).toBeVisible();
+      expect(await columnsOf(page)).toEqual(before);
+      expect(moves, 'a cancelled drag must not reach the server').toEqual([]);
+    });
+
+    test('on a phone the target column scrolls into view as the card is carried across', async ({
+      page,
+      authedUser,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const boardId = await seedBoard(page, authedUser.token!, [['A1', 'A2'], ['B1']]);
+      await logInThroughTheUi(page, authedUser);
+      await startOn(page, boardId, 'A1');
+
+      const row = page.getByRole('region', { name: 'Board columns' });
+      await handleOf(page, 'A1').focus();
+      await page.keyboard.press('Space');
+
+      let previous = await row.evaluate(element => element.scrollLeft);
+      for (const title of ['Up Next', 'In Progress', 'Done']) {
+        await page.keyboard.press('ArrowRight');
+        await expect(dndAnnouncement(page)).toContainText(`${title}, position`);
+
+        // The row scrolls on its own, smoothly, so it is polled rather than read.
+        await expect
+          .poll(
+            async () => {
+              const heading = (await page.getByRole('heading', { name: title, level: 2 }).boundingBox())!;
+              return heading.x >= 0 && heading.x + heading.width <= 390;
+            },
+            { message: `${title} must be on screen` }
+          )
+          .toBe(true);
+
+        const now = await row.evaluate(element => element.scrollLeft);
+        expect(now, 'the row scrolled toward the target').toBeGreaterThan(previous);
+        previous = now;
+
+        // The carried card is in view too, not left behind in the first column.
+        const overlay = (await page.locator('[role="article"]').last().boundingBox())!;
+        expect(overlay.x).toBeGreaterThanOrEqual(0);
+        expect(overlay.x + overlay.width).toBeLessThanOrEqual(390);
+      }
+
+      await page.keyboard.press('Space');
+      await expect(dndAnnouncement(page)).toHaveText('Dropped A1 in Done, position 1 of 1.');
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'A1', level: 3 })).toBeVisible();
+      expect((await columnsOf(page))[3]).toBe('Done: A1');
+    });
   });
 
   /**
