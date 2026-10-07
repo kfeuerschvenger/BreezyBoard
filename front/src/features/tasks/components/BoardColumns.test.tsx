@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BoardColumns } from './BoardColumns';
 import type { Task } from '@/models';
 import type { ColumnData } from '../hooks/useBoardData';
 import type { UseTaskDragAndDropResult } from '../hooks/useTaskDragAndDrop';
+import type { UseTaskMoverResult } from '../hooks/useTaskMover';
 
 const columns: ColumnData[] = [
   { _id: 'col-a', id: 'col-a', title: 'Backlog', color: '#3B82F6', order: 0 },
@@ -25,19 +26,34 @@ const task: Task = {
   order: 'a0',
 };
 
-const drag = {
-  sensors: [],
-  activeTask: null,
-  onDragStart: () => {},
-  onDragEnd: () => {},
-} as unknown as UseTaskDragAndDropResult;
+// dnd-kit renders a live region of its own, so the status role alone is ambiguous.
+const announcer = () => document.querySelector<HTMLElement>('[data-move-announcer]')!;
 
-const renderColumns = (tasks: Task[], onAddTask = () => {}) =>
+const makeMover = (overrides: Partial<UseTaskMoverResult> = {}): UseTaskMoverResult => ({
+  move: vi.fn(),
+  moveToColumn: vi.fn().mockResolvedValue('moved'),
+  announcement: '',
+  focusRequest: null,
+  ...overrides,
+});
+
+const makeDrag = (mover: UseTaskMoverResult = makeMover()) =>
+  ({
+    sensors: [],
+    activeTask: null,
+    onDragStart: () => {},
+    onDragEnd: () => {},
+    mover,
+  }) as unknown as UseTaskDragAndDropResult;
+
+const drag = makeDrag();
+
+const renderColumns = (tasks: Task[], onAddTask = () => {}, dragProps: UseTaskDragAndDropResult = drag) =>
   render(
     <BoardColumns
       columns={columns}
       tasks={tasks}
-      drag={drag}
+      drag={dragProps}
       taskColors={new Map()}
       onTaskClick={() => {}}
       onAddTask={onAddTask}
@@ -111,6 +127,88 @@ describe('BoardColumns', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Add task' }));
 
       expect(onAddTask).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the Move to menu', () => {
+    it('names every column of the board and marks the one the card is in', async () => {
+      renderColumns([task]);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Move Write the spec to another column' }));
+
+      const menu = screen.getByRole('menu', { name: 'Move Write the spec to' });
+      const items = within(menu).getAllByRole('menuitem');
+      expect(items.map(item => item.textContent)).toEqual(['Backlog', 'DoingCurrent', 'Done']);
+      expect(items[1]).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('hands the chosen column to the shared move path', async () => {
+      const moveToColumn = vi.fn().mockResolvedValue('moved');
+      renderColumns([task], () => {}, makeDrag(makeMover({ moveToColumn })));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Move Write the spec to another column' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Done' }));
+
+      expect(moveToColumn).toHaveBeenCalledWith(task, { id: 'col-c', title: 'Done' });
+    });
+
+    it('does not open the task drawer when the menu is used', async () => {
+      const onTaskClick = vi.fn();
+      render(
+        <BoardColumns
+          columns={columns}
+          tasks={[task]}
+          drag={drag}
+          taskColors={new Map()}
+          onTaskClick={onTaskClick}
+          onAddTask={() => {}}
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: 'Move Write the spec to another column' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Backlog' }));
+
+      expect(onTaskClick).not.toHaveBeenCalled();
+    });
+
+    it('announces the result of a move in a live region that is always mounted', () => {
+      const { rerender } = renderColumns([task]);
+      const region = announcer();
+      expect(region).toBeEmptyDOMElement();
+
+      rerender(
+        <BoardColumns
+          columns={columns}
+          tasks={[task]}
+          drag={makeDrag(makeMover({ announcement: 'Moved Write the spec to Done.' }))}
+          taskColors={new Map()}
+          onTaskClick={() => {}}
+          onAddTask={() => {}}
+        />,
+      );
+
+      expect(announcer()).toBe(region);
+      expect(region).toHaveTextContent('Moved Write the spec to Done.');
+    });
+
+    it('gives focus back to the moved card once it has been rendered again', async () => {
+      const { rerender } = renderColumns([task]);
+      expect(document.body).toHaveFocus();
+
+      rerender(
+        <BoardColumns
+          columns={columns}
+          tasks={[task]}
+          drag={makeDrag(makeMover({ focusRequest: { taskId: 't1', nonce: 1 } }))}
+          taskColors={new Map()}
+          onTaskClick={() => {}}
+          onAddTask={() => {}}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Move Write the spec to another column' })).toHaveFocus(),
+      );
     });
   });
 });

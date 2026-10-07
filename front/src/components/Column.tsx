@@ -4,6 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 import type { Column as ColumnType, Task } from '@/models';
+import type { MoveTarget } from '@/features/tasks';
 import TaskCard from './TaskCard';
 
 interface ColumnProps {
@@ -15,6 +16,9 @@ interface ColumnProps {
    * the card, which used to ask the colour endpoint once per card.
    */
   colorOf: (task: Task) => string;
+  /** The board's columns, for each card's "Move to" menu. */
+  moveTargets?: MoveTarget[];
+  onMove?: (task: Task, target: MoveTarget) => void;
 }
 
 /**
@@ -27,7 +31,7 @@ interface ColumnProps {
  * header never moves: only the body scrolls, so a long column keeps its title
  * and count in view.
  */
-const Column: React.FC<ColumnProps> = ({ column, tasks, onTaskClick, colorOf }) => {
+const Column: React.FC<ColumnProps> = ({ column, tasks, onTaskClick, colorOf, moveTargets, onMove }) => {
   const { setNodeRef } = useDroppable({
     id: column._id,
   });
@@ -65,13 +69,17 @@ const Column: React.FC<ColumnProps> = ({ column, tasks, onTaskClick, colorOf }) 
         escapes the column, and the page grows to the position of the last card
         in the longest column.
       */}
-      <div
-        ref={setNodeRef}
-        className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4"
-      >
+      <div ref={setNodeRef} className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
         <SortableContext items={tasks.map(task => task._id)} strategy={verticalListSortingStrategy}>
           {tasks.map(task => (
-            <TaskCard key={task._id} task={task} color={colorOf(task)} onClick={() => onTaskClick(task)} />
+            <TaskCard
+              key={task._id}
+              task={task}
+              color={colorOf(task)}
+              onClick={() => onTaskClick(task)}
+              moveTargets={moveTargets}
+              onMove={onMove}
+            />
           ))}
         </SortableContext>
 

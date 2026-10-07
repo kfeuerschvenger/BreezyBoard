@@ -25,6 +25,16 @@ export type {
   UseTaskFormOptions,
   UseTaskFormResult,
 } from './hooks/useTaskForm';
+export { TaskMoveMenu } from './components/TaskMoveMenu';
+export type { TaskMoveMenuProps } from './components/TaskMoveMenu';
+export { useTaskMover } from './hooks/useTaskMover';
+export type {
+  FocusRequest,
+  MoveOutcome,
+  MoveTarget,
+  UseTaskMoverOptions,
+  UseTaskMoverResult,
+} from './hooks/useTaskMover';
 export { BoardColumns } from './components/BoardColumns';
 export type { BoardColumnsProps } from './components/BoardColumns';
 export { useBoardData } from './hooks/useBoardData';

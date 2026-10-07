@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ClipboardList, Plus } from 'lucide-react';
 import { closestCorners, DndContext, DragOverlay } from '@dnd-kit/core';
 import Column from '@/components/Column';
@@ -37,6 +37,31 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
 }) => {
   const colorOf = (task: Task) => resolveColor(task.color, taskColors);
 
+  const { mover } = drag;
+  const moveTargets = useMemo(() => columns.map(({ id, title }) => ({ id, title })), [columns]);
+  const { focusRequest } = mover;
+
+  // A card that changes column is a new element and the focused one is gone,
+  // so focus goes to the same task's "Move to" button where it now stands.
+  // The new copy is not in the document until the cache write has rendered,
+  // so the lookup retries across a few frames before giving up.
+  useEffect(() => {
+    if (!focusRequest) return;
+
+    let frame = 0;
+    let attempts = 0;
+    const focusTrigger = () => {
+      const trigger = document.querySelector<HTMLElement>(
+        `[data-task-move-trigger="${CSS.escape(focusRequest.taskId)}"]`,
+      );
+      if (trigger) trigger.focus();
+      else if (attempts++ < 10) frame = requestAnimationFrame(focusTrigger);
+    };
+    frame = requestAnimationFrame(focusTrigger);
+
+    return () => cancelAnimationFrame(frame);
+  }, [focusRequest]);
+
   if (columns.length === 0) {
     return (
       <div className="text-center py-12">
@@ -48,6 +73,17 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
 
   return (
     <>
+      {/*
+        Where the result of a menu move is announced. A card that moves leaves
+        no trace at the place the person was working, so without this a screen
+        reader hears nothing at all. It is mounted from the start and only its
+        text changes, because a live region that appears together with its
+        message is not reliably announced.
+      */}
+      <div role="status" data-move-announcer className="sr-only">
+        {mover.announcement}
+      </div>
+
       {/*
         A banner above the row rather than inside a column: it describes the
         whole board, it never covers a drop target, and it is the same shape at
@@ -109,6 +145,8 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
               tasks={tasks.filter(task => task.status === column.id)}
               onTaskClick={onTaskClick}
               colorOf={colorOf}
+              moveTargets={moveTargets}
+              onMove={mover.moveToColumn}
             />
           ))}
         </div>

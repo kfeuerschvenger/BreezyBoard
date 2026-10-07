@@ -83,7 +83,7 @@ The other half of the guarantee, that a failure partway through the cascade roll
 
 It sits next to `authorization.mjs` for the same reason that one does. Half of its assertions are refusals and half are successes, because a model that refused everybody would satisfy every negative assertion ever written. It also checks the two cases that are easy to get subtly wrong: that a board admins can administer is one they can also find in their list, and that adding somebody to a board actually admits them to the workspace, without which the invitation is inert and the person is refused on every request.
 
-**`accessibility.mjs`** is the end to end layer of the accessibility gate, and it is the layer that matters most, because what it catches is what static analysis structurally cannot see. It drives six surfaces, including two with a dialog open, and runs axe against each.
+**`accessibility.mjs`** is the end to end layer of the accessibility gate, and it is the layer that matters most, because what it catches is what static analysis structurally cannot see. It drives six surfaces, including two with a dialog open, and runs axe against each. One more surface, the board with a task card's "Move to" menu open, exists because a popup rendered in a portal is outside everything scanned with it closed.
 
 It is a ratchet rather than a pass. Each surface carries the violation count measured when the gate went in, and the script fails on anything above it. Numbers may only go down, and a rule that reaches zero has its line deleted rather than left at zero, so the table shrinks as the debt does. A gate that failed on all the existing debt at once would be switched off within a week; one that cannot get worse is one people keep.
 
