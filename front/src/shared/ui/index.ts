@@ -36,3 +36,6 @@ export type { StatTileProps, StatTileTone } from './StatTile';
 
 export { SwatchPicker } from './SwatchPicker';
 export type { SwatchLayout, SwatchOption, SwatchPickerProps } from './SwatchPicker';
+
+export { Menu, MenuItem } from './Menu';
+export type { MenuItemProps, MenuProps, MenuTriggerProps } from './Menu';
