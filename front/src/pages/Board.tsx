@@ -150,7 +150,14 @@ const Board = () => {
         animate={{ opacity: 1, y: 0 }}
         className="flex min-h-0 flex-1 flex-col pt-6"
       >
-        <BoardColumns columns={columns} tasks={tasks} drag={drag} taskColors={taskColors} onTaskClick={openTask} />
+        <BoardColumns
+          columns={columns}
+          tasks={tasks}
+          drag={drag}
+          taskColors={taskColors}
+          onTaskClick={openTask}
+          onAddTask={openNewTask}
+        />
 
         <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />
       </motion.div>

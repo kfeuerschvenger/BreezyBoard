@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { BoardColumns } from './BoardColumns';
 import type { Task } from '@/models';
 import type { ColumnData } from '../hooks/useBoardData';
@@ -31,7 +32,7 @@ const drag = {
   onDragEnd: () => {},
 } as unknown as UseTaskDragAndDropResult;
 
-const renderColumns = (tasks: Task[]) =>
+const renderColumns = (tasks: Task[], onAddTask = () => {}) =>
   render(
     <BoardColumns
       columns={columns}
@@ -39,7 +40,8 @@ const renderColumns = (tasks: Task[]) =>
       drag={drag}
       taskColors={new Map()}
       onTaskClick={() => {}}
-    />
+      onAddTask={onAddTask}
+    />,
   );
 
 describe('BoardColumns', () => {
@@ -77,10 +79,38 @@ describe('BoardColumns', () => {
         drag={drag}
         taskColors={new Map()}
         onTaskClick={() => {}}
-      />
+        onAddTask={() => {}}
+      />,
     );
 
     expect(screen.getByText(/no columns available/i)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Board columns' })).not.toBeInTheDocument();
+  });
+
+  describe('the empty board banner', () => {
+    it('shows only while the board has no task at all, with the columns still beneath it', () => {
+      renderColumns([]);
+
+      expect(screen.getByRole('heading', { name: /no tasks yet/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add task' })).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toContain('Backlog');
+      expect(screen.getAllByText(/no tasks here yet/i)).toHaveLength(3);
+    });
+
+    it('is gone once the board has a task', () => {
+      renderColumns([task]);
+
+      expect(screen.queryByRole('heading', { name: /no tasks yet/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add task' })).not.toBeInTheDocument();
+    });
+
+    it('starts a new task when its button is pressed', async () => {
+      const onAddTask = vi.fn();
+      renderColumns([], onAddTask);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add task' }));
+
+      expect(onAddTask).toHaveBeenCalledTimes(1);
+    });
   });
 });
