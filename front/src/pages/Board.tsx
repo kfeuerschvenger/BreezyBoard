@@ -123,7 +123,11 @@ const Board = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // Fills the frame the app gives the board page, which is pinned to the
+    // viewport: the header takes what it needs and the columns take the rest,
+    // so the only things that scroll are the column row sideways and each
+    // column body down.
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50">
       <PageHeader
         title={board ? board.title : 'Project Board'}
         subtitle="Manage tasks in this board"
@@ -141,7 +145,11 @@ const Board = () => {
         <UserAvatar />
       </PageHeader>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex min-h-0 flex-1 flex-col pt-6"
+      >
         <BoardColumns columns={columns} tasks={tasks} drag={drag} taskColors={taskColors} onTaskClick={openTask} />
 
         <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />

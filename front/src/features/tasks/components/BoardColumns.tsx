@@ -42,7 +42,27 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({ columns, tasks, drag
       onDragStart={drag.onDragStart}
       onDragEnd={drag.onDragEnd}
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/*
+        The one scroll container for the row. Columns keep a fixed width and
+        overflow it sideways instead of wrapping, so a board of eight columns
+        is the same shape as a board of three.
+
+        It takes focus (tabIndex 0) because it is scrollable: with no task on
+        the board there is no drag handle inside it, and a scroll region with
+        nothing focusable would be unreachable from the keyboard on a screen
+        too narrow for the columns. It is also what dnd-kit scrolls while a
+        card is carried toward an off-screen column. Snapping is proximity, not
+        mandatory, because mandatory snapping fights that auto-scroll.
+      */}
+      <div
+        role="region"
+        aria-label="Board columns"
+        // The rule cannot know this region scrolls, which is what makes focus
+        // here required (axe: scrollable-region-focusable) rather than decorative.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        className="flex min-h-0 flex-1 snap-x snap-proximity items-stretch gap-4 overflow-x-auto scroll-px-4 px-4 pb-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500 sm:scroll-px-6 sm:px-6"
+      >
         {columns.map(column => (
           <Column
             key={column.id}

@@ -388,7 +388,7 @@ Related: 10 or more source files import from `framer-motion`, which is not a dec
 
 ### Status
 
-Phases 0 through 5 are complete. Phases 6, 6b and 7 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
+Phases 0 through 5 are complete. Phase 6 is in progress and phases 6b and 7 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
 
 Five things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. `P2-6a`, the intermittent drag pickup, is a known issue deferred out of every phase, see section 5.3. The contrast of the colours the new `Avatar` introduced has not been measured. `shared/ui/Menu` was not written, and 12.6b says why. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
 
@@ -468,7 +468,8 @@ Five things are deliberately left open and are not oversights. Three of the line
 | 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
 | 5d, section 12.5 | **Done** | Every row closed. Nine pages and modals decomposed, five files deleted outright, eight findings opened and closed |
 | 5c and 5d overall | **Done** | Phase 5 is complete. What is left of it is three line targets in section 12.6, each recorded in 12.6b with the reason |
-| 6, layout and product surface | Not started | Password recovery is decided: implement it, do not remove the link |
+| 6, board layout | Done | Columns are a fixed width in one row that scrolls sideways, each column scrolls inside itself under a fixed header, empty columns say so, the board fills the space between the header and the footer. `e2e/verify/board-layout.mjs` measures it at 390, 1024 and 1440 pixels (42 assertions) including dnd-kit auto-scrolling the row while a card is held at the edge |
+| 6, layout and product surface | In progress | Remaining: the single-pointer move alternative, keyboard coordinates, the bottom sheet drawer, responsive coverage for the nine components, the 404 page, board editing and deletion, password recovery |
 | 6b, visual redesign | Not started | Added to the plan, see Phase 6b |
 | 7, documentation and CI | Not started | The contributing guide is out of scope |
 
@@ -1394,6 +1395,12 @@ One of those tests was wrong on the first run while the code was right, and it i
 The target is under 80 and 153 is not that, for the same reasons as the dashboard and one more. The error screens stayed: the two pages' versions differ enough, one an alert card with two buttons and one a red box with one, that a shared component would be a switch over presentation with no behaviour in common, which is the merge this section argues against under `UserPicker`. The rest is the header, three hand-rolled buttons and the save handler, which is genuine page logic about what a completed checklist means.
 
 One simplification went in with the last commit and is named because it is a behaviour change rather than a move. The add member modal was held open by a `showAddMemberModal` boolean beside a `selectedBoardForMembers` board, two pieces of state that had to agree. They are one now, and the modal is open when there is a board. The old pair could open the modal with no board, showing an empty title, which nothing reached in practice because the id always came from a rendered card. It is the same shape as P4-8: a second copy of a fact that something has to keep in step.
+
+**The board layout, and P4-16, a page that grew to the position of the last card.** The wrapping four column grid is a row of fixed width columns now. `BoardColumns` owns one labelled scroll container, `Column` is `w-72` below the small breakpoint and `w-80` above it, keeps its header out of the scrolling body, and fills the height of the row, so the whole of an empty column is a drop target and carries a one line hint. `Board` and a new `AppShell` in `App.tsx` pin the board route to the viewport, which is why the footer stays visible and the document never has a second vertical scrollbar.
+
+P4-16 was found by the new script rather than by reading. With fourteen cards in one column the document overflowed the viewport by 906 pixels although every column scrolled internally. The cause is that `TaskCard` carries `sr-only` text, which is `position: absolute`, and an absolutely positioned descendant is clipped and scrolled only by a scroller that is also its containing block. The column body was not, so each card's hidden text escaped it and the page grew to the position of the last card in the longest column. The column body is `relative` now and the script asserts the document does not scroll vertically at three viewports, which fails without it. The same shape would appear around any scroller that contains `sr-only` text.
+
+The scroll row takes `tabIndex={0}` with a name, which needed one `jsx-a11y/no-noninteractive-tabindex` disable with a reason: the rule cannot know the region scrolls. It cannot be left out, because a board with no tasks has no drag handle inside the row and axe's `scrollable-region-focusable` would otherwise fail on a screen too narrow for the columns. Scroll snapping is `proximity`, not `mandatory`, because mandatory snapping fights dnd-kit's auto-scroll; the script holds a card at the right edge at 390 pixels, asserts the row scrolled, and asserts the drop landed in another column. Two things are not decided here and are listed for the product owner: whether the footer belongs on the board page at all, since on a phone it takes about 150 pixels of the 844, and whether a board with no tasks anywhere deserves a board level empty state with an Add Task action beyond the per column hints.
 
 ### 12.7 Sequencing
 
