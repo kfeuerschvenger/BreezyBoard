@@ -6,12 +6,38 @@ import { Checklist } from './Checklist';
 import { PrioritySelect } from './PrioritySelect';
 import type { UseTaskDrawerResult } from '../hooks/useTaskDrawer';
 
-export interface TaskFormProps extends UseTaskDrawerResult {
+/** The id the form carries, so buttons outside it can submit it. */
+export const TASK_FORM_ID = 'task-form';
+
+export type TaskFormProps = UseTaskDrawerResult;
+
+export interface TaskFormActionsProps {
+  isValid: boolean;
+  isSubmitting: boolean;
   onCancel: () => void;
 }
 
 /**
- * The task form's fields and its two buttons, given everything it renders.
+ * The form's two buttons.
+ *
+ * They are rendered by the drawer's footer rather than inside the form, so a
+ * long form scrolls underneath them instead of carrying them off screen. The
+ * `form` attribute is what keeps the submit button the form's own: pressing it
+ * and pressing Enter in a field both go through the form's submit handler.
+ */
+export const TaskFormActions: React.FC<TaskFormActionsProps> = ({ isValid, isSubmitting, onCancel }) => (
+  <div className="flex w-full gap-3">
+    <Button type="submit" form={TASK_FORM_ID} disabled={!isValid || isSubmitting} className="flex-1 justify-center">
+      {isSubmitting ? 'Saving...' : 'Save Changes'}
+    </Button>
+    <Button type="button" variant="secondary" onClick={onCancel}>
+      Cancel
+    </Button>
+  </div>
+);
+
+/**
+ * The task form's fields, given everything it renders.
  *
  * It holds no state of its own and asks for no data: both come from
  * `useTaskDrawer`, which is what lets the drawer around it be a title and a
@@ -21,17 +47,14 @@ export interface TaskFormProps extends UseTaskDrawerResult {
 export const TaskForm: React.FC<TaskFormProps> = ({
   values,
   errors,
-  isValid,
-  isSubmitting,
   submitError,
   setField,
   handleSubmit,
   colors,
   members,
   isLoadingColors,
-  onCancel,
 }) => (
-  <form onSubmit={handleSubmit} className="space-y-6">
+  <form id={TASK_FORM_ID} onSubmit={handleSubmit} className="space-y-6">
     <Field label="Title" required error={errors.title}>
       {props => (
         <Input
@@ -98,15 +121,6 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         {submitError}
       </div>
     )}
-
-    <div className="flex gap-3 pt-4">
-      <Button type="submit" disabled={!isValid || isSubmitting} className="flex-1 justify-center">
-        {isSubmitting ? 'Saving...' : 'Save Changes'}
-      </Button>
-      <Button type="button" variant="secondary" onClick={onCancel}>
-        Cancel
-      </Button>
-    </div>
   </form>
 );
 

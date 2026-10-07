@@ -22,8 +22,9 @@
     "verify:a11y": "node verify/accessibility.mjs",
     "verify:layout": "node verify/rendered-layout.mjs",
     "verify:board": "node verify/board-layout.mjs",
+    "verify:responsive": "node verify/responsive.mjs",
     "verify:tokens": "node verify/design-tokens.mjs",
-    "verify": "npm run verify:auth && npm run verify:session && npm run verify:api && npm run verify:drafts && npm run verify:integrity && npm run verify:workspaces && npm run verify:a11y && npm run verify:layout && npm run verify:board && npm run verify:tokens"
+    "verify": "npm run verify:auth && npm run verify:session && npm run verify:api && npm run verify:drafts && npm run verify:integrity && npm run verify:workspaces && npm run verify:a11y && npm run verify:layout && npm run verify:board && npm run verify:responsive && npm run verify:tokens"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { X } from 'lucide-react';
 import { IconButton } from './IconButton';
 
@@ -21,19 +22,36 @@ export interface DrawerProps {
   closeOnBackdrop?: boolean;
 }
 
-// max-w-xl matches the existing drawer panel in src/components/TaskDrawer.tsx (md, default).
+// The width cap applies from the medium breakpoint up, where the drawer is a
+// side panel. Below it the drawer is a bottom sheet and always spans the screen.
 const SIZE_CLASSES: Record<DrawerSize, string> = {
-  sm: 'max-w-md',
-  md: 'max-w-xl',
-  lg: 'max-w-2xl',
+  sm: 'md:max-w-md',
+  md: 'md:max-w-xl',
+  lg: 'md:max-w-2xl',
 };
+
+/** The medium breakpoint, where the sheet becomes a side panel. Matches Tailwind's `md`. */
+const SIDE_PANEL_QUERY = '(min-width: 768px)';
 
 /**
  * Drawer
- * Same contract and accessibility behavior as Modal, sliding in from the
- * right instead of being centered. Matches the backdrop and panel classes
- * and the spring transition of the existing drawer (see
- * src/components/TaskDrawer.tsx lines 540-558). It never auto-dismisses.
+ * Same contract and accessibility behavior as Modal, anchored to an edge
+ * instead of being centered. It is a bottom sheet below the medium breakpoint
+ * and a side panel against the right edge from there up: a full height side
+ * panel on a phone leaves no board visible behind it, while a sheet capped at
+ * 90 dvh keeps the page header in view.
+ *
+ * The panel never grows past the screen. The header and the optional `footer`
+ * stay in place and only the body scrolls, so a form's actions are reachable
+ * however long the form is. Heights use `dvh`, which follows the browser
+ * chrome and, where the browser resizes the layout for the on-screen
+ * keyboard, the keyboard too; `vh` would be taller than what is visible. The
+ * footer pads for the home indicator through `safe-area-inset-bottom`.
+ *
+ * It slides in from the bottom or from the right to match. It never
+ * auto-dismisses and has no drag-to-dismiss gesture: Escape, the close
+ * button and the backdrop all work for every input method, and a drag
+ * gesture would add a path only a touch screen can take.
  */
 export function Drawer({
   open,
@@ -47,6 +65,9 @@ export function Drawer({
 }: DrawerProps): ReactNode {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const sidePanel = useMediaQuery(SIDE_PANEL_QUERY);
+  const offscreen = sidePanel ? { x: '100%' } : { y: '100%' };
+  const onscreen = sidePanel ? { x: 0 } : { y: 0 };
 
   useEscapeKey(open, onClose);
   useFocusTrap(panelRef, open);
@@ -66,18 +87,18 @@ export function Drawer({
 
           <motion.div
             ref={panelRef}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            initial={offscreen}
+            animate={onscreen}
+            exit={offscreen}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className={`fixed right-0 top-0 h-full w-full ${SIZE_CLASSES[size]} bg-white shadow-xl z-50 overflow-y-auto flex flex-col`}
+            className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl md:inset-x-auto md:inset-y-0 md:right-0 md:max-h-none md:rounded-none ${SIZE_CLASSES[size]}`}
           >
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <div>
-                <h2 id={titleId} className="text-xl font-bold text-gray-900 font-heading">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 md:p-6">
+              <div className="min-w-0">
+                <h2 id={titleId} className="text-xl font-bold text-gray-900 font-heading break-words">
                   {title}
                 </h2>
                 {subtitle && <p className="text-sm text-gray-600 font-body mt-1">{subtitle}</p>}
@@ -90,10 +111,12 @@ export function Drawer({
               </IconButton>
             </div>
 
-            <div className="flex-1 p-6">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">{children}</div>
 
             {footer && (
-              <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">{footer}</div>
+              <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-6">
+                {footer}
+              </div>
             )}
           </motion.div>
         </>
