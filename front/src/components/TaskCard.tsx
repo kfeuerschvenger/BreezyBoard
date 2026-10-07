@@ -5,8 +5,8 @@ import { motion } from 'framer-motion';
 import { User, CircleCheck, AlertCircle, GripVertical, ShieldAlert } from 'lucide-react';
 import type { Task } from '@/models';
 import { COLOR_FALLBACK } from '@/features/colors';
-import { asTaskPriority, PRIORITY_BADGE_CLASSES } from '@/features/tasks';
-import type { TaskPriority } from '@/features/tasks';
+import { asTaskPriority, PRIORITY_BADGE_CLASSES, TaskMoveMenu } from '@/features/tasks';
+import type { MoveTarget, TaskPriority } from '@/features/tasks';
 
 interface TaskCardProps {
   task: Task;
@@ -21,6 +21,13 @@ interface TaskCardProps {
   color?: string;
   onClick?: () => void;
   isDragging?: boolean;
+  /**
+   * The columns the card can be moved to without dragging. The "Move to" menu
+   * renders only when this and `onMove` are both given, so the copy of the card
+   * in the drag overlay never carries one.
+   */
+  moveTargets?: MoveTarget[];
+  onMove?: (task: Task, target: MoveTarget) => void;
 }
 
 /**
@@ -37,7 +44,14 @@ const PRIORITY_ICONS: Record<TaskPriority, React.ElementType> = {
 /**
  * TaskCard: presentational card for a single task with optional drag support.
  */
-const TaskCard: React.FC<TaskCardProps> = ({ task, color = COLOR_FALLBACK, onClick, isDragging = false }) => {
+const TaskCard: React.FC<TaskCardProps> = ({
+  task,
+  color = COLOR_FALLBACK,
+  onClick,
+  isDragging = false,
+  moveTargets,
+  onMove,
+}) => {
   // Use the task id as the sortable id (must be stable)
   const sortableId = task._id;
 
@@ -126,16 +140,27 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, color = COLOR_FALLBACK, onCli
           P0-3. aria-label survives because dnd-kit does not set it, and
           onClick is not an activator.
         */}
-        <button
-          type="button"
-          className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-          aria-label="Drag handle"
-          onClick={stopAndHandle}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical size={16} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {moveTargets && onMove && (
+            <TaskMoveMenu
+              taskId={task._id}
+              taskTitle={task.title}
+              columns={moveTargets}
+              currentColumnId={task.status}
+              onMove={target => onMove(task, target)}
+            />
+          )}
+          <button
+            type="button"
+            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+            aria-label="Drag handle"
+            onClick={stopAndHandle}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Progress / checklist */}

@@ -59,6 +59,12 @@ const BASELINE = {
   // word for word, and it closed when the task drawer moved onto the shared
   // Drawer, whose dialog is labelled by its own title.
   'board, task drawer open': { region: 1 },
+  // Added on 2026-10-07, when the "Move to" menu shipped. The menu renders in
+  // a portal at the end of the body, outside the page's landmarks, so a
+  // second `region` node is what this surface exists to catch. Its two
+  // numbers are the board's own, unchanged: no main landmark, and the one
+  // region node the board already carries. The popup adds nothing to either.
+  'board, move menu open': { 'landmark-one-main': 1, region: 1 },
   // Added on 2026-09-25, when this surface was scanned for the first time.
   // Its two numbers are the same debt every other surface carries: no main
   // landmark, and content sitting outside one. aria-prohibited-attr was also
@@ -192,6 +198,42 @@ await scan('board');
 await page.getByRole('button', { name: /add task/i }).first().click();
 await page.waitForTimeout(400);
 await scan('board, task drawer open');
+
+// The "Move to" menu is a popup in a portal, so nothing scanned with it
+// closed says anything about it. It is opened on a card that has a column
+// either side of it, so every state of an item is on screen: a column to move
+// to and the current one, disabled.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+const token = (await register.json()).data.token;
+const authorised = { headers: { Authorization: `Bearer ${token}` } };
+const boardId = page.url().match(/board\/([a-f0-9]{24})/)[1];
+const board = (await (await page.request.get(`${API}/boards/${boardId}`, authorised)).json()).data;
+const palette = (await (await page.request.get(`${API}/colors?type=task`, authorised)).json()).data;
+const created = await page.request.post(`${API}/tasks/board/${boardId}`, {
+  ...authorised,
+  data: {
+    title: 'Axe menu task',
+    description: '',
+    status: board.columns[0]._id,
+    priority: 'medium',
+    color: palette[0]._id,
+    boardId,
+    checklist: [],
+  },
+});
+if (!created.ok()) {
+  console.error(`creating the task for the move menu failed with ${created.status()}.`);
+  await browser.close();
+  process.exit(1);
+}
+await page.reload();
+await page.getByRole('button', { name: 'Move Axe menu task to another column' }).waitFor();
+await page.keyboard.press('Tab');
+await page.getByRole('button', { name: 'Move Axe menu task to another column' }).click();
+await page.getByRole('menu', { name: 'Move Axe menu task to' }).waitFor();
+await scan('board, move menu open');
+await page.keyboard.press('Escape');
 
 // The profile page was outside this gate until now, which is how its joined
 // date printed "Invalid Date" and its avatar input sat at display:none
