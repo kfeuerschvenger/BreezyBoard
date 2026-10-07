@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { Navigate, Route, BrowserRouter as Router, Routes, useMatch } from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 
-import Footer from '@/components/Footer';
 import { QueryClientProvider } from '@tanstack/react-query';
 
+import { AppShell } from '@/app/layouts/AppShell';
 import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,26 +27,6 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
-};
-
-/**
- * The frame every page sits in, with the footer under it.
- *
- * The board is the one page that is exactly as tall as the screen: its columns
- * scroll inside themselves, so a frame that grew with its content would push
- * the footer below the fold and give the document a second vertical scrollbar
- * beside the columns'. On that route the frame is pinned to the viewport
- * instead, and the board takes whatever the footer leaves.
- */
-const AppShell = ({ children }: { children: ReactNode }) => {
-  const onBoard = useMatch('/board/:boardId') !== null;
-
-  return (
-    <div className={`flex flex-col bg-gray-50 ${onBoard ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
-      {children}
-      <Footer />
-    </div>
-  );
 };
 
 const AppRoutes = () => {
