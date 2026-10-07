@@ -59,6 +59,11 @@ const BASELINE = {
   // word for word, and it closed when the task drawer moved onto the shared
   // Drawer, whose dialog is labelled by its own title.
   'board, task drawer open': { region: 1 },
+  // Added with the bottom sheet. The same drawer below the medium breakpoint is
+  // a different layout, a bottom sheet with its own scrolling body and a footer
+  // outside it, and a layout nothing scanned at a desktop width says anything
+  // about.
+  'board, task drawer open, phone': { region: 1 },
   // Added on 2026-10-07, when the "Move to" menu shipped. The menu renders in
   // a portal at the end of the body, outside the page's landmarks, so a
   // second `region` node is what this surface exists to catch. Its two
@@ -198,6 +203,10 @@ await scan('board');
 await page.getByRole('button', { name: /add task/i }).first().click();
 await page.waitForTimeout(400);
 await scan('board, task drawer open');
+
+await page.setViewportSize({ width: 390, height: 844 });
+await scan('board, task drawer open, phone');
+await page.setViewportSize({ width: 1440, height: 900 });
 
 // The "Move to" menu is a popup in a portal, so nothing scanned with it
 // closed says anything about it. It is opened on a card that has a column

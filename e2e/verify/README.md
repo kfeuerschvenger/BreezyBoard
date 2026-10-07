@@ -114,3 +114,11 @@ The board's layout, measured at 390, 1024 and 1440 pixels.
 It asserts that the document scrolls in neither direction, that the columns share one row at one fixed width inside a single horizontally scrolling container that can take focus, that a long column scrolls inside itself while its header stays put, that an empty column says so and fills its column, and that holding a dragged card at the screen edge scrolls the row and lets the drop land in another column. None of this exists below a real browser, because jsdom loads no stylesheet.
 
 It found P4-16, absolutely positioned `sr-only` text escaping a column's scroller and growing the page.
+
+## responsive.mjs
+
+The task drawer as a bottom sheet, measured at 320, 390, 768, 1024 and 1440 pixels.
+
+Below the medium breakpoint the drawer is full width, anchored to the bottom of the screen and capped below the top of the page. From 768 up it is a side panel against the right edge. At every width the page does not scroll sideways, Save and Cancel are inside the viewport, and the form scrolls inside the panel while the title and the two actions stay where they are. On a phone it also shrinks the viewport to half its height, which is how a browser that resizes the layout viewport reports the on-screen keyboard, and asserts that the sheet still fits, the actions are still reachable and the focused field is on screen. Last, the dialog semantics survive the layout change: focus is inside it, Escape closes it and focus returns to the control that opened it.
+
+Resizing a desktop browser is a stand-in for a keyboard, not a keyboard. Whether a real device behaves the same depends on how its browser resizes the layout for the keyboard, which is why the viewport meta tag asks for `interactive-widget=resizes-content`.
