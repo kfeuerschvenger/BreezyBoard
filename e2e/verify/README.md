@@ -106,3 +106,11 @@ Controls that land where they belong, measured on a rendered page.
 It exists because of finding P4-13 and the class of defect it belongs to. A control positioned with absolute inside a parent that was never made relative is correct markup, correct classes and correct behaviour, and it is in the wrong place on screen. No layer below a real browser computes layout, so the static lint, axe and the component tests all pass while two password toggles sit stacked on each other above the wrong field.
 
 It asserts containment rather than coordinates, so a redesign does not break it.
+
+## board-layout.mjs
+
+The board's layout, measured at 390, 1024 and 1440 pixels.
+
+It asserts that the document scrolls in neither direction, that the columns share one row at one fixed width inside a single horizontally scrolling container that can take focus, that a long column scrolls inside itself while its header stays put, that an empty column says so and fills its column, and that holding a dragged card at the screen edge scrolls the row and lets the drop land in another column. None of this exists below a real browser, because jsdom loads no stylesheet.
+
+It found P4-16, absolutely positioned `sr-only` text escaping a column's scroller and growing the page.
