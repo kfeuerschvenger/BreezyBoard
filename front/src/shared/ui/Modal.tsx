@@ -75,11 +75,11 @@ export function Modal({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className={`relative bg-white rounded-xl shadow-2xl w-full ${SIZE_CLASSES[size]} mx-4 max-h-[80vh] overflow-hidden flex flex-col`}
+            className={`relative bg-white rounded-xl shadow-2xl w-full ${SIZE_CLASSES[size]} mx-4 max-h-[85dvh] overflow-hidden flex flex-col`}
           >
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <div>
-                <h2 id={titleId} className="text-xl font-semibold text-gray-900 font-heading">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 md:p-6">
+              <div className="min-w-0">
+                <h2 id={titleId} className="text-xl font-semibold text-gray-900 font-heading break-words">
                   {title}
                 </h2>
                 {subtitle && <p className="text-sm text-gray-600 font-body mt-1">{subtitle}</p>}
@@ -96,10 +96,12 @@ export function Modal({
               </IconButton>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">{children}</div>
+            <div className="flex-1 overflow-y-auto p-4 md:p-6">{children}</div>
 
             {footer && (
-              <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50">{footer}</div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-4 md:p-6">
+                {footer}
+              </div>
             )}
           </motion.div>
         </div>

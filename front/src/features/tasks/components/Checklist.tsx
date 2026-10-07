@@ -30,6 +30,9 @@ interface SortableChecklistItemProps {
 
 const newItemId = (): string => (crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString());
 
+/** A square control box: 44 pixels on a phone, where it is touched, and 28 where a pointer is precise. */
+const TARGET = 'flex h-11 w-11 shrink-0 items-center justify-center md:h-7 md:w-7';
+
 const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onUpdate, onDelete }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
 
@@ -44,29 +47,37 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onU
       style={style}
       className={`flex items-center gap-2 p-2 rounded-lg ${isDragging ? 'bg-blue-50' : 'bg-white'}`}
     >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-gray-400 p-1">
-        <GripVertical size={14} />
+      <div
+        {...attributes}
+        {...listeners}
+        aria-label="Reorder checklist item"
+        className={`${TARGET} cursor-grab active:cursor-grabbing text-gray-400`}
+      >
+        <GripVertical size={14} aria-hidden="true" />
       </div>
-      <input
-        type="checkbox"
-        checked={item.completed}
-        onChange={event => onUpdate(item.id, 'completed', event.target.checked)}
-        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-      />
+      <label className={`${TARGET} cursor-pointer`}>
+        <input
+          type="checkbox"
+          checked={item.completed}
+          onChange={event => onUpdate(item.id, 'completed', event.target.checked)}
+          aria-label="Completed"
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+        />
+      </label>
       <input
         type="text"
         value={item.text}
         onChange={event => onUpdate(item.id, 'text', event.target.value)}
-        className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent font-body"
+        className="min-w-0 flex-1 px-2 py-2 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent font-body"
         placeholder="Enter checklist item"
       />
       <button
         type="button"
         onClick={() => onDelete(item.id)}
-        className="p-1 text-red-600 hover:text-red-700 cursor-pointer"
+        className={`${TARGET} text-red-600 hover:text-red-700 cursor-pointer`}
         aria-label="Delete checklist item"
       >
-        <Trash2 size={14} />
+        <Trash2 size={14} aria-hidden="true" />
       </button>
     </div>
   );
@@ -124,7 +135,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
         <button
           type="button"
           onClick={handleAdd}
-          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+          className="flex min-h-11 items-center gap-1 px-1 text-sm text-blue-600 hover:text-blue-700 cursor-pointer md:min-h-7"
         >
           <Plus size={16} aria-hidden="true" />
           Add Item

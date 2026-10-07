@@ -94,7 +94,7 @@ const RegisterForm: React.FC = () => {
       {apiError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{apiError}</div>}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="First name" error={errors.firstName?.message} icon={<User className="h-5 w-5 text-gray-400" />}>
             {props => <Input {...props} {...register('firstName')} placeholder="John" className="pl-10" />}
           </Field>
@@ -141,7 +141,7 @@ const RegisterForm: React.FC = () => {
             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             {...register('terms')}
           />
-          <label htmlFor="terms" className="ml-2 block text-sm text-gray-700">
+          <label htmlFor="terms" className="ml-2 block py-2 text-sm text-gray-700">
             I agree to the{' '}
             <button
               type="button"

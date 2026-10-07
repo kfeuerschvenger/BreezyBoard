@@ -21,13 +21,13 @@ const Footer: React.FC = () => {
           </p>
 
           {/* Right side: social links */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <a
               href="https://www.linkedin.com/in/kevin-feuerschvenger/"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="LinkedIn profile"
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="inline-flex p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="LinkedIn profile"
             >
               <Linkedin size={20} strokeWidth={1.75} />
@@ -37,7 +37,7 @@ const Footer: React.FC = () => {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub profile"
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="inline-flex p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="GitHub profile"
             >
               <Github size={20} strokeWidth={1.75} />
@@ -45,7 +45,7 @@ const Footer: React.FC = () => {
             <a
               href="mailto:kfeuerschvenger@gmail.com"
               aria-label="Send email"
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="inline-flex p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="Email me"
             >
               <Mail size={20} strokeWidth={1.75} />

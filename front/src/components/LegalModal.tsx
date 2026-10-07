@@ -33,7 +33,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ open, onClose, title, filePath 
           <a
             href={encodeURI(filePath)}
             download
-            className="text-sm text-gray-600 hover:text-gray-800 underline cursor-pointer"
+            className="inline-flex items-center px-2 py-3 text-sm text-gray-600 hover:text-gray-800 underline cursor-pointer md:py-2"
           >
             Download
           </a>

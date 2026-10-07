@@ -62,7 +62,9 @@ const BASELINE = {
   // Added with the bottom sheet. The same drawer below the medium breakpoint is
   // a different layout, a bottom sheet with its own scrolling body and a footer
   // outside it, and a layout nothing scanned at a desktop width says anything
-  // about.
+  // about. It is scanned with a checklist item added, because an item is three
+  // controls, a drag handle, a checkbox and a delete button, and each of them
+  // has to be named. The first two were not, and no surface scanned an item.
   'board, task drawer open, phone': { region: 1 },
   // Added on 2026-10-07, when the "Move to" menu shipped. The menu renders in
   // a portal at the end of the body, outside the page's landmarks, so a
@@ -205,6 +207,7 @@ await page.waitForTimeout(400);
 await scan('board, task drawer open');
 
 await page.setViewportSize({ width: 390, height: 844 });
+await page.getByRole('button', { name: 'Add Item' }).click();
 await scan('board, task drawer open, phone');
 await page.setViewportSize({ width: 1440, height: 900 });
 

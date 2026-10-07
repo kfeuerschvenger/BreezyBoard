@@ -89,7 +89,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       }
     >
       <div className="space-y-6">
-        <div className="p-6 border-b border-gray-200">
+        <div className="border-b border-gray-200 py-4 md:p-6">
           <div className="relative">
             <Search
               size={20}
@@ -111,7 +111,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
         <SelectedMembers members={selected} onRemove={toggle} />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="p-6">
+          <div className="py-4 md:p-6">
             <MemberSearchResults
               members={search.results}
               selectedIds={selected.map(member => member._id)}
