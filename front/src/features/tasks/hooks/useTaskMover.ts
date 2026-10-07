@@ -25,9 +25,13 @@ export interface MoveTarget {
  */
 export type MoveOutcome = 'moved' | 'unchanged' | 'superseded' | 'failed';
 
+/** The control on a card that can take focus back after the card has moved. */
+export type FocusTarget = 'move-trigger' | 'drag-handle';
+
 /** Where keyboard focus should go once a moved card has been re-rendered. */
 export interface FocusRequest {
   taskId: string;
+  target: FocusTarget;
   /** Distinguishes two requests for the same task, so the second still fires. */
   nonce: number;
 }
@@ -49,10 +53,22 @@ export interface UseTaskMoverResult {
    * column and announce the result.
    */
   moveToColumn: (task: Task, target: MoveTarget) => Promise<MoveOutcome>;
-  /** The latest result of a menu move, for a polite live region. */
+  /** The latest result of a move the mover announces itself, for a polite live region. */
   announcement: string;
-  /** Set after a menu move so the page can return focus to the card. */
+  /**
+   * Says something in that live region. A drag is announced by dnd-kit's own,
+   * so the only thing it needs this for is the one thing dnd-kit cannot know:
+   * that the request failed.
+   */
+  announce: (message: string) => void;
+  /** Set after a move so the page can return focus to the card. */
   focusRequest: FocusRequest | null;
+  /**
+   * Asks the page to focus a control on a card once the card has re-rendered.
+   * A card that changes column is a new element, so the one that had focus is
+   * gone by the time the move is done.
+   */
+  requestFocus: (taskId: string, target: FocusTarget) => void;
 }
 
 /**
@@ -67,6 +83,11 @@ export function useTaskMover({ tasks, cache }: UseTaskMoverOptions): UseTaskMove
   const [announcement, setAnnouncement] = useState('');
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const nonce = useRef(0);
+
+  const requestFocus = useCallback((taskId: string, target: FocusTarget) => {
+    nonce.current += 1;
+    setFocusRequest({ taskId, target, nonce: nonce.current });
+  }, []);
 
   // The move request currently in flight, if any. A second move started
   // before the first one answers aborts it rather than racing it: without
@@ -132,8 +153,7 @@ export function useTaskMover({ tasks, cache }: UseTaskMoverOptions): UseTaskMove
       // The card leaves the DOM the moment the optimistic write lands, taking
       // keyboard focus with it. Asking for focus up front lets the page put
       // it back on the card's new copy as soon as that exists.
-      nonce.current += 1;
-      setFocusRequest({ taskId: task._id, nonce: nonce.current });
+      requestFocus(task._id, 'move-trigger');
 
       // No card to land on, so the card goes to the bottom of the column. That
       // is where a drop on a column's empty space lands too, and where a
@@ -146,10 +166,10 @@ export function useTaskMover({ tasks, cache }: UseTaskMoverOptions): UseTaskMove
 
       return outcome;
     },
-    [move],
+    [move, requestFocus],
   );
 
-  return { move, moveToColumn, announcement, focusRequest };
+  return { move, moveToColumn, announcement, announce: setAnnouncement, focusRequest, requestFocus };
 }
 
 export default useTaskMover;

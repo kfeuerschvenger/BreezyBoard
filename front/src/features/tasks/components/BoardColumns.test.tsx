@@ -33,7 +33,9 @@ const makeMover = (overrides: Partial<UseTaskMoverResult> = {}): UseTaskMoverRes
   move: vi.fn(),
   moveToColumn: vi.fn().mockResolvedValue('moved'),
   announcement: '',
+  announce: vi.fn(),
   focusRequest: null,
+  requestFocus: vi.fn(),
   ...overrides,
 });
 
@@ -199,7 +201,7 @@ describe('BoardColumns', () => {
         <BoardColumns
           columns={columns}
           tasks={[task]}
-          drag={makeDrag(makeMover({ focusRequest: { taskId: 't1', nonce: 1 } }))}
+          drag={makeDrag(makeMover({ focusRequest: { taskId: 't1', target: 'move-trigger', nonce: 1 } }))}
           taskColors={new Map()}
           onTaskClick={() => {}}
           onAddTask={() => {}}
@@ -209,6 +211,43 @@ describe('BoardColumns', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: 'Move Write the spec to another column' })).toHaveFocus(),
       );
+    });
+
+    it('hands the drag context the instructions and announcements it is given', () => {
+      render(
+        <BoardColumns
+          columns={columns}
+          tasks={[task]}
+          drag={
+            {
+              ...makeDrag(),
+              accessibility: { screenReaderInstructions: { draggable: 'Custom drag instructions.' } },
+            } as unknown as UseTaskDragAndDropResult
+          }
+          taskColors={new Map()}
+          onTaskClick={() => {}}
+          onAddTask={() => {}}
+        />,
+      );
+
+      expect(screen.getByText('Custom drag instructions.')).toBeInTheDocument();
+    });
+
+    it('gives focus back to the drag handle when that is what was asked for', async () => {
+      const { rerender } = renderColumns([task]);
+
+      rerender(
+        <BoardColumns
+          columns={columns}
+          tasks={[task]}
+          drag={makeDrag(makeMover({ focusRequest: { taskId: 't1', target: 'drag-handle', nonce: 1 } }))}
+          taskColors={new Map()}
+          onTaskClick={() => {}}
+          onAddTask={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Drag handle' })).toHaveFocus());
     });
   });
 });

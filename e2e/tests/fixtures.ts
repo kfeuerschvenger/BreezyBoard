@@ -7,6 +7,8 @@ export interface TestUser {
   lastName: string;
   email: string;
   password: string;
+  /** Set by the `authedUser` fixture, so a test can seed data without logging in again. */
+  token?: string;
 }
 
 /** Every run registers its own account, so the suite never depends on seeded users. */
@@ -58,6 +60,40 @@ export async function logInThroughTheUi(page: Page, user: TestUser): Promise<voi
   await expect(page.getByText('My Boards')).toBeVisible();
 }
 
+/**
+ * Creates a board from the first template and fills its columns through the
+ * API, one list of task titles per column in board order. Setting a board up
+ * through the form would put the setup, not the behaviour, under test.
+ */
+export async function seedBoard(page: Page, token: string, columns: string[][]): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const read = async (path: string) => (await (await page.request.get(`${API_URL}${path}`, { headers })).json()).data;
+
+  const [templates, boardColors, taskColors] = await Promise.all([
+    read('/templates'),
+    read('/colors?type=board'),
+    read('/colors?type=task'),
+  ]);
+  const created = await page.request.post(`${API_URL}/boards`, {
+    headers,
+    data: { title: `E2E Seeded ${Date.now()}`, description: 'seeded', color: boardColors[0]._id, template: templates[0]._id },
+  });
+  expect(created.ok(), `Board creation failed with ${created.status()}`).toBe(true);
+  const board = (await created.json()).data;
+  const boardColumns = [...board.columns].sort((a: { order: number }, b: { order: number }) => a.order - b.order);
+
+  for (const [index, titles] of columns.entries()) {
+    for (const title of titles) {
+      const task = await page.request.post(`${API_URL}/tasks/board/${board._id}`, {
+        headers,
+        data: { title, status: boardColumns[index]._id, color: taskColors[0]._id },
+      });
+      expect(task.ok(), `Task creation failed with ${task.status()}`).toBe(true);
+    }
+  }
+  return board._id as string;
+}
+
 /** Reads the count badge rendered next to a column title. */
 export async function columnCount(page: Page, columnTitle: string): Promise<number> {
   const text = await page.locator('body').innerText();
@@ -71,6 +107,7 @@ export const test = base.extend<{ authedUser: TestUser }>({
     const user = makeUser();
     const token = await registerViaApi(page, user);
     await assertSeedDataExists(page, token);
+    user.token = token;
     await use(user);
   },
 });

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { ClipboardList, Plus } from 'lucide-react';
-import { closestCorners, DndContext, DragOverlay } from '@dnd-kit/core';
+import { DndContext, DragOverlay } from '@dnd-kit/core';
 import Column from '@/components/Column';
 import TaskCard from '@/components/TaskCard';
 import type { Task } from '@/models';
@@ -42,7 +42,8 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
   const { focusRequest } = mover;
 
   // A card that changes column is a new element and the focused one is gone,
-  // so focus goes to the same task's "Move to" button where it now stands.
+  // so focus goes to the same control of the same task where it now stands:
+  // the "Move to" button after a menu move, the drag handle after a drag.
   // The new copy is not in the document until the cache write has rendered,
   // so the lookup retries across a few frames before giving up.
   useEffect(() => {
@@ -51,9 +52,8 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
     let frame = 0;
     let attempts = 0;
     const focusTrigger = () => {
-      const trigger = document.querySelector<HTMLElement>(
-        `[data-task-move-trigger="${CSS.escape(focusRequest.taskId)}"]`,
-      );
+      const attribute = focusRequest.target === 'drag-handle' ? 'data-task-drag-handle' : 'data-task-move-trigger';
+      const trigger = document.querySelector<HTMLElement>(`[${attribute}="${CSS.escape(focusRequest.taskId)}"]`);
       if (trigger) trigger.focus();
       else if (attempts++ < 10) frame = requestAnimationFrame(focusTrigger);
     };
@@ -113,9 +113,11 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
       )}
       <DndContext
         sensors={drag.sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={drag.collisionDetection}
+        accessibility={drag.accessibility}
         onDragStart={drag.onDragStart}
         onDragEnd={drag.onDragEnd}
+        onDragCancel={drag.onDragCancel}
       >
         {/*
         The one scroll container for the row. Columns keep a fixed width and

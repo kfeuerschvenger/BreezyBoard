@@ -154,6 +154,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             type="button"
             className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
             aria-label="Drag handle"
+            data-task-drag-handle={task._id}
             onClick={stopAndHandle}
             {...attributes}
             {...listeners}
