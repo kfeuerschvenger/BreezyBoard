@@ -80,7 +80,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, error, onDirty, 
           <button
             type="button"
             onClick={onForgotPassword}
-            className="text-sm text-blue-600 hover:text-blue-500 font-medium cursor-pointer"
+            className="py-2 text-sm text-blue-600 hover:text-blue-500 font-medium cursor-pointer"
           >
             Forgot password?
           </button>

@@ -1,12 +1,32 @@
-// The task drawer, measured on a rendered page at five widths.
+// Every main surface, measured on a rendered page at five widths.
 //
-// Below the medium breakpoint the drawer is a bottom sheet and above it a
-// side panel, its actions stay inside the viewport while its body scrolls, and
-// shrinking the viewport the way an on-screen keyboard does keeps the actions
-// and the focused field on screen. Every one of those is a fact about computed
-// layout, which no layer below a real browser produces: jsdom loads no
-// stylesheet, so a component test sees that a breakpoint class is present and
-// never that it did anything.
+// What a phone user meets is a fact about computed layout, which no layer
+// below a real browser produces: jsdom loads no stylesheet, so a component
+// test sees that a breakpoint class is present and never that it fixed
+// anything. A modal footer that pushes a button off the screen, a header
+// whose actions overlap its title, or a control smaller than a fingertip
+// would each pass every unit test in the repository.
+//
+// Per surface and per width the script asserts:
+//
+//   - the document does not scroll sideways
+//   - no control is cut off by a box that does not scroll, and none sits
+//     outside the viewport (a control inside a scrolling region is reachable
+//     by scrolling it, so it is measured where it is visible)
+//   - no two controls overlap, apart from a button deliberately placed inside
+//     the field it belongs to and controls on different layers (a menu or a
+//     dialog over the page behind it)
+//   - every control is at least 24 by 24 pixels (WCAG 2.5.8), inline links in
+//     running text excepted, as the criterion does
+//   - a page title keeps a readable width, so a header never "fits" by crushing it
+//   - text clipped with an ellipsis or a line clamp can still be read in full
+//     through a title
+//
+// Then the task drawer, which is a different shape of claim: below the medium
+// breakpoint it is a bottom sheet and above it a side panel, its actions stay
+// inside the viewport while its body scrolls, and shrinking the viewport the
+// way an on-screen keyboard does keeps the actions and the focused field on
+// screen.
 //
 // What is asserted is behaviour rather than coordinates, so a redesign that
 // changes colours, spacing or type does not break it.
@@ -31,6 +51,9 @@ const VIEWPORTS = [
   { width: 1024, height: 768 },
   { width: 1440, height: 900 },
 ];
+
+/** The small breakpoint, where the registration name fields share a row. */
+const SMALL = 640;
 
 /** The medium breakpoint: the drawer is a bottom sheet strictly below it. */
 const MD = 768;
@@ -90,6 +113,8 @@ for (const [index, title] of [LONG_TITLE, 'Short task'].entries()) {
 
 const browser = await chromium.launch();
 
+/** A page with no session, for the pages only a signed out visitor reaches. */
+const anonPage = await (await browser.newContext({ viewport: VIEWPORTS[1] })).newPage();
 /** A page signed in through the interface, so the session is a real one. */
 const page = await (await browser.newContext({ viewport: VIEWPORTS[4] })).newPage();
 
@@ -104,6 +129,375 @@ const settle = async target => {
   await target.waitForLoadState('networkidle').catch(() => {});
   await target.waitForTimeout(700);
 };
+
+/**
+ * Everything the assertions need, read in one round trip.
+ *
+ * It runs in the page, so it cannot import anything: the clipping model is
+ * written out here and kept deliberately small. A control's visible box is
+ * its own box cut by every ancestor that clips. An ancestor that scrolls
+ * (`auto` or `scroll`) only hides what can be scrolled to, which is fine. An
+ * ancestor with `overflow: hidden` that removes part of the control is a
+ * defect, because nothing can ever bring it back.
+ */
+const audit = target =>
+  target.evaluate(() => {
+    const vw = document.documentElement.clientWidth;
+    const vh = window.innerHeight;
+    const doc = document.documentElement;
+
+    const CONTROLS = [
+      'a[href]',
+      'button',
+      'input:not([type="hidden"])',
+      'select',
+      'textarea',
+      'summary',
+      '[role="button"]',
+      '[role="menuitem"]',
+      '[role="tab"]',
+      '[role="checkbox"]',
+      '[role="radio"]',
+      '[role="switch"]',
+      '[role="option"]',
+      '[role="combobox"]',
+    ].join(',');
+
+    const intersect = (a, b) => {
+      const left = Math.max(a.left, b.left);
+      const top = Math.max(a.top, b.top);
+      const right = Math.min(a.right, b.right);
+      const bottom = Math.min(a.bottom, b.bottom);
+      return { left, top, right, bottom, width: right - left, height: bottom - top };
+    };
+    const describe = el => {
+      const name =
+        el.getAttribute('aria-label') ||
+        el.getAttribute('name') ||
+        el.getAttribute('placeholder') ||
+        el.textContent.trim().replace(/\s+/g, ' ');
+      return `${el.tagName.toLowerCase()}${name ? ` "${name.slice(0, 32)}"` : ''}`;
+    };
+
+    const measured = [];
+    const problems = { clipped: [], outside: [], small: [], overlap: [], truncated: [] };
+
+    for (const el of document.querySelectorAll(CONTROLS)) {
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      const own = el.getBoundingClientRect();
+      // Visually hidden inputs (sr-only, 1 pixel) are measured through their
+      // visible label, not on their own.
+      if (own.width <= 1 || own.height <= 1) continue;
+
+      let visible = {
+        left: own.left,
+        top: own.top,
+        right: own.right,
+        bottom: own.bottom,
+        width: own.width,
+        height: own.height,
+      };
+      let absolute = style.position === 'absolute';
+      let fixed = style.position === 'fixed';
+      let clippedBy = null;
+
+      for (let node = el.parentElement; node && !fixed; node = node.parentElement) {
+        const ancestor = getComputedStyle(node);
+        if (absolute && ancestor.position === 'static' && ancestor.transform === 'none') continue;
+        absolute = ancestor.position === 'absolute';
+        if (ancestor.position === 'fixed') {
+          // Fixed ancestors are the end of the walk: nothing above them clips.
+          fixed = true;
+        }
+        const clipsX = ancestor.overflowX !== 'visible';
+        const clipsY = ancestor.overflowY !== 'visible';
+        if (!clipsX && !clipsY) continue;
+        const box = node.getBoundingClientRect();
+        const before = visible;
+        const cut = intersect(visible, {
+          left: clipsX ? box.left : -Infinity,
+          right: clipsX ? box.right : Infinity,
+          top: clipsY ? box.top : -Infinity,
+          bottom: clipsY ? box.bottom : Infinity,
+        });
+        if (cut.width <= 0 || cut.height <= 0) {
+          visible = null;
+          break;
+        }
+        const hidesX = ancestor.overflowX === 'hidden' && cut.width < before.width - 2;
+        const hidesY = ancestor.overflowY === 'hidden' && cut.height < before.height - 2;
+        if (hidesX || hidesY) clippedBy = clippedBy ?? describe(node);
+        visible = cut;
+      }
+      // Scrolled out of a scrolling region: reachable by scrolling it.
+      if (!visible) continue;
+
+      const dialog = el.closest('[role="dialog"]');
+      const layer = el.closest('[role="dialog"],[role="menu"]');
+      measured.push({ el, visible, layer });
+
+      if (clippedBy) problems.clipped.push(`${describe(el)} is cut off by ${clippedBy}`);
+      if (visible.left < -0.5 || visible.right > vw + 0.5) {
+        problems.outside.push(
+          `${describe(el)} spans x ${Math.round(visible.left)} to ${Math.round(visible.right)} in a ${vw}px viewport`
+        );
+      }
+      // A dialog is fixed to the viewport, so what is visible of it must be
+      // inside it vertically too. The page behind it may scroll.
+      if (dialog && (visible.top < -0.5 || visible.bottom > vh + 0.5)) {
+        problems.outside.push(
+          `${describe(el)} spans y ${Math.round(visible.top)} to ${Math.round(visible.bottom)} in a ${vh}px viewport`
+        );
+      }
+
+      // Target size. A checkbox or radio is pressed through its label.
+      let width = own.width;
+      let height = own.height;
+      if (el instanceof HTMLInputElement && ['checkbox', 'radio'].includes(el.type) && el.labels?.length) {
+        const label = el.labels[0].getBoundingClientRect();
+        width = Math.max(width, label.width);
+        height = Math.max(height, label.height);
+      }
+      // A link or button set in the middle of a sentence is exempt, as WCAG
+      // 2.5.8 exempts it: its size is the size of the text around it.
+      const inRunningText =
+        style.display.startsWith('inline') &&
+        [...el.parentElement.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+      const inline = inRunningText || (style.display === 'inline' && el.tagName === 'A');
+      if (!inline && (width < 24 - 0.5 || height < 24 - 0.5)) {
+        problems.small.push(`${describe(el)} is ${Math.round(width)}x${Math.round(height)}`);
+      }
+    }
+
+    for (let i = 0; i < measured.length; i += 1) {
+      for (let j = i + 1; j < measured.length; j += 1) {
+        const a = measured[i];
+        const b = measured[j];
+        if (a.layer !== b.layer) continue;
+        if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+        const both = intersect(a.visible, b.visible);
+        if (both.width <= 2 || both.height <= 2) continue;
+        // A button placed inside the field it belongs to, such as a password
+        // toggle, is the one intended overlap.
+        const field = x => x instanceof HTMLInputElement || x instanceof HTMLTextAreaElement;
+        const inside = (inner, outer) =>
+          inner.left >= outer.left - 1 &&
+          inner.right <= outer.right + 1 &&
+          inner.top >= outer.top - 1 &&
+          inner.bottom <= outer.bottom + 1;
+        if (field(a.el) && inside(b.visible, a.visible)) continue;
+        if (field(b.el) && inside(a.visible, b.visible)) continue;
+        problems.overlap.push(`${describe(a.el)} overlaps ${describe(b.el)} by ${Math.round(both.width)}x${Math.round(both.height)}`);
+      }
+    }
+
+    for (const el of document.querySelectorAll('body *')) {
+      const style = getComputedStyle(el);
+      const ellipsis = style.textOverflow === 'ellipsis' && style.overflow !== 'visible';
+      const clamp = style.webkitLineClamp && style.webkitLineClamp !== 'none';
+      if (!ellipsis && !clamp) continue;
+      if (el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1) continue;
+      if (el.closest('[title]') || el.closest('[aria-label]')) continue;
+      problems.truncated.push(`${describe(el)} is cut short and has no title`);
+    }
+
+    const headline = document.querySelector('header h1');
+    return {
+      pageWide: doc.scrollWidth - doc.clientWidth,
+      headlineWidth: headline ? Math.round(headline.getBoundingClientRect().width) : null,
+      problems,
+    };
+  });
+
+/** Assert one surface at the current width. */
+const scanSurface = async (target, surface, width) => {
+  await settle(target);
+  const found = await audit(target);
+  const where = `${surface} at ${width}`;
+  check(`${where}: the page does not scroll sideways`, found.pageWide <= 0, `overflows by ${found.pageWide}px`);
+  // Nothing overlaps or leaves the screen when a title is squeezed to a
+  // sliver, so the other assertions cannot see it: a header that fits by
+  // reducing its title to a column of single letters is still a broken header.
+  if (found.headlineWidth !== null) {
+    check(`${where}: the page title keeps a readable width`, found.headlineWidth >= 120, `title is ${found.headlineWidth}px wide`);
+  }
+  const rules = {
+    clipped: 'no control is cut off',
+    outside: 'every control is inside the viewport',
+    overlap: 'no controls overlap',
+    small: 'every control is at least 24x24',
+    truncated: 'clipped text can be read in full',
+  };
+  for (const [key, label] of Object.entries(rules)) {
+    const list = [...new Set(found.problems[key])];
+    check(`${where}: ${label}`, list.length === 0, list.slice(0, 4).join('; '));
+  }
+};
+
+const openMoveMenu = async () => {
+  await page.getByRole('button', { name: /^Move .* to another column$/ }).first().click();
+  await page.getByRole('menu').waitFor();
+};
+
+const authed = [
+  {
+    name: 'dashboard',
+    open: async () => {
+      await page.goto(`${FRONT}/`);
+      await page.getByText('My Boards').waitFor();
+    },
+  },
+  {
+    name: 'dashboard, create board modal',
+    open: async () => {
+      await page.goto(`${FRONT}/`);
+      await page.getByText('My Boards').waitFor();
+      await page.getByRole('button', { name: /create board/i }).first().click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    name: 'dashboard, add members modal',
+    open: async () => {
+      await page.goto(`${FRONT}/`);
+      await page.getByText('My Boards').waitFor();
+      await page.getByRole('button', { name: /^Options for / }).first().click();
+      await page.getByRole('button', { name: 'Add Member' }).click();
+      await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
+    },
+  },
+  {
+    name: 'dashboard, account menu',
+    open: async () => {
+      await page.goto(`${FRONT}/`);
+      await page.getByText('My Boards').waitFor();
+      await page.getByRole('button', { name: /^Account menu/ }).click();
+      await page.getByRole('menu').waitFor();
+    },
+  },
+  {
+    name: 'board',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByRole('region', { name: 'Board columns' }).waitFor();
+      await page.getByText('Short task', { exact: true }).waitFor();
+    },
+  },
+  {
+    name: 'board, move menu',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByText('Short task', { exact: true }).waitFor();
+      await openMoveMenu();
+    },
+  },
+  {
+    name: 'board, new task drawer',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByText('Short task', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Add Task' }).click();
+      await page.getByRole('dialog', { name: 'Create New Task' }).waitFor();
+    },
+  },
+  {
+    name: 'board, edit task drawer',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByText('Short task', { exact: true }).waitFor();
+      await page.getByText('Short task', { exact: true }).click();
+      await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
+    },
+  },
+  {
+    name: 'profile',
+    open: async () => {
+      await page.goto(`${FRONT}/profile`);
+      await page.getByText('Profile Settings').waitFor();
+    },
+  },
+  {
+    name: 'profile, saved modal',
+    open: async () => {
+      await page.goto(`${FRONT}/profile`);
+      await page.getByText('Profile Settings').waitFor();
+      // Saving is disabled until the form is dirty.
+      await page.getByLabel('First Name').fill(`Responsive${Date.now() % 1000}`);
+      await page.getByRole('button', { name: /^Save/ }).first().click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+];
+
+const anonymous = [
+  {
+    name: 'login',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/login`);
+      await anonPage.waitForSelector('form');
+    },
+  },
+  {
+    name: 'login, forgot password',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/login`);
+      await anonPage.waitForSelector('form');
+      await anonPage.getByRole('button', { name: /forgot password/i }).click();
+      await anonPage.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    name: 'register',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/register`);
+      await anonPage.waitForSelector('form');
+    },
+  },
+  {
+    name: 'register, terms modal',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/register`);
+      await anonPage.waitForSelector('form');
+      await anonPage.getByRole('button', { name: 'Terms of Service' }).click();
+      await anonPage.getByRole('dialog').waitFor();
+      await anonPage.getByRole('dialog').getByText(/\S{4,}/).first().waitFor();
+    },
+  },
+];
+
+for (const viewport of VIEWPORTS) {
+  log(`\n--- ${viewport.width} by ${viewport.height} ---`);
+  await page.setViewportSize(viewport);
+  await anonPage.setViewportSize(viewport);
+
+  for (const surface of authed) {
+    await surface.open();
+    await scanSurface(page, surface.name, viewport.width);
+  }
+  for (const surface of anonymous) {
+    await surface.open();
+    await scanSurface(anonPage, surface.name, viewport.width);
+
+    if (surface.name === 'register') {
+      // The two name fields share a row from the small breakpoint up and take
+      // a row each below it, where half of a phone's width is too narrow to
+      // read what was typed.
+      const names = await anonPage.evaluate(() =>
+        ['firstName', 'lastName'].map(name => {
+          const box = document.querySelector(`input[name="${name}"]`).getBoundingClientRect();
+          return { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width) };
+        })
+      );
+      const sideBySide = names[0].top === names[1].top;
+      check(
+        `register at ${viewport.width}: the name fields ${viewport.width >= SMALL ? 'share a row' : 'stack'}`,
+        sideBySide === viewport.width >= SMALL,
+        `first at ${names[0].left},${names[0].top} and ${names[0].width}px wide, last at ${names[1].left},${names[1].top}`
+      );
+    }
+  }
+}
 
 log('\n--- the task drawer is a bottom sheet on a phone and a side panel on a desktop ---');
 
@@ -210,6 +604,43 @@ for (const viewport of VIEWPORTS) {
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   check(`${label}: Escape closes it and focus returns to the control that opened it`,
     await page.evaluate(() => /add task/i.test(document.activeElement?.textContent ?? '')));
+}
+
+log('\n--- on a touch screen nothing is hidden behind a hover ---');
+
+// A phone has no hover, so a control that is transparent until the pointer
+// is over its card is invisible there, and still pressable by accident.
+const touchPage = await (
+  await browser.newContext({ viewport: VIEWPORTS[1], hasTouch: true, isMobile: true })
+).newPage();
+await touchPage.goto(`${FRONT}/login`);
+const touchForm = touchPage.locator('form').first();
+await touchForm.getByLabel('Email address', { exact: true }).fill(user.email);
+await touchForm.getByLabel('Password', { exact: true }).fill(user.password);
+await touchForm.getByRole('button', { name: /sign in/i }).click();
+await touchPage.getByText('My Boards').waitFor();
+await settle(touchPage);
+
+const touchSurfaces = [
+  ['dashboard', `${FRONT}/`, () => touchPage.getByRole('button', { name: /^Options for / }).first().waitFor()],
+  ['board', `${FRONT}/board/${boardId}`, () => touchPage.getByText('Short task', { exact: true }).waitFor()],
+];
+for (const [name, url, ready] of touchSurfaces) {
+  await touchPage.goto(url);
+  await ready();
+  await settle(touchPage);
+  const hidden = await touchPage.evaluate(() => {
+    const found = [];
+    for (const el of document.querySelectorAll('a[href],button,input:not([type="hidden"]),select,textarea,[role="button"]')) {
+      const box = el.getBoundingClientRect();
+      if (box.width <= 1 || box.height <= 1) continue;
+      let opacity = 1;
+      for (let node = el; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+      if (opacity < 0.05) found.push(el.getAttribute('aria-label') || el.textContent.trim().slice(0, 30));
+    }
+    return found;
+  });
+  check(`${name} on a touch screen: every control is visible`, hidden.length === 0, hidden.slice(0, 4).join('; '));
 }
 
 await browser.close();

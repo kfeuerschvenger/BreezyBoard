@@ -48,8 +48,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout })
         <div className="flex items-center gap-3">
           <Avatar name={fullName} src={user.avatar} size="lg" decorative />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{fullName}</p>
-            <p className="text-xs text-gray-500 truncate">{user.email ?? ''}</p>
+            <p className="text-sm font-medium text-gray-900 truncate" title={fullName}>
+              {fullName}
+            </p>
+            <p className="text-xs text-gray-500 truncate" title={user.email ?? undefined}>
+              {user.email ?? ''}
+            </p>
           </div>
         </div>
       </div>

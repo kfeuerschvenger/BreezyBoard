@@ -88,4 +88,11 @@ describe('Checklist', () => {
 
     expect(screen.getAllByRole('button', { name: /delete checklist item/i })).toHaveLength(ITEMS.length);
   });
+
+  it('names the other two controls of a row as well', () => {
+    renderChecklist();
+
+    expect(screen.getAllByRole('checkbox', { name: 'Completed' })).toHaveLength(ITEMS.length);
+    expect(screen.getAllByRole('button', { name: 'Reorder checklist item' })).toHaveLength(ITEMS.length);
+  });
 });

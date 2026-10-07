@@ -14,6 +14,10 @@ export interface BoardCardMenuProps {
 /**
  * The per board options menu.
  *
+ * The trigger is hidden until the card is hovered only where hovering exists.
+ * A phone has no hover, so there it stays visible, and it is 44 pixels square
+ * below the medium breakpoint where it is touched.
+ *
  * The two `data-board-menu` attributes are what the page's outside click
  * handler looks for to decide a click was not aimed at the menu. They are
  * markup hooks rather than styling, which is why they carry no value.
@@ -30,7 +34,7 @@ export const BoardCardMenu: React.FC<BoardCardMenuProps> = ({
     <button
       data-board-menu-btn
       onClick={onToggle}
-      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
+      className="p-3 md:p-1 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-gray-100 rounded"
       aria-label={`Options for ${boardTitle}`}
     >
       <MoreHorizontal size={16} className="text-gray-400" />
