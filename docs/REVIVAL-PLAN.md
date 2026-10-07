@@ -236,6 +236,8 @@ Observed while building the end-to-end suite rather than by reading the code. Th
 
 A human pressing and moving generates many more intermediate events than an automated pointer, so this is not a defect a user would hit often. It does mean the interaction has very little margin, and a slow device or a heavy board is exactly where that margin disappears. Adding a distance activation constraint was tried and made the automated case worse, so the fix is not obvious and should be done with the drag rewrite in Phase 4 rather than guessed at now.
 
+**Status: known issue, deferred.** It has not been reproduced by hand, and the measurements so far place the failures inside full runs of the end to end spec rather than in isolation, which points at state carried between tests or at contention. It is not scheduled in any phase and does not block one. Whoever picks it up starts from the measurements in section 12.6b, and from the "Move to" menu in Phase 6, which gives every move a path that does not depend on the drag sensor.
+
 Measured during Phase 4b, because it was briefly mistaken for a regression: the core loop spec fails roughly one run in six, and the failure is always the same one, the sensor never announcing the pickup so the `role="status"` live region stays empty. The rate is identical with and without the workspace authorization layer, at 5 passes in 6 either way and with the same durations, so the extra query that layer adds per request is not what causes it.
 
 Two things made it look worse than it is, and both are worth knowing before diagnosing this again. Three consecutive failures is unremarkable at a one-in-six rate, so a handful of runs is not a measurement. And each separate `npx playwright test` invocation reports browser startup inside the test duration, which turns an 8.8 second run into a 16 second one and invites a conclusion about performance that the numbers do not support. Use `--repeat-each` within one invocation to compare.
@@ -386,9 +388,9 @@ Related: 10 or more source files import from `framer-motion`, which is not a dec
 
 ### Status
 
-Phases 0 through 5 are complete. Phases 6 and 7 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
+Phases 0 through 5 are complete. Phases 6, 6b and 7 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
 
-Five things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. `P2-6a`, the intermittent drag pickup, is still open with the measurements taken so far. The contrast of the colours the new `Avatar` introduced has not been measured. `shared/ui/Menu` was not written, and 12.6b says why. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
+Five things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. `P2-6a`, the intermittent drag pickup, is a known issue deferred out of every phase, see section 5.3. The contrast of the colours the new `Avatar` introduced has not been measured. `shared/ui/Menu` was not written, and 12.6b says why. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
 
 | Phase | State | Evidence |
 |---|---|---|
@@ -466,7 +468,9 @@ Five things are deliberately left open and are not oversights. Three of the line
 | 3, fifth modal found | Done | The forgot password dialog was the one P3-4 missed. On the shared shell, and scanned open for the first time |
 | 5d, section 12.5 | **Done** | Every row closed. Nine pages and modals decomposed, five files deleted outright, eight findings opened and closed |
 | 5c and 5d overall | **Done** | Phase 5 is complete. What is left of it is three line targets in section 12.6, each recorded in 12.6b with the reason |
-| 6 onward | Not started | |
+| 6, layout and product surface | Not started | Password recovery is decided: implement it, do not remove the link |
+| 6b, visual redesign | Not started | Added to the plan, see Phase 6b |
+| 7, documentation and CI | Not started | The contributing guide is out of scope |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
 
@@ -482,8 +486,9 @@ graph LR
   P2 --> P4[Phase 4<br/>Data integrity]
   P3 --> P5[Phase 5<br/>Architecture]
   P4 --> P5
-  P5 --> P6[Phase 6<br/>Design and a11y]
-  P5 --> P7[Phase 7<br/>Docs and CI]
+  P5 --> P6[Phase 6<br/>Layout and product]
+  P6 --> P6b[Phase 6b<br/>Visual redesign]
+  P6b --> P7[Phase 7<br/>Docs and CI]
 ```
 
 Phase 2 sits before the security and integrity work deliberately. Those phases change authorization and data shape, which is exactly the kind of change that needs a safety net underneath it.
@@ -573,13 +578,25 @@ This is the largest phase and the most divisible. It should be a chain of small 
 
 The design token layer and the accessible primitives moved into Phase 5a and 5b, so what remains here is everything that operates above the component level.
 
-Rebuild the board as a horizontally scrolling column set with a fixed column width, internal vertical scroll per column, and a real empty state, replacing the wrapping grid. Add the single-pointer alternative to dragging required by WCAG 2.5.7, which is the "Move to" menu described in section 10.3, and then the dnd-kit cross-column keyboard coordinates. Make the task drawer a bottom sheet below the medium breakpoint. Add responsive coverage to the nine components that have none, mobile-first. Add the missing 404 page, board editing and deletion from the board view with confirmation and undo, and either implement password recovery or remove the link.
+Rebuild the board as a horizontally scrolling column set with a fixed column width, internal vertical scroll per column, and a real empty state, replacing the wrapping grid. Add the single-pointer alternative to dragging required by WCAG 2.5.7, which is the "Move to" menu described in section 10.3, and then the dnd-kit cross-column keyboard coordinates. Make the task drawer a bottom sheet below the medium breakpoint. Add responsive coverage to the nine components that have none, mobile-first. Add the missing 404 page, board editing and deletion from the board view with confirmation and undo, and password recovery.
+
+Password recovery is decided: it is implemented, not removed. That means a reset request that answers the same way whether or not the address exists, a single-use token with a short expiry stored hashed, a reset page that sets the new password, and a bump of `tokenVersion` on success so every existing session is revoked, per section 9. The request route sits behind the same rate limit as the other auth routes. Delivery needs a mail transport, which in development can be a local catcher container rather than a real provider.
 
 The accessibility enforcement gate from section 10.2 should be wired at the start of Phase 5, not here, so that everything built from that point forward is checked as it lands.
 
+### Phase 6b. Visual redesign. Size: L.
+
+The interface works and is accessible, but it reads as generic: it has no visual identity of its own. This phase gives it one. It covers a brand direction, a palette, a type pairing, an icon treatment, motion, and the density and rhythm of the board, the dashboard and the auth screens.
+
+It runs after Phase 6 so it styles the final layout rather than one about to be rebuilt. That costs little because of Phase 5: colour, type and spacing live in the token layer and the `shared/ui` primitives, so most of the redesign lands there instead of in every feature component. Where a screen needs more than a restyle, that is a finding against the primitive layer and is fixed there.
+
+The accessibility gate stays in force throughout. Every new colour pair is measured for contrast before it lands, which also closes the unmeasured `Avatar` colours left open from Phase 5.
+
+Acceptance: the axe gate and the rendered layout gate stay green on every surface, every text and control colour pair meets WCAG 2.2 AA contrast by measurement, and the change is visible in the tokens and primitives rather than as overrides scattered across features.
+
 ### Phase 7. Documentation and CI. Size: M.
 
-A real root `README.md` in ASCII per the formatting standard, a `README_es.md` with Mermaid, an architecture document, an environment variable reference, an OpenAPI specification generated from the Zod schemas written in Phase 3, and a contributing guide. Guard the seed scripts against running outside development. Add a CI pipeline running lint, type check, tests and a Docker build on every pull request. Add graceful shutdown, a health check that verifies the database connection, request ids and structured request logging.
+A real root `README.md` in ASCII per the formatting standard, a `README_es.md` with Mermaid, an architecture document, an environment variable reference, and an OpenAPI specification generated from the Zod schemas written in Phase 3. A contributing guide is out of scope. Guard the seed scripts against running outside development. Add a CI pipeline running lint, type check, tests and a Docker build on every pull request. Add graceful shutdown, a health check that verifies the database connection, request ids and structured request logging.
 
 ## 7. Recommended sequence
 
@@ -591,7 +608,9 @@ Phases 3 and 4 can then run in parallel if desired, since they touch mostly diff
 
 Phase 5 before Phase 6, because redesigning components that are about to be split in half is wasted work. Within Phase 5, tokens and primitives before the component refactor, for the same reason one level down. See section 10.1.
 
-Phase 7 last, since documenting the architecture before Phase 5 changes it means writing it twice.
+Phase 6b after Phase 6, so the redesign styles the final layout rather than one about to be rebuilt.
+
+Phase 7 last, since documenting the architecture, and taking screenshots of an interface, before it stops changing means writing it twice.
 
 Two decisions block Phase 5 and should be made before it starts rather than during it: the real-time transport and the workspace question, both in section 11.2. They are decisions, not implementations, so they cost a conversation now and a migration later. The real-time one additionally interacts with the session design, as explained in section 9.7.
 
