@@ -90,6 +90,10 @@ services:
       # password resets from one address, and the production budget would
       # turn a repeated run into a rate limit that reads as a defect.
       PASSWORD_RECOVERY_LIMIT_PER_15_MIN: ${PASSWORD_RECOVERY_LIMIT_PER_15_MIN:-500}
+      # Development only: the browser suite asks for resets from addresses it
+      # reuses, and the production gap of a minute between two emails to one
+      # address would make the second request send nothing.
+      PASSWORD_RESET_COOLDOWN_MS: ${PASSWORD_RESET_COOLDOWN_MS:-1000}
       # Password reset mail goes to the Mailpit container above. Port 1025
       # is its SMTP listener and needs no authentication. FRONTEND_URL is the
       # origin the reset link points at, so it is the address a browser on

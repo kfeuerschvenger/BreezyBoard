@@ -18,6 +18,7 @@ export default async function setup() {
   process.env.MONGODB_URI = mongod.getUri('breezyboard-test');
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key';
   process.env.NODE_ENV = 'test';
+  process.env.PASSWORD_RESET_COOLDOWN_MS = '1';
 
   return async () => {
     await mongod.stop();

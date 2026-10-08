@@ -60,6 +60,18 @@ const buildResetMessage = link => {
  * Saving the token overwrites the previous pair on the user, which is what
  * makes a new request invalidate the old link.
  *
+ * At most one link is issued per address per `PASSWORD_RESET_COOLDOWN_MS`, so
+ * the route cannot be used to fill someone's mailbox. The cooldown is read
+ * from the stored expiry: a token's issue time is its expiry minus the
+ * lifetime, which needs no extra field, survives a restart and holds across
+ * instances. The check lives in the filter of the same `updateOne` that saves
+ * the token, so two simultaneous requests cannot both pass it. A request
+ * inside the cooldown matches nothing, leaves the earlier token alive (the
+ * link already in the mailbox keeps working) and sends nothing. Its response
+ * and its database work are those of any other request, and an unknown
+ * address matches nothing for the same reason, so no one can tell the two
+ * apart from outside.
+ *
  * @param {string} email - already trimmed and lowercased by the validation layer
  * @returns {Promise<void>}
  */
@@ -68,18 +80,20 @@ export const requestPasswordReset = async email => {
 
   const token = crypto.randomBytes(TOKEN_BYTES).toString('hex');
   const target = user ? user._id : new mongoose.Types.ObjectId();
+  const now = Date.now();
+  const issuedBefore = now + env.PASSWORD_RESET_TTL_MS - env.PASSWORD_RESET_COOLDOWN_MS;
 
-  await User.updateOne(
-    { _id: target },
+  const { modifiedCount } = await User.updateOne(
+    { _id: target, passwordResetExpiresAt: { $not: { $gt: new Date(issuedBefore) } } },
     {
       $set: {
         passwordResetTokenHash: hashToken(token),
-        passwordResetExpiresAt: new Date(Date.now() + env.PASSWORD_RESET_TTL_MS),
+        passwordResetExpiresAt: new Date(now + env.PASSWORD_RESET_TTL_MS),
       },
     }
   );
 
-  if (!user) {
+  if (!user || modifiedCount === 0) {
     return;
   }
 
