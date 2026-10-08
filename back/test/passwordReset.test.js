@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import request from 'supertest';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import app from '../src/app.js';
 import env from '../src/config/env.js';
 import { rateLimitTesting } from '../src/middleware/rateLimit.middleware.js';
@@ -129,6 +129,80 @@ describe('POST /auth/forgot-password', () => {
 
     const withSecond = await reset(second);
     expect(withSecond.status).toBe(200);
+  });
+
+  describe('per-address cooldown', () => {
+    const shortCooldown = env.PASSWORD_RESET_COOLDOWN_MS;
+
+    beforeEach(() => {
+      env.PASSWORD_RESET_COOLDOWN_MS = 60_000;
+    });
+
+    afterEach(() => {
+      env.PASSWORD_RESET_COOLDOWN_MS = shortCooldown;
+    });
+
+    const settle = () => new Promise(resolve => setTimeout(resolve, 100));
+
+    test('a second request inside the cooldown sends no mail and keeps the first link working', async () => {
+      const mail = installFakeTransport();
+      const { user, token } = await userWithResetToken(mail);
+
+      const again = await forgot(user.email);
+      await settle();
+
+      expect(again.status).toBe(202);
+      expect(mail.sent).toHaveLength(1);
+      expect((await reset(token)).status).toBe(200);
+    });
+
+    test('answers a request inside the cooldown exactly like one outside it, and like an unknown address', async () => {
+      const mail = installFakeTransport();
+      const { user } = await userWithResetToken(mail);
+
+      const inside = await forgot(user.email);
+      const unknown = await forgot('nobody.at.all@example.com');
+
+      expect(inside.status).toBe(202);
+      expect(unknown.status).toBe(inside.status);
+      expect(unknown.body).toEqual(inside.body);
+    });
+
+    test('sends again once the cooldown has passed', async () => {
+      const mail = installFakeTransport();
+      const { user } = await userWithResetToken(mail);
+
+      await User.updateOne(
+        { email: user.email },
+        { $set: { passwordResetExpiresAt: new Date(Date.now() + env.PASSWORD_RESET_TTL_MS - 61_000) } }
+      );
+      await forgot(user.email);
+      await mail.waitForMail(2);
+
+      expect(mail.sent).toHaveLength(2);
+    });
+
+    test('the cooldown is per address, so another account is not held back', async () => {
+      const mail = installFakeTransport();
+      await userWithResetToken(mail);
+      const { user: other } = await registerUser();
+
+      await forgot(other.email);
+      await mail.waitForMail(2);
+
+      expect(mail.sent[1].to).toBe(other.email);
+    });
+
+    test('simultaneous requests for one address send a single mail', async () => {
+      const mail = installFakeTransport();
+      const { user } = await registerUser();
+
+      await Promise.all([forgot(user.email), forgot(user.email), forgot(user.email)]);
+      await mail.waitForMail(1);
+      await settle();
+
+      expect(mail.sent).toHaveLength(1);
+    });
   });
 
   test('is behind a rate limit that counts requests which succeed', async () => {

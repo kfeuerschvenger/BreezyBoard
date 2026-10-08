@@ -113,6 +113,7 @@ const parseFrontendUrl = raw => {
   return url.origin;
 };
 
+const ONE_MINUTE_MS = 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
@@ -169,6 +170,15 @@ const env = {
   // mailbox, a forwarded message or a backup is worth nothing by the time
   // anyone finds it. Tunable so tests can exercise expiry without waiting.
   PASSWORD_RESET_TTL_MS: parseDurationMs('PASSWORD_RESET_TTL_MS', process.env.PASSWORD_RESET_TTL_MS, THIRTY_MINUTES_MS),
+
+  // The shortest gap between two reset emails to the same address. Requests
+  // inside it get the usual answer and send nothing. The tests shorten it so
+  // they can ask for several links in a row.
+  PASSWORD_RESET_COOLDOWN_MS: parseDurationMs(
+    'PASSWORD_RESET_COOLDOWN_MS',
+    process.env.PASSWORD_RESET_COOLDOWN_MS,
+    ONE_MINUTE_MS
+  ),
 
   // Password recovery requests (asking for a link and using one) a single
   // address may make in fifteen minutes. The default is the production
