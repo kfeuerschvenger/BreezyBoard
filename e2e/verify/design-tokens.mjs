@@ -179,6 +179,198 @@ for (const [surface, value] of Object.entries(tertiary)) {
   check(`tertiary text on ${surface} is at least 4.5:1 (${value}:1)`, value >= 4.5, true);
 }
 
+log('\n--- contrast of the colour pairs the primitives introduce ---');
+
+// Each pair is [label, foreground, background, minimum]. A value that starts
+// with `--` is read from `:root`, anything else is a CSS colour. Both go
+// through a canvas so oklch and alpha are resolved by the browser: the
+// background is painted over white first and the foreground over that, which
+// is how a translucent border or fill actually meets the page.
+const measurePairs = async (target, pairs) =>
+  target.evaluate(list => {
+    const root = getComputedStyle(document.documentElement);
+    const resolve = value => (value.startsWith('--') ? root.getPropertyValue(value).trim() : value);
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const flatten = (fg, bg) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.fillStyle = resolve(bg);
+      ctx.fillRect(0, 0, 1, 1);
+      const under = [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3);
+      ctx.fillStyle = resolve(fg);
+      ctx.fillRect(0, 0, 1, 1);
+      return { over: [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3), under };
+    };
+    const channel = c => {
+      const v = c / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    return list.map(([label, fg, bg, minimum]) => {
+      const { over, under } = flatten(fg, bg);
+      const hi = Math.max(luminance(over), luminance(under));
+      const lo = Math.min(luminance(over), luminance(under));
+      return [label, Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100, minimum];
+    });
+  }, pairs);
+
+const reportPairs = async (target, pairs) => {
+  for (const [label, value, minimum] of await measurePairs(target, pairs)) {
+    check(`${label} is at least ${minimum}:1 (${value}:1)`, value >= minimum, true);
+  }
+};
+
+await reportPairs(page, [
+  ['field and control border on white', '--color-line-control', '--color-surface', 3],
+  ['field and control border on the ground', '--color-line-control', '--color-ground', 3],
+  ['focus colour on white', '--color-focus', '--color-surface', 3],
+  ['focus colour on the ground', '--color-focus', '--color-ground', 3],
+  ['white on the primary button fill', '#ffffff', '--color-ink', 4.5],
+  ['white on the primary button hover fill', '#ffffff', '--color-ink-hover', 4.5],
+  ['white on the danger button fill', '#ffffff', '--color-danger', 4.5],
+  ['danger text on white', '--color-danger', '--color-surface', 4.5],
+  ['danger text on its tint', '--color-danger', '--color-danger-bg', 4.5],
+  ['field error text on white', '--color-danger-strong', '--color-surface', 4.5],
+  ['field label on white', '--color-ink-secondary', '--color-surface', 4.5],
+  ['field hint on white', '--color-ink-tertiary', '--color-surface', 4.5],
+  ['ghost button text on its hover fill', '--color-ink-secondary', '--color-line-06', 4.5],
+]);
+
+log('\n--- the keyframes are declared ---');
+
+const keyframeNames = await page.evaluate(() => {
+  const names = new Set();
+  const walk = rules => {
+    for (const rule of rules) {
+      if (rule instanceof CSSKeyframesRule) names.add(rule.name);
+      else if (rule.cssRules) walk(rule.cssRules);
+    }
+  };
+  for (const sheet of document.styleSheets) {
+    try {
+      walk(sheet.cssRules);
+    } catch {
+      // A cross origin sheet cannot be read, and there is none to read.
+    }
+  }
+  return [...names];
+});
+for (const name of [
+  'bbUp',
+  'bbFade',
+  'bbIn',
+  'bbLand',
+  'bbAway',
+  'bbFlow',
+  'bbDrift',
+  'bbSway',
+  'bbPop',
+  'bbGap',
+  'bbSpin',
+  'bbShake',
+  'bbToast',
+]) {
+  check(`the ${name} keyframes exist`, keyframeNames.includes(name), true);
+}
+
+log('\n--- the field frame, on a rendered input ---');
+
+const fieldMetrics = async target =>
+  target.evaluate(() => {
+    const input = document.querySelector('form input');
+    const style = getComputedStyle(input);
+    return {
+      height: style.height,
+      radius: style.borderTopLeftRadius,
+      fontSize: style.fontSize,
+      border: style.borderTopColor,
+    };
+  });
+const paintOf = async (target, cssColor) =>
+  target.evaluate(value => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 1, 1);
+    ctx.fillStyle = value;
+    ctx.fillRect(0, 0, 1, 1);
+    return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).join(',');
+  }, cssColor);
+const tokenValue = (target, name) =>
+  target.evaluate(n => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
+
+const field = await fieldMetrics(page);
+check('an input is 48 pixels tall', field.height, '48px');
+check('an input has the field radius', field.radius, '14px');
+check('an input reads 15 pixels', field.fontSize, '15px');
+check(
+  'an input at rest has the control border',
+  await paintOf(page, field.border),
+  await paintOf(page, await tokenValue(page, '--color-line-control'))
+);
+
+await page.locator('form input').first().focus();
+await page.waitForTimeout(400);
+const focusedField = await page.evaluate(() => {
+  const style = getComputedStyle(document.activeElement);
+  return { border: style.borderTopColor, shadow: style.boxShadow };
+});
+check(
+  'a focused input swaps its border for the focus colour',
+  await paintOf(page, focusedField.border),
+  await paintOf(page, await tokenValue(page, '--color-focus'))
+);
+check('a focused input draws the halo', focusedField.shadow.includes('0px 0px 0px 4px'), true);
+
+log('\n--- buttons and the focus ring, on a rendered dialog ---');
+
+await page.getByRole('button', { name: /forgot password/i }).click();
+const probeDialog = page.getByRole('dialog');
+await probeDialog.waitFor({ state: 'visible' });
+await page.waitForTimeout(500);
+const primary = probeDialog.getByRole('button', { name: 'Send reset link' });
+const secondary = probeDialog.getByRole('button', { name: 'Cancel' });
+const styleOf = (locator, props) =>
+  locator.evaluate((element, names) => {
+    const style = getComputedStyle(element);
+    return Object.fromEntries(names.map(name => [name, style[name]]));
+  }, props);
+
+const primaryStyle = await styleOf(primary, ['height', 'backgroundColor', 'borderTopLeftRadius', 'fontWeight']);
+check('the primary button is 44 pixels tall', primaryStyle.height, '44px');
+check('the primary button has the control radius', primaryStyle.borderTopLeftRadius, '12px');
+check('the primary button is semibold', primaryStyle.fontWeight, '600');
+check(
+  'the primary button is filled with ink',
+  await paintOf(page, primaryStyle.backgroundColor),
+  await paintOf(page, await tokenValue(page, '--color-ink'))
+);
+const secondaryStyle = await styleOf(secondary, ['height', 'borderTopColor', 'borderTopWidth']);
+check('the secondary button is 44 pixels tall', secondaryStyle.height, '44px');
+check('the secondary button has a border', secondaryStyle.borderTopWidth !== '0px', true);
+
+// The dialog opens with focus on its field, so the keyboard walks to the
+// buttons from there. `focus-visible` only matches for a keyboard arrival.
+await primary.focus();
+await page.keyboard.press('Shift+Tab');
+await page.keyboard.press('Tab');
+const ring = await styleOf(primary, ['outlineStyle', 'outlineWidth', 'outlineOffset', 'outlineColor']);
+check('a keyboard focused button draws a 2px solid outline', `${ring.outlineStyle} ${ring.outlineWidth}`, 'solid 2px');
+check('the outline is offset from the button', ring.outlineOffset, '2px');
+check(
+  'the outline is the focus colour',
+  await paintOf(page, ring.outlineColor),
+  await paintOf(page, await tokenValue(page, '--color-focus'))
+);
+await page.keyboard.press('Escape');
+await probeDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
+
 log('\n--- the reduced motion policy ---');
 
 // A person who asks the system for less motion gets animations and
@@ -208,6 +400,38 @@ const collapsed = await calmPage.evaluate(() => {
 check('a 2s transition collapses to under 1ms', collapsed.transition < 1, true);
 check('a 3s animation collapses to under 1ms', collapsed.animation < 1, true);
 check('an infinite animation plays once', collapsed.iterations, '1');
+
+// Every named animation of the token layer, not a probe of the rule alone: a
+// new `--animate-*` token that reached the page some other way would not be
+// caught by the generic probe above.
+const animationTokens = await calmPage.evaluate(() =>
+  [
+    'bb-up',
+    'bb-fade',
+    'bb-in',
+    'bb-land',
+    'bb-away',
+    'bb-pop',
+    'bb-gap',
+    'bb-spin',
+    'bb-shake',
+    'bb-sway',
+    'bb-toast',
+  ].map(name => {
+    const probe = document.createElement('div');
+    probe.style.animation = `var(--animate-${name})`;
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    const duration = Number.parseFloat(style.animationDuration) * (style.animationDuration.endsWith('ms') ? 1 : 1000);
+    const out = [name, style.animationName, duration, style.animationIterationCount];
+    probe.remove();
+    return out;
+  })
+);
+for (const [name, animationName, duration, iterations] of animationTokens) {
+  check(`--animate-${name} names a keyframe set`, animationName !== 'none', true);
+  check(`--animate-${name} collapses to under 1ms and plays once`, duration < 1 && iterations === '1', true);
+}
 
 await calmPage.getByRole('button', { name: /forgot password/i }).click();
 const dialog = calmPage.getByRole('dialog');

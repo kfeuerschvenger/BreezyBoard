@@ -1,24 +1,27 @@
 import { forwardRef } from 'react';
 import type { TextareaHTMLAttributes } from 'react';
+import { FIELD_BORDER, FIELD_BORDER_ERROR, FIELD_CLASSES } from './fieldStyles';
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   hasError?: boolean;
 }
 
-// Exact class string harvested from src/components/CreateBoardModal.tsx.
-const BASE_CLASSES =
-  'w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none';
-
 /**
  * Textarea
- * Thin wrapper over the native textarea carrying the existing textarea class string.
+ * Thin wrapper over the native textarea carrying the shared field frame.
  * Incoming className is merged after the base classes so callers can override.
  */
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ hasError = false, className = '', ...rest }, ref) => {
-    const borderClass = hasError ? 'border-red-500' : 'border-gray-300';
+    const borderClass = hasError ? FIELD_BORDER_ERROR : FIELD_BORDER;
 
-    return <textarea ref={ref} className={`${BASE_CLASSES} ${borderClass} ${className}`} {...rest} />;
+    return (
+      <textarea
+        ref={ref}
+        className={`${FIELD_CLASSES} resize-none rounded-field px-4 py-3 leading-normal ${borderClass} ${className}`}
+        {...rest}
+      />
+    );
   }
 );
 

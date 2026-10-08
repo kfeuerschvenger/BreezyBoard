@@ -68,6 +68,13 @@
   --color-line-14: rgb(15 27 45 / 0.14);
   --color-line-22: rgb(15 27 45 / 0.22);
 
+  /* The boundary of a control that is not drawn with a fill of its own: an
+     input, the unchecked track of a switch, the frame of a segmented control.
+     WCAG 1.4.11 asks 3:1 against what the control sits on, and the reference
+     design's 0.12 alpha navy measures 1.28:1. At 0.5 it measures 3.34:1 on
+     white and 3.26:1 on the ground. */
+  --color-line-control: rgb(15 27 45 / 0.5);
+
   /* The six hues. Every coloured thing in the interface is one of these, in
      three steps: a tint for backgrounds, a deep for text on that tint, and a
      mid for dots, bars and avatar fills. The hue angle is its own variable so
@@ -97,6 +104,21 @@
   --color-lavender-tint: oklch(0.93 0.045 var(--hue-lavender));
   --color-lavender-deep: oklch(0.42 0.11 var(--hue-lavender));
   --color-lavender-mid: oklch(0.72 0.12 var(--hue-lavender));
+
+  /* The edge step: the outline of a hue swatch and the fill of a progress
+     bar. The mid step measures 2.35 to 2.59:1 on white, which is not enough
+     for a shape that has to be seen on its own. At lightness 0.6 the edge
+     measures 3.46:1 or better on the ground and 3.75:1 or better on white,
+     for every hue. */
+  --color-sky-edge: oklch(0.6 0.1 var(--hue-sky));
+  --color-teal-edge: oklch(0.6 0.1 var(--hue-teal));
+  --color-green-edge: oklch(0.6 0.1 var(--hue-green));
+  --color-sand-edge: oklch(0.6 0.1 var(--hue-sand));
+  --color-coral-edge: oklch(0.6 0.1 var(--hue-coral));
+  --color-lavender-edge: oklch(0.6 0.1 var(--hue-lavender));
+
+  /* The accent drawn on the ink surface of a toast. */
+  --color-on-ink-accent: oklch(0.82 0.1 192);
 
   /* Interactive blue: the accent for active icons, the focus border and the
      toggle track, and the softer step for a field being typed into. */
@@ -171,6 +193,242 @@
   --duration-enter: 0.45s;
   --duration-away: 0.46s;
   --duration-land: 0.55s;
+
+  /* The logo tile and the loading mark. */
+  --gradient-logo: linear-gradient(135deg, oklch(0.55 0.14 248), oklch(0.74 0.12 192));
+
+  /* Whole animations, each a keyframe set below with its timing and easing.
+     `animate-bb-up` and the rest are the only way a component names one, so
+     the timing lives here and never in a class string. Every one of them is
+     collapsed by the reduced motion rule at the end of this file. */
+  --animate-bb-up: bbUp 0.35s var(--ease-standard) both;
+  --animate-bb-fade: bbFade 0.2s both;
+  --animate-bb-in: bbIn 0.5s var(--ease-standard) both;
+  --animate-bb-land: bbLand 0.55s var(--ease-standard);
+  --animate-bb-away: bbAway 0.46s var(--ease-exit) forwards;
+  --animate-bb-pop: bbPop 0.35s both;
+  --animate-bb-gap: bbGap 0.18s both;
+  --animate-bb-spin: bbSpin 0.8s linear infinite;
+  --animate-bb-shake: bbShake 0.45s;
+  --animate-bb-sway: bbSway 4s ease-in-out infinite;
+  --animate-bb-toast: bbToast 0.45s var(--ease-standard) both;
+}
+
+/*
+ * Keyframes. Names and shapes follow section 5 of docs/design/SPEC.md. The two
+ * the wind layer drives, `bbFlow` and `bbDrift`, are not in the table above
+ * because each streak and particle carries its own duration and delay.
+ */
+@keyframes bbFlow {
+  from {
+    stroke-dashoffset: 2000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bbDrift {
+  0% {
+    transform: translate(-4vw, 0) rotate(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(50vw, -40px) rotate(200deg);
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(104vw, 16px) rotate(420deg);
+    opacity: 0;
+  }
+}
+
+@keyframes bbIn {
+  from {
+    opacity: 0;
+    transform: translate(-34px, 8px) rotate(-5deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbLand {
+  0% {
+    transform: translateY(-12px) rotate(3deg) scale(1.03);
+    box-shadow: var(--shadow-card-landing);
+  }
+  55% {
+    transform: translateY(2px) rotate(-0.6deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes bbAway {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(180px, -60px) rotate(18deg) scale(0.85);
+    filter: blur(2px);
+  }
+}
+
+@keyframes bbView {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bbShake {
+  20% {
+    transform: translateX(-9px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+  0%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes bbFloat {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes bbToast {
+  from {
+    opacity: 0;
+    transform: translateX(-70px) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bbGap {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: 58px;
+    opacity: 1;
+  }
+}
+
+@keyframes bbPop {
+  0% {
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes bbSway {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+  50% {
+    transform: translateX(3px) rotate(0.4deg);
+  }
+}
+
+/*
+ * The focus ring. One definition for every interactive primitive, drawn as an
+ * outline offset from the control so it never depends on the control's own
+ * border or fill. `focus-visible` rather than `focus`: a pointer press does
+ * not draw it, a keyboard arrival always does. The colour is the focus token,
+ * 4.6:1 on white and 4.25:1 on the ground. A control on an ink surface takes
+ * the white variant, and one clipped by an overflow takes the inset one.
+ */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
+@utility focus-ring-inset {
+  &:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
+  }
+}
+
+/* For a wrapper whose focusable child is visually hidden, such as a radio
+   inside a label drawn as a swatch or a segment. */
+@utility focus-ring-within {
+  &:has(:focus-visible) {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
+@utility focus-ring-on-ink {
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
 }
 
 @layer base {

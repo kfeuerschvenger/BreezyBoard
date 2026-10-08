@@ -50,6 +50,9 @@ describe('Button', () => {
         <Button>Primary</Button>
         <Button variant="secondary">Secondary</Button>
         <Button variant="ghost">Ghost</Button>
+        <Button variant="glass">Glass</Button>
+        <Button variant="danger">Danger</Button>
+        <Button variant="danger-ghost">Blow it away</Button>
         <Button disabled>Disabled</Button>
         <Button isLoading>Saving</Button>
       </div>
