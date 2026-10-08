@@ -37,6 +37,18 @@ services:
       retries: 10
       start_period: 20s
 
+  # A local mail catcher. It accepts anything the API sends over SMTP and
+  # delivers it nowhere: the message is only readable in its web interface
+  # and through its HTTP API, which the end to end suite uses to follow a
+  # password reset link. Development only, there is no counterpart in
+  # docker-compose.prod.yml, where the API must be pointed at a real relay.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: breezyboard-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
   back:
     build:
       context: ./back
@@ -46,6 +58,8 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       PORT: 5000
       # replicaSet=rs0 is what makes the driver open sessions against a
@@ -72,6 +86,13 @@ services:
       # docker-compose.prod.yml deliberately does not set this, so production
       # keeps the strict default from back/src/config/env.js.
       REGISTRATION_LIMIT_PER_HOUR: ${REGISTRATION_LIMIT_PER_HOUR:-500}
+      # Password reset mail goes to the Mailpit container above. Port 1025
+      # is its SMTP listener and needs no authentication. FRONTEND_URL is the
+      # origin the reset link points at, so it is the address a browser on
+      # the host uses, not a name inside the compose network.
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      FRONTEND_URL: http://localhost:${FRONT_PORT:-5173}
       DOTENV_CONFIG_QUIET: "true"
     ports:
       - "${BACK_PORT:-5000}:5000"
