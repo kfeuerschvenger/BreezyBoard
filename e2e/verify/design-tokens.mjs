@@ -1,17 +1,14 @@
 // Design tokens, checked on a rendered page rather than in the stylesheet.
 //
-// This script exists because of how finding P4-1 was actually caught. The
-// code said `font-heading` in forty places and the stylesheet imported
-// Inter, and both of those read as a working typography system. What was
-// true was that Tailwind 4 has no implicit theme, so an undeclared token
-// makes its utility a silent no-op, and the whole application rendered in
-// the default sans stack. Nothing in the source says that. Only the
-// computed style on a real page does.
+// Tailwind 4 has no implicit theme: an undeclared token makes its utility a
+// silent no-op, and the page falls back to the browser default without any
+// error. Nothing in the source says so. Only the computed style on a real
+// page does, which is why every assertion here reads a rendered element, a
+// loaded font face or a painted pixel.
 //
-// It also measures the colour contrast of the muted text and icon token
-// rather than trusting a hex value copied out of a palette, because
-// Tailwind 4 states its palette in oklch and the numbers are not the ones
-// from version 3 that most contrast advice is written against.
+// Colour contrast is measured on the rendered page as well, rather than read
+// off a hex value in a palette table, because the tokens are stated in oklch
+// and the numbers are not the ones most contrast advice is written against.
 
 import { chromium } from 'playwright';
 
@@ -31,48 +28,113 @@ const page = await context.newPage();
 
 await page.goto(`${FRONT}/login`);
 await page.waitForSelector('form');
-// The webfont is fetched from Google, so the first paint can land before it
-// arrives and report the fallback perfectly correctly.
-await page.evaluate(() => document.fonts.ready);
 
 log('--- the typography tokens resolve to a real family ---');
 
-const usesInter = async selector =>
+// The faces are self-hosted and split by unicode range, so a family is only
+// fetched once something draws with it. Asking the font loader for each face
+// forces the fetch and returns the faces that matched: an empty list means
+// the family name resolves to nothing, which a computed style alone never
+// reveals because it reports the declared stack, not what was drawn.
+const faceLoads = async spec =>
+  page.evaluate(async s => {
+    const faces = await document.fonts.load(s);
+    return faces.length > 0 && faces.every(f => f.status === 'loaded') ? 'loaded' : 'no face loaded';
+  }, spec);
+
+const familyOf = async selector =>
   page.evaluate(sel => {
     const element = document.querySelector(sel);
-    if (!element) return 'no such element';
-    return getComputedStyle(element).fontFamily.toLowerCase().includes('inter') ? 'Inter' : 'not Inter';
+    return element ? getComputedStyle(element).fontFamily : 'no such element';
   }, selector);
 
-check('body text resolves to Inter', await usesInter('body'), 'Inter');
-check('a heading resolves to Inter', await usesInter('h1, h2, h3'), 'Inter');
+const leads = (family, name) =>
+  (family.split(',')[0] ?? '')
+    .replace(/["']/g, '')
+    .trim()
+    .startsWith(name);
+
+check('body text leads with Instrument Sans', leads(await familyOf('body'), 'Instrument Sans'), true);
+check('a heading leads with Bricolage Grotesque', leads(await familyOf('h1, h2, h3'), 'Bricolage Grotesque'), true);
+check('Inter is gone from the page', (await familyOf('body')).toLowerCase().includes('inter,'), false);
+
+check('the display face loads from a real file', await faceLoads('700 24px "Bricolage Grotesque Variable"'), 'loaded');
+check('the body face loads from a real file', await faceLoads('400 14px "Instrument Sans Variable"'), 'loaded');
+check('the mono face loads at 400', await faceLoads('400 12px "DM Mono"'), 'loaded');
+check('the mono face loads at 500', await faceLoads('500 12px "DM Mono"'), 'loaded');
 
 // The tokens are what the classes point at. An element carrying one has to
-// end up with the family rather than with whatever the browser defaults to,
-// which is exactly what was not happening before the @theme block existed.
-const tokenApplies = await page.evaluate(() => {
+// end up with the family rather than with whatever the browser defaults to.
+const utilityFamily = className =>
+  page.evaluate(cls => {
+    const probe = document.createElement('span');
+    probe.className = cls;
+    probe.textContent = 'probe';
+    document.body.appendChild(probe);
+    const family = getComputedStyle(probe).fontFamily;
+    probe.remove();
+    return family;
+  }, className);
+
+check('the font-heading utility applies', leads(await utilityFamily('font-heading'), 'Bricolage Grotesque'), true);
+check('the font-body utility applies', leads(await utilityFamily('font-body'), 'Instrument Sans'), true);
+// No component draws in the mono face yet, so Tailwind has generated no
+// `font-mono` utility to probe. The token itself is what a later class or
+// style reads, so the probe takes it through `var()`.
+const monoFamily = await page.evaluate(() => {
   const probe = document.createElement('span');
-  probe.className = 'font-heading';
+  probe.style.fontFamily = 'var(--font-mono)';
   probe.textContent = 'probe';
   document.body.appendChild(probe);
   const family = getComputedStyle(probe).fontFamily;
   probe.remove();
-  return family.toLowerCase().includes('inter') ? 'applied' : 'silently ignored';
+  return family;
 });
-check('the font-heading utility actually applies', tokenApplies, 'applied');
+check('the mono token resolves to DM Mono', leads(monoFamily, 'DM Mono'), true);
 
-log('\n--- contrast of the muted text and icon colour ---');
+log('\n--- the global basics ---');
 
-// WCAG 1.4.3 wants 4.5:1 for normal text and 1.4.11 wants 3:1 for the
-// meaningful parts of an icon. The muted grey is used for both, so the
-// stricter of the two is the one that matters.
-const measured = await page.evaluate(() => {
-  // Every colour goes through a canvas rather than through a regular
-  // expression. Tailwind 4 states its palette in oklch, so a computed colour
-  // reads as `oklch(0.707 0.022 261.325)`, and a parser that assumes three
-  // channels of 0 to 255 reads those numbers as an RGB triple and produces a
-  // confident, meaningless answer. Painting one pixel and reading it back
-  // costs nothing and is correct for any colour space the browser accepts.
+const basics = await page.evaluate(() => {
+  const root = getComputedStyle(document.documentElement);
+  const body = getComputedStyle(document.body);
+  const paint = value => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = value;
+    ctx.fillRect(0, 0, 1, 1);
+    return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).join(',');
+  };
+  const token = name => root.getPropertyValue(name).replace(/\s/g, '');
+  return {
+    ground: paint(root.getPropertyValue('--color-ground').trim()),
+    ink: paint(root.getPropertyValue('--color-ink').trim()),
+    bodyBackground: paint(body.backgroundColor),
+    bodyColor: paint(body.color),
+    easing: token('--ease-standard'),
+    exit: token('--ease-exit'),
+    spring: token('--ease-spring'),
+    hues: ['sky', 'teal', 'green', 'sand', 'coral', 'lavender'].map(h =>
+      ['tint', 'deep', 'mid'].every(step => root.getPropertyValue(`--color-${h}-${step}`).trim() !== '')
+    ),
+  };
+});
+check('the page ground is the ground token', basics.bodyBackground, basics.ground);
+check('the page text is the ink token', basics.bodyColor, basics.ink);
+check('the standard easing is declared', basics.easing, 'cubic-bezier(0.2,0.8,0.2,1)');
+check('the exit easing is declared', basics.exit, 'cubic-bezier(0.5,0,0.75,0)');
+check('the spring easing is declared', basics.spring, 'cubic-bezier(0.3,1.4,0.5,1)');
+check('all six hues declare a tint, a deep and a mid', basics.hues.every(Boolean), true);
+
+log('\n--- contrast of the tertiary text token ---');
+
+// Placeholders, eyebrow labels and timestamps are small text, so 1.4.3 asks
+// for 4.5:1 on every surface they sit on: white, the page ground and each
+// note tint. Every colour goes through a canvas, because the tokens are
+// stated in oklch and a parser written for three channels of 0 to 255 reads
+// them as an RGB triple and answers confidently and wrongly.
+const tertiary = await page.evaluate(() => {
   const toRgb = cssColor => {
     const canvas = document.createElement('canvas');
     canvas.width = 1;
@@ -83,7 +145,6 @@ const measured = await page.evaluate(() => {
     const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
     return [r, g, b];
   };
-
   const channel = c => {
     const v = c / 255;
     return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
@@ -94,42 +155,29 @@ const measured = await page.evaluate(() => {
     const darker = Math.min(luminance(a), luminance(b));
     return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
   };
-
-  // The nearest ancestor that actually paints something, which is the
-  // surface the text is read against. Walking up matters: the elements
-  // carrying this colour sit on white cards over a grey page.
-  const backgroundBehind = element => {
-    for (let node = element; node; node = node.parentElement) {
-      const value = getComputedStyle(node).backgroundColor;
-      const [r, g, b] = toRgb(value);
-      const alpha = Number(value.match(/[\d.]+\s*\)$/)?.[0]?.replace(')', '') ?? '1');
-      if (!value.startsWith('rgba(0, 0, 0, 0') && alpha !== 0) return [r, g, b];
-    }
-    return [255, 255, 255];
+  const root = getComputedStyle(document.documentElement);
+  const text = toRgb(root.getPropertyValue('--color-ink-tertiary').trim());
+  const surfaces = {
+    white: toRgb(root.getPropertyValue('--color-surface').trim()),
+    ground: toRgb(root.getPropertyValue('--color-ground').trim()),
   };
-
-  const sample = document.querySelector('.text-gray-400');
-  if (!sample) return null;
-
-  return {
-    color: getComputedStyle(sample).color,
-    contrast: ratio(toRgb(getComputedStyle(sample).color), backgroundBehind(sample)),
-  };
+  // The note background of the reference design: lightness .955, chroma .035.
+  for (const [name, hue] of [
+    ['sky', 232],
+    ['teal', 192],
+    ['green', 150],
+    ['sand', 82],
+    ['coral', 38],
+    ['lavender', 300],
+  ]) {
+    surfaces[`note ${name}`] = toRgb(`oklch(0.955 0.035 ${hue})`);
+  }
+  return Object.fromEntries(Object.entries(surfaces).map(([name, rgb]) => [name, ratio(text, rgb)]));
 });
 
-if (measured) {
-  log(`measured on a real element: text-gray-400 is ${measured.color}`);
-  log(`          against the surface behind it: ${measured.contrast}:1`);
-  log(`          ${measured.contrast >= 4.5 ? 'passes' : 'FAILS'} 1.4.3 for text (4.5:1)`);
-  log(`          ${measured.contrast >= 3 ? 'passes' : 'FAILS'} 1.4.11 for icon parts (3:1)`);
-} else {
-  log('no element carrying text-gray-400 on this page');
+for (const [surface, value] of Object.entries(tertiary)) {
+  check(`tertiary text on ${surface} is at least 4.5:1 (${value}:1)`, value >= 4.5, true);
 }
-
-log('\nReported rather than asserted. The colour is used in thirty five places for both text');
-log('and icons, so the remedy is a decision per call site rather than a global swap, and it');
-log('belongs with the component migration. Recorded here so the number comes from a');
-log('measurement instead of from a palette table written for Tailwind 3.');
 
 await browser.close();
 

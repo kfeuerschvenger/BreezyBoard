@@ -93,7 +93,7 @@ It earned its keep before it was even finished. The first measurement reported e
 
 It also confirmed the prediction in section 10.2 of the revival plan, word for word: the task drawer reports `aria-dialog-name`, an unlabelled dialog, which no lint rule and no unit test in this repository had ever noticed.
 
-**`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. Bring that stack up first:
+**`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. It also asserts that the page makes no request to another origin, that the policy names no font host, and that the Bricolage Grotesque and Instrument Sans files load from the application origin with status 200. Bring that stack up first:
 
 ```bash
 MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-only \
