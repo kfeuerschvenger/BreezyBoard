@@ -1,35 +1,210 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/*
+ * Self-hosted typefaces. The variable builds carry the weight axis (and the
+ * optical size axis for the display face) in one file per script, and each
+ * face is split by `unicode-range`, so a browser only downloads the scripts
+ * the page actually draws. `font-display: swap` is set by the packages: text
+ * paints at once in the fallback stack and swaps when the file arrives.
+ */
+@import '@fontsource-variable/bricolage-grotesque/opsz.css';
+@import '@fontsource-variable/instrument-sans/index.css';
+@import '@fontsource/dm-mono/400.css';
+@import '@fontsource/dm-mono/500.css';
 @import 'tailwindcss';
 
 /*
- * The design token layer, section 12.2 of the revival plan.
+ * The design token layer, section 12.2 of the revival plan and the Phase 6b
+ * specification in docs/design/SPEC.md.
  *
- * `font-heading` and `font-body` are applied across eight files and roughly
- * forty call sites, and until this block existed every one of them did
- * nothing at all. Under Tailwind 4 there is no config file and no implicit
- * theme: a utility whose token is not declared here simply does not exist,
- * and an unknown class is a silent no-op rather than an error. So Inter was
- * imported on the line above, never bound to anything, and the entire
- * application rendered in the default sans stack. That is finding P4-1, and
- * it was confirmed by reading the computed font off a running production
- * page rather than by reading the code.
+ * This block is the only place a visual value is declared. Under Tailwind 4
+ * there is no config file and no implicit theme: a utility whose token is not
+ * declared here does not exist, and an unknown class is a silent no-op rather
+ * than an error. `static` makes every variable below part of the generated
+ * stylesheet whether or not a class uses it yet, so a script or a stylesheet
+ * can read any of them from `:root`.
  *
- * Both roles resolve to Inter today, which is the faithful fix rather than a
- * shortcut: it is the only family the application loads, and the two names
- * record a distinction the design already makes in weight. Introducing a
- * separate display face later is one line here instead of forty edits.
+ * Tokens are named for the role they play, never for the value they hold. A
+ * dark theme is then a second set of values for these same names, and no
+ * feature has to change.
+ *
+ * Tailwind's own `--radius-*`, `--shadow-*` and `--color-*` scales are left
+ * alone: redefining them would restyle every component that uses `rounded-lg`
+ * or `shadow-sm` before that component has been migrated.
  */
-@theme {
-  --font-heading: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+@theme static {
+  /* Typefaces. Heading is the display face, body is the reading face, mono is
+     for small labels, counts and key hints. */
+  --font-heading: 'Bricolage Grotesque Variable', 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Ground, surfaces and text. The tertiary step is the lightest grey that
+     keeps 4.5:1 on white, on the ground and on every note tint, which is why
+     it is darker than the reference design's value: placeholders, eyebrow
+     labels and timestamps are small text. */
+  --color-ground: #f3f6f9;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f7f9fb;
+  --color-ink: #0f1b2d;
+  --color-ink-hover: oklch(0.3 0.08 248);
+  --color-ink-body: #2e3b4e;
+  --color-ink-secondary: #4b586b;
+  --color-ink-tertiary: #5e6b7e;
+  --color-link: oklch(0.45 0.12 232);
+  --color-selection: oklch(0.89 0.065 232);
+  --color-scrim: rgb(15 27 45 / 0.32);
+
+  /* Glass surfaces drawn over the ground gradient. */
+  --color-glass: rgb(255 255 255 / 0.62);
+  --color-glass-strong: rgb(255 255 255 / 0.82);
+  --color-glass-border: rgb(255 255 255 / 0.85);
+
+  /* Borders and dividers, one navy at rising opacity. */
+  --color-line-05: rgb(15 27 45 / 0.05);
+  --color-line-06: rgb(15 27 45 / 0.06);
+  --color-line-07: rgb(15 27 45 / 0.07);
+  --color-line-08: rgb(15 27 45 / 0.08);
+  --color-line-10: rgb(15 27 45 / 0.1);
+  --color-line-12: rgb(15 27 45 / 0.12);
+  --color-line-14: rgb(15 27 45 / 0.14);
+  --color-line-22: rgb(15 27 45 / 0.22);
+
+  /* The six hues. Every coloured thing in the interface is one of these, in
+     three steps: a tint for backgrounds, a deep for text on that tint, and a
+     mid for dots, bars and avatar fills. The hue angle is its own variable so
+     a gradient or a note background can be built from the same number. */
+  --hue-sky: 232;
+  --hue-teal: 192;
+  --hue-green: 150;
+  --hue-sand: 82;
+  --hue-coral: 38;
+  --hue-lavender: 300;
+
+  --color-sky-tint: oklch(0.93 0.045 var(--hue-sky));
+  --color-sky-deep: oklch(0.42 0.11 var(--hue-sky));
+  --color-sky-mid: oklch(0.72 0.12 var(--hue-sky));
+  --color-teal-tint: oklch(0.93 0.045 var(--hue-teal));
+  --color-teal-deep: oklch(0.42 0.11 var(--hue-teal));
+  --color-teal-mid: oklch(0.72 0.12 var(--hue-teal));
+  --color-green-tint: oklch(0.93 0.045 var(--hue-green));
+  --color-green-deep: oklch(0.42 0.11 var(--hue-green));
+  --color-green-mid: oklch(0.72 0.12 var(--hue-green));
+  --color-sand-tint: oklch(0.93 0.045 var(--hue-sand));
+  --color-sand-deep: oklch(0.42 0.11 var(--hue-sand));
+  --color-sand-mid: oklch(0.72 0.12 var(--hue-sand));
+  --color-coral-tint: oklch(0.93 0.045 var(--hue-coral));
+  --color-coral-deep: oklch(0.42 0.11 var(--hue-coral));
+  --color-coral-mid: oklch(0.72 0.12 var(--hue-coral));
+  --color-lavender-tint: oklch(0.93 0.045 var(--hue-lavender));
+  --color-lavender-deep: oklch(0.42 0.11 var(--hue-lavender));
+  --color-lavender-mid: oklch(0.72 0.12 var(--hue-lavender));
+
+  /* Interactive blue: the accent for active icons, the focus border and the
+     toggle track, and the softer step for a field being typed into. */
+  --color-accent: oklch(0.55 0.13 232);
+  --color-accent-strong: oklch(0.62 0.13 232);
+  --color-accent-soft: oklch(0.7 0.12 232);
+  --color-focus: oklch(0.55 0.13 232);
+  --color-focus-halo: oklch(0.74 0.13 232 / 0.22);
+
+  /* Status roles. Each has an icon or fill step, a text step that holds
+     contrast on its own background, and the background. */
+  --color-success: oklch(0.6 0.13 150);
+  --color-success-strong: oklch(0.5 0.11 150);
+  --color-success-bg: oklch(0.955 0.035 150);
+  --color-warning: oklch(0.55 0.12 82);
+  --color-warning-strong: oklch(0.42 0.11 82);
+  --color-warning-bg: oklch(0.955 0.035 82);
+  --color-danger: oklch(0.48 0.13 38);
+  --color-danger-strong: oklch(0.42 0.11 38);
+  --color-danger-bg: oklch(0.955 0.035 38);
+
+  /* Radii by role, not by size. */
+  --radius-dot: 4px;
+  --radius-check: 6px;
+  --radius-chip: 8px;
+  --radius-button-small: 10px;
+  --radius-control: 12px;
+  --radius-field: 14px;
+  --radius-card: 16px;
+  --radius-float: 18px;
+  --radius-note: 20px;
+  --radius-tile: 22px;
+  --radius-panel: 24px;
+  --radius-modal: 26px;
+  --radius-hero: 28px;
+  --radius-stage: 30px;
+  --radius-pill: 99px;
+
+  /* Shadows: long, soft, with a large negative spread, in the navy of the
+     text so every surface looks lit from the same place. */
+  --shadow-nav-active: 0 6px 16px -10px rgb(15 27 45 / 0.35);
+  --shadow-card: 0 1px 0 rgb(15 27 45 / 0.04), 0 8px 20px -16px rgb(15 27 45 / 0.35);
+  --shadow-card-hover: 0 18px 30px -18px rgb(15 27 45 / 0.45);
+  --shadow-card-landing: 0 26px 40px -18px rgb(15 27 45 / 0.45);
+  --shadow-column: 0 16px 40px -32px rgb(15 27 45 / 0.4);
+  --shadow-sidebar: 0 20px 50px -30px rgb(15 27 45 / 0.35);
+  --shadow-tile: 0 14px 34px -24px rgb(15 27 45 / 0.4);
+  --shadow-tile-hover: 0 26px 44px -24px rgb(15 27 45 / 0.45);
+  --shadow-modal: 0 40px 80px -30px rgb(15 27 45 / 0.55);
+  --shadow-button: 0 12px 24px -14px rgb(15 27 45 / 0.7);
+  --shadow-button-submit: 0 14px 30px -14px rgb(15 27 45 / 0.6);
+  --shadow-button-hover: 0 20px 36px -14px rgb(15 27 45 / 0.6);
+  --shadow-toast: 0 20px 40px -18px rgb(15 27 45 / 0.7);
+  --shadow-knob: 0 2px 6px rgb(15 27 45 / 0.25);
+  --shadow-segment: 0 2px 8px -3px rgb(15 27 45 / 0.3);
+  --shadow-note: 0 18px 34px -20px rgb(15 27 45 / 0.4);
+  --shadow-hero: 0 30px 60px -36px oklch(0.4 0.12 240 / 0.8);
+  --shadow-focus: 0 0 0 4px oklch(0.74 0.13 232 / 0.22);
+  --shadow-swatch-ring: 0 0 0 2px #fff, 0 0 0 4px #0f1b2d;
+
+  /* Easings. Standard is a fast start that settles, for anything entering
+     or moving. Exit accelerates away, for anything leaving. Spring
+     overshoots slightly, for small confirmations. */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-spring: cubic-bezier(0.3, 1.4, 0.5, 1);
+
+  /* Durations. */
+  --duration-fast: 0.2s;
+  --duration-base: 0.25s;
+  --duration-moderate: 0.35s;
+  --duration-enter: 0.45s;
+  --duration-away: 0.46s;
+  --duration-land: 0.55s;
 }
 
-/*
- * Inter for everything that does not say otherwise. Without this the
- * hundreds of elements carrying neither `font-heading` nor `font-body`
- * would keep rendering in the default stack, so binding the two tokens
- * alone would have produced an application in two different typefaces.
- */
-body {
-  font-family: var(--font-body);
+@layer base {
+  html {
+    background-color: var(--color-ground);
+  }
+
+  /*
+   * Body carries the reading face, the ink colour and the ground. Hundreds of
+   * elements name neither a family nor a colour, so without these they would
+   * render in the browser default.
+   */
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Every heading is set in the display face, with or without a utility
+   * class, so a heading added later cannot fall back to the reading face by
+   * omission.
+   */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+
+  ::selection {
+    background-color: var(--color-selection);
+  }
 }

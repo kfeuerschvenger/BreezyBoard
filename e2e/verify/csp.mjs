@@ -5,6 +5,8 @@ const log = (...a) => console.log(...a);
 const cspViolations = [];
 const consoleErrors = [];
 const failedRequests = [];
+const fontResponses = [];
+const foreignRequests = [];
 
 const browser = await chromium.launch();
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
@@ -14,6 +16,12 @@ page.on('console', m => {
   else if (m.type() === 'error') consoleErrors.push(text);
 });
 page.on('pageerror', e => consoleErrors.push('PAGEERROR ' + String(e)));
+page.on('response', r => {
+  if (r.request().resourceType() === 'font') fontResponses.push({ url: r.url(), status: r.status() });
+});
+page.on('request', r => {
+  if (!r.url().startsWith(BASE) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) foreignRequests.push(r.url());
+});
 page.on('requestfailed', r => failedRequests.push(`${r.url()} :: ${r.failure()?.errorText}`));
 
 const user = {
@@ -36,13 +44,44 @@ await page.waitForTimeout(3000);
 log('url after login:', page.url());
 log('dashboard visible:', (await page.locator('body').innerText()).includes('My Boards'));
 
-// The font is loaded from Google Fonts through an @import in the stylesheet,
-// which is exactly the kind of thing a careless CSP blocks.
-const fontApplied = await page.evaluate(() => {
-  const probe = document.querySelector('h1, h2, p');
-  return probe ? getComputedStyle(probe).fontFamily : 'none';
+// The typefaces are bundled into /assets/ and served from the application
+// origin, so the policy names no font host. This reads the computed families,
+// waits for the faces to actually load, and then asserts where the files came
+// from. A policy that blocked them would show up here as a fallback family and
+// an empty font response list rather than as a thrown error.
+const fontReport = await page.evaluate(async () => {
+  await document.fonts.ready;
+  const heading = document.querySelector('h1, h2, h3');
+  const body = document.querySelector('p, label, button');
+  await document.fonts.load('700 20px "Bricolage Grotesque Variable"');
+  await document.fonts.load('400 14px "Instrument Sans Variable"');
+  return {
+    heading: heading ? getComputedStyle(heading).fontFamily : 'none',
+    body: body ? getComputedStyle(body).fontFamily : 'none',
+    loaded: [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, '')),
+  };
 });
-log('computed font family:', fontApplied);
+log('computed heading family:', fontReport.heading);
+log('computed body family:', fontReport.body);
+log('faces loaded:', [...new Set(fontReport.loaded)].join(', '));
+
+const headerResponse = await page.request.get(BASE + '/');
+const policy = headerResponse.headers()['content-security-policy'] ?? '';
+log('policy:', policy);
+
+const fontProblems = [];
+if (/googleapis|gstatic/.test(policy)) fontProblems.push('the policy still names a third-party font host');
+if (!fontResponses.length) fontProblems.push('no font file was requested');
+for (const f of fontResponses) {
+  if (!f.url.startsWith(BASE)) fontProblems.push(`font served from another origin: ${f.url}`);
+  if (f.status !== 200) fontProblems.push(`font answered ${f.status}: ${f.url}`);
+}
+for (const family of ['Bricolage Grotesque Variable', 'Instrument Sans Variable']) {
+  if (!fontReport.loaded.includes(family)) fontProblems.push(`${family} did not load`);
+}
+if (!fontReport.heading.includes('Bricolage')) fontProblems.push('a heading did not resolve to Bricolage Grotesque');
+if (!fontReport.body.includes('Instrument Sans')) fontProblems.push('body text did not resolve to Instrument Sans');
+log('font files from the app origin:', fontResponses.filter(f => f.url.startsWith(BASE)).length);
 
 await page.screenshot({ path: 'prod-csp.png', fullPage: true });
 
@@ -55,4 +94,6 @@ const section = (t, arr) => {
 section('CSP VIOLATIONS', cspViolations);
 section('CONSOLE ERRORS', consoleErrors);
 section('FAILED REQUESTS', failedRequests);
-process.exit(cspViolations.length ? 1 : 0);
+section('REQUESTS TO OTHER ORIGINS', foreignRequests);
+section('FONT PROBLEMS', fontProblems);
+process.exit(cspViolations.length || fontProblems.length || foreignRequests.length ? 1 : 0);
