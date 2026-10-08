@@ -132,6 +132,48 @@ describe('boards', () => {
     expect((await Board.findById(board._id)).title).toBe('Test Board');
   });
 
+  test('create refuses a color id that matches no palette entry, and writes nothing', async () => {
+    const missing = 'ffffffffffffffffffffffff';
+
+    const res = await request(app)
+      .post('/api/boards')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Painted with nothing', color: missing });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(await Board.countDocuments({ title: 'Painted with nothing' })).toBe(0);
+  });
+
+  test('update refuses a color id that matches no palette entry and keeps the colour it had', async () => {
+    const board = await createBoard(owner.token, colors.boardColor._id);
+
+    const res = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Renamed in the same request', color: 'ffffffffffffffffffffffff' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+
+    const stored = await Board.findById(board._id);
+    expect(stored.color.toString()).toBe(colors.boardColor._id.toString());
+    expect(stored.title).toBe('Test Board');
+  });
+
+  test('update that leaves the colour out still goes through', async () => {
+    const board = await createBoard(owner.token, colors.boardColor._id);
+
+    const res = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Only the name' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.title).toBe('Only the name');
+    expect(res.body.data.color.value).toBe('#0052CC');
+  });
+
   test('get by id tells the caller their own role on the board', async () => {
     const member = await registerUser();
     const board = await createBoard(owner.token, colors.boardColor._id);

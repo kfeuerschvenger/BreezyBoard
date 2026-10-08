@@ -2,11 +2,13 @@ import mongoose from 'mongoose';
 
 import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
+import ColorPalette from '../models/ColorPalette.js';
 import Task from '../models/Task.js';
 import Workspace from '../models/Workspace.js';
 import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middleware.js';
 import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
+import { ErrorCode } from '../constants/errorCodes.js';
 
 // Columns are copied out of the template rather than referenced, so that the
 // board owns its column ids. Mongoose assigns fresh subdocument ids on the
@@ -29,6 +31,19 @@ const copyColumnsFromTemplate = async templateId => {
     color: column.color,
     order: column.order,
   }));
+};
+
+// The schema checks that a colour id is shaped like an id, and nothing checks
+// that it names anything. A board saved with an id that matches no palette
+// entry reads back with a null colour, which every consumer then has to
+// guess a fallback for, so the id is looked up before it is written.
+//
+// A 400 rather than a 404: the board being written is fine, it is the value
+// sent for one of its fields that is not.
+const assertColorExists = async colorId => {
+  if (!(await ColorPalette.exists({ _id: colorId }))) {
+    throw new ApiError(400, 'color must be the id of an existing color', [], ErrorCode.VALIDATION_ERROR);
+  }
 };
 
 // A board always belongs to exactly one workspace. A client that names one
@@ -63,6 +78,8 @@ const resolveWorkspaceId = async (requestedWorkspaceId, userId) => {
 };
 
 export const createBoard = async (boardData, userId) => {
+  await assertColorExists(boardData.color);
+
   // Ensures that the creator is included in the members
   const members = boardData.members || [];
   if (!members.includes(userId)) {
@@ -100,6 +117,10 @@ export const getBoardById = async id => {
 };
 
 export const updateBoard = async (id, updateData) => {
+  if (updateData.color !== undefined) {
+    await assertColorExists(updateData.color);
+  }
+
   const board = await Board.findByIdAndUpdate(id, updateData, {
     new: true,
     runValidators: true,
