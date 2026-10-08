@@ -39,11 +39,15 @@ const copyColumnsFromTemplate = async templateId => {
 // entry reads back with a null colour, which every consumer then has to
 // guess a fallback for, so the id is looked up before it is written.
 //
+// The palette holds three kinds of colour, and a board takes only the
+// 'board' kind: a task or column colour is a real entry but belongs to a
+// different surface, so it is refused like an id that names nothing.
+//
 // A 400 rather than a 404: the board being written is fine, it is the value
 // sent for one of its fields that is not.
-const assertColorExists = async colorId => {
-  if (!(await ColorPalette.exists({ _id: colorId }))) {
-    throw new ApiError(400, 'color must be the id of an existing color', [], ErrorCode.VALIDATION_ERROR);
+const assertBoardColorExists = async colorId => {
+  if (!(await ColorPalette.exists({ _id: colorId, type: 'board' }))) {
+    throw new ApiError(400, 'color must be the id of a board color', [], ErrorCode.VALIDATION_ERROR);
   }
 };
 
@@ -95,7 +99,7 @@ const resolveWorkspaceId = async (requestedWorkspaceId, userId) => {
 };
 
 export const createBoard = async (boardData, userId) => {
-  await assertColorExists(boardData.color);
+  await assertBoardColorExists(boardData.color);
 
   if (boardData.members?.length) {
     await assertUsersExist(boardData.members);
@@ -139,7 +143,7 @@ export const getBoardById = async id => {
 
 export const updateBoard = async (id, updateData) => {
   if (updateData.color !== undefined) {
-    await assertColorExists(updateData.color);
+    await assertBoardColorExists(updateData.color);
   }
 
   const board = await Board.findByIdAndUpdate(id, updateData, {

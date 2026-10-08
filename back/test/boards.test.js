@@ -161,6 +161,32 @@ describe('boards', () => {
     expect(stored.title).toBe('Test Board');
   });
 
+  test('create refuses a task color and a column color, and writes nothing', async () => {
+    for (const color of [colors.taskColor, colors.columnColor]) {
+      const res = await request(app)
+        .post('/api/boards')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ title: 'Wrong palette', color: color._id.toString() });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+    }
+    expect(await Board.countDocuments({ title: 'Wrong palette' })).toBe(0);
+  });
+
+  test('update refuses a task color and keeps the colour the board had', async () => {
+    const board = await createBoard(owner.token, colors.boardColor._id);
+
+    const res = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ color: colors.taskColor._id.toString() });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect((await Board.findById(board._id)).color.toString()).toBe(colors.boardColor._id.toString());
+  });
+
   describe('member ids must belong to existing users', () => {
     const nobody = 'ffffffffffffffffffffffff';
     const idOf = account => account.user.id ?? account.user._id;
