@@ -71,6 +71,18 @@ services:
       # https://breezyboard.example. The API refuses to start without it rather
       # than falling back to allowing every origin, which is what it used to do.
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS to the public origin of the site}
+      # Password reset mail. The API refuses to start without a relay, a
+      # sender and the public origin: a reset link is an account takeover
+      # waiting for the wrong recipient, so the alternative of logging it
+      # when no relay is configured would put live tokens in the logs.
+      # SMTP_USER and SMTP_PASSWORD are optional but only together.
+      FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL to the public origin of the site}
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST to the mail relay}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM to the sender address, for example BreezyBoard <no-reply@breezyboard.example>}
     volumes:
       - uploads:/app/uploads
 

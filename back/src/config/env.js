@@ -69,7 +69,52 @@ const parseCount = (name, raw, fallback) => {
   return parsed;
 };
 
+/**
+ * Settings that have a sensible local value but no safe default anywhere
+ * else. Same rule as a secret: production refuses to start without them,
+ * because a deployment that silently pointed its reset links at localhost
+ * or its mail at a catcher nobody reads would look healthy and never
+ * deliver a working link.
+ */
+const requireInProduction = (name, developmentFallback) => {
+  const value = process.env[name];
+
+  if (value && value.trim() !== '') {
+    return value.trim();
+  }
+
+  if (isProduction) {
+    throw new Error(`${name} is required in production and was not set. Refusing to start.`);
+  }
+
+  return developmentFallback;
+};
+
+/**
+ * The origin of the frontend, used to build links that leave the system in
+ * an email. It is configuration, never the request's Host header: that
+ * header is chosen by whoever sends the request, so a link built from it
+ * would let an attacker have a victim's reset token delivered to a host the
+ * attacker controls.
+ */
+const parseFrontendUrl = raw => {
+  let url;
+
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('FRONTEND_URL must be an absolute URL such as https://breezyboard.example. Refusing to start.');
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('FRONTEND_URL must use http or https. Refusing to start.');
+  }
+
+  return url.origin;
+};
+
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -103,6 +148,28 @@ const env = {
   // limiter beside it is not.
   REGISTRATION_LIMIT_PER_HOUR: parseCount('REGISTRATION_LIMIT_PER_HOUR', process.env.REGISTRATION_LIMIT_PER_HOUR, 20),
 
+  // Where the frontend is served. The password reset email links to
+  // `${FRONTEND_URL}/reset-password`. Only the origin is kept, so a trailing
+  // path or slash in the setting cannot corrupt the link.
+  FRONTEND_URL: parseFrontendUrl(requireInProduction('FRONTEND_URL', 'http://localhost:5173')),
+
+  // Outgoing mail over SMTP. In development the defaults point at a local
+  // catcher (Mailpit, port 1025, no authentication) so nothing leaves the
+  // machine. SMTP_USER and SMTP_PASSWORD are optional together: a relay
+  // that authenticates needs both, a catcher needs neither.
+  SMTP_HOST: requireInProduction('SMTP_HOST', 'localhost'),
+  SMTP_PORT: parseCount('SMTP_PORT', process.env.SMTP_PORT, isProduction ? 587 : 1025),
+  SMTP_SECURE: (process.env.SMTP_SECURE ?? '').trim().toLowerCase() === 'true',
+  SMTP_USER: (process.env.SMTP_USER ?? '').trim(),
+  SMTP_PASSWORD: process.env.SMTP_PASSWORD ?? '',
+  MAIL_FROM: requireInProduction('MAIL_FROM', 'BreezyBoard <no-reply@breezyboard.local>'),
+
+  // How long a password reset link works. Long enough for a message to
+  // cross a slow mail relay and be read, short enough that a link left in a
+  // mailbox, a forwarded message or a backup is worth nothing by the time
+  // anyone finds it. Tunable so tests can exercise expiry without waiting.
+  PASSWORD_RESET_TTL_MS: parseDurationMs('PASSWORD_RESET_TTL_MS', process.env.PASSWORD_RESET_TTL_MS, THIRTY_MINUTES_MS),
+
   // How long a deleted board stays restorable before the purge job removes
   // it and its tasks for good, and how often that job looks. The interface
   // offers undo for a few seconds only, so the window exists for an owner
@@ -111,6 +178,10 @@ const env = {
   BOARD_RETENTION_MS: parseDurationMs('BOARD_RETENTION_MS', process.env.BOARD_RETENTION_MS, SEVEN_DAYS_MS),
   BOARD_PURGE_INTERVAL_MS: parseDurationMs('BOARD_PURGE_INTERVAL_MS', process.env.BOARD_PURGE_INTERVAL_MS, ONE_HOUR_MS),
 };
+
+if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASSWORD)) {
+  throw new Error('SMTP_USER and SMTP_PASSWORD must be set together or not at all. Refusing to start.');
+}
 
 if (isProduction && env.CORS_ORIGINS.length === 0) {
   throw new Error('CORS_ORIGINS is required in production and was not set. Refusing to start.');
