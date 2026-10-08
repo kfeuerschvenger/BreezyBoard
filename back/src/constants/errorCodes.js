@@ -10,6 +10,10 @@ export const ErrorCode = Object.freeze({
   TOKEN_REVOKED: 'TOKEN_REVOKED',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   RATE_LIMITED: 'RATE_LIMITED',
+  // A password reset token that is unknown, expired or already used. One
+  // code for all three: telling them apart would tell a guesser which part of
+  // the token was right.
+  INVALID_RESET_TOKEN: 'INVALID_RESET_TOKEN',
   CONFLICT: 'CONFLICT',
   INTERNAL: 'INTERNAL',
 });
