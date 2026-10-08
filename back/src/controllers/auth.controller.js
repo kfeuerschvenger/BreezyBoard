@@ -1,4 +1,5 @@
 import * as authService from '../services/auth.service.js';
+import * as passwordResetService from '../services/passwordReset.service.js';
 import * as userService from '../services/user.service.js';
 import responseHandler from '../utils/responseHandler.js';
 
@@ -16,6 +17,26 @@ export const login = async (req, res, next) => {
     const { email, password } = req.body;
     const { token, user } = await authService.loginUser(email, password);
     responseHandler(res, 200, { token, user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Always 202 with the same body, whether or not the address has an account.
+// The work behind it is shaped to match, see passwordReset.service.js.
+export const forgotPassword = async (req, res, next) => {
+  try {
+    await passwordResetService.requestPasswordReset(req.body.email);
+    responseHandler(res, 202, { accepted: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetPassword = async (req, res, next) => {
+  try {
+    await passwordResetService.resetPassword(req.body.token, req.body.newPassword);
+    responseHandler(res, 200, { reset: true });
   } catch (error) {
     next(error);
   }

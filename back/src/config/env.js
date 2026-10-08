@@ -170,6 +170,16 @@ const env = {
   // anyone finds it. Tunable so tests can exercise expiry without waiting.
   PASSWORD_RESET_TTL_MS: parseDurationMs('PASSWORD_RESET_TTL_MS', process.env.PASSWORD_RESET_TTL_MS, THIRTY_MINUTES_MS),
 
+  // Password recovery requests (asking for a link and using one) a single
+  // address may make in fifteen minutes. The default is the production
+  // value, and only docker-compose.yml raises it. See
+  // rateLimit.middleware.js for why it counts successful requests too.
+  PASSWORD_RECOVERY_LIMIT_PER_15_MIN: parseCount(
+    'PASSWORD_RECOVERY_LIMIT_PER_15_MIN',
+    process.env.PASSWORD_RECOVERY_LIMIT_PER_15_MIN,
+    10
+  ),
+
   // How long a deleted board stays restorable before the purge job removes
   // it and its tasks for good, and how often that job looks. The interface
   // offers undo for a few seconds only, so the window exists for an owner

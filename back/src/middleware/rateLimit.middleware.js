@@ -10,10 +10,17 @@ import { ErrorCode } from '../constants/errorCodes.js';
  * Disabled under test, where the suite legitimately logs in dozens of times in
  * a few seconds and a limiter would make failures look like flakes.
  */
+/**
+ * The switch a test flips to exercise a limiter that is otherwise skipped.
+ * Without it nothing could prove a route is actually behind its limiter,
+ * since removing the limiter from the route would change no test result.
+ */
+export const rateLimitTesting = { enabled: false };
+
 const shared = {
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => env.NODE_ENV === 'test',
+  skip: () => env.NODE_ENV === 'test' && !rateLimitTesting.enabled,
   message: {
     success: false,
     message: 'Too many attempts. Please wait before trying again.',
@@ -50,4 +57,26 @@ export const registrationLimiter = rateLimit({
   ...shared,
   windowMs: 60 * 60 * 1000,
   limit: env.REGISTRATION_LIMIT_PER_HOUR,
+});
+
+/**
+ * Password recovery, both the request for a link and the use of one.
+ *
+ * Counts every request, which is the opposite of authLimiter and is
+ * required rather than chosen: a reset request always succeeds, by design,
+ * since it must answer the same for an address that exists and one that
+ * does not. A limiter that skipped successful requests would therefore
+ * never count one, and the route would be unlimited while appearing
+ * protected. What it bounds is the number of emails one address can make
+ * the system send to somebody else's mailbox.
+ *
+ * Configurable for the reason registrationLimiter is: the end to end suite
+ * requests resets from one address, and development raises the budget.
+ * The default is the production value, and docker-compose.prod.yml does not
+ * mention it.
+ */
+export const passwordRecoveryLimiter = rateLimit({
+  ...shared,
+  windowMs: 15 * 60 * 1000,
+  limit: env.PASSWORD_RECOVERY_LIMIT_PER_15_MIN,
 });

@@ -56,6 +56,20 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // The pending password reset, if any. Only the SHA-256 of the token is
+    // kept, so a read of the database cannot be turned into a working reset
+    // link. One pair per user: issuing a new token overwrites the pair and
+    // that is what invalidates the previous one. Never selected by default,
+    // like the password.
+    passwordResetTokenHash: {
+      type: String,
+      select: false,
+      index: { sparse: true },
+    },
+    passwordResetExpiresAt: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -68,6 +82,8 @@ const userSchema = new mongoose.Schema(
         delete ret.password;
         delete ret.__v;
         delete ret.tokenVersion;
+        delete ret.passwordResetTokenHash;
+        delete ret.passwordResetExpiresAt;
         return ret;
       },
     },
