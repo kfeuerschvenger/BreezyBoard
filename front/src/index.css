@@ -208,3 +208,22 @@
     background-color: var(--color-selection);
   }
 }
+
+/*
+ * Reduced motion. A person who asks the system for less motion gets every
+ * animation and transition collapsed to an instant and played once. The
+ * duration is one hundredth of a millisecond rather than zero, so
+ * `animationend` and `transitionend` still fire and code that waits on them,
+ * such as a drawer that unmounts when its close animation completes, keeps
+ * working.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

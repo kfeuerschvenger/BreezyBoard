@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 
 import { QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'motion/react';
 
 import { AppShell } from '@/app/layouts/AppShell';
 import { createQueryClient } from '@/app/queryClient';
@@ -76,17 +77,22 @@ const queryClient = createQueryClient();
 
 const App = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AuthToastProvider>
-          <Router>
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
-          </Router>
-        </AuthToastProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    // reducedMotion="user" makes every motion component honour the system
+    // setting: transforms and layout animations are skipped, opacity still
+    // fades, so an exit finishes and AnimatePresence unmounts as usual.
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AuthToastProvider>
+            <Router>
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            </Router>
+          </AuthToastProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   );
 };
 

@@ -6,7 +6,7 @@ import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
 import { BoardActions } from '@/features/boards';
 import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { IconPlus } from '@tabler/icons-react';
 import { LoadingScreen, Icon } from '@/shared/ui';
 import NotFound from './NotFound';

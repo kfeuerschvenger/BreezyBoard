@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { IconCheck, IconSearch, IconX } from '@tabler/icons-react';
 import type { User } from '@/models';
 import { Avatar, Icon } from '@/shared/ui';

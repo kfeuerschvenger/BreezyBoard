@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { IconLock, IconMail, IconUser } from '@tabler/icons-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 import { Field, Input, PasswordInput, Icon } from '@/shared/ui';
 import LegalModal from '@/components/LegalModal';

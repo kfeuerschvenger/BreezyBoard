@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { AuthIllustration } from './AuthIllustration';
 
 export interface AuthLayoutProps {

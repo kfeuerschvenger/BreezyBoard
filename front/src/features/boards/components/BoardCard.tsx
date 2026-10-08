@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { IconUsers } from '@tabler/icons-react';
 import { Icon } from '@/shared/ui';
 import { Link } from 'react-router-dom';
