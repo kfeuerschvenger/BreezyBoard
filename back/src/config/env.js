@@ -187,6 +187,9 @@ const env = {
   SMTP_HOST: requireInProduction('SMTP_HOST', 'localhost'),
   SMTP_PORT: parseCount('SMTP_PORT', process.env.SMTP_PORT, isProduction ? 587 : 1025),
   SMTP_SECURE: (process.env.SMTP_SECURE ?? '').trim().toLowerCase() === 'true',
+  // Opt-out of the TLS requirement on the SMTP connection, for the local mail
+  // catcher only. Never true by default, and refused in production below.
+  SMTP_ALLOW_PLAINTEXT: (process.env.SMTP_ALLOW_PLAINTEXT ?? '').trim().toLowerCase() === 'true',
   SMTP_USER: (process.env.SMTP_USER ?? '').trim(),
   SMTP_PASSWORD: process.env.SMTP_PASSWORD ?? '',
   MAIL_FROM: requireInProduction('MAIL_FROM', 'BreezyBoard <no-reply@breezyboard.local>'),
@@ -227,6 +230,10 @@ const env = {
 
 if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASSWORD)) {
   throw new Error('SMTP_USER and SMTP_PASSWORD must be set together or not at all. Refusing to start.');
+}
+
+if (isProduction && env.SMTP_ALLOW_PLAINTEXT) {
+  throw new Error('SMTP_ALLOW_PLAINTEXT is not allowed in production: mail must be sent over TLS. Refusing to start.');
 }
 
 if (isProduction && env.CORS_ORIGINS.length === 0) {

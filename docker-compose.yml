@@ -100,6 +100,11 @@ services:
       # the host uses, not a name inside the compose network.
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
+      # Mailpit speaks no TLS, and the API requires it everywhere else. This
+      # opt-out exists for this container alone: the production configuration
+      # refuses to start with it set, and docker-compose.prod.yml never
+      # mentions it.
+      SMTP_ALLOW_PLAINTEXT: "true"
       FRONTEND_URL: http://localhost:${FRONT_PORT:-5173}
       DOTENV_CONFIG_QUIET: "true"
     ports:
