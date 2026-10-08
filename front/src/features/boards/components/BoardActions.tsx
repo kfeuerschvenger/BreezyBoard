@@ -1,12 +1,16 @@
 import { useState } from 'react';
-import { MoreHorizontal, Pencil } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import type { Board } from '@/models';
 import { Menu, MenuItem } from '@/shared/ui';
+import { useDeleteBoardWithUndo } from '../hooks/useDeleteBoardWithUndo';
 import { useUpdateBoard } from '../queries';
+import { DeleteBoardDialog } from './DeleteBoardDialog';
 import { EditBoardModal } from './EditBoardModal';
 
 export interface BoardActionsProps {
   board: Board;
+  /** Runs once the board is deleted, to leave a page that no longer has a board. */
+  onDeleted: () => void;
 }
 
 /**
@@ -18,11 +22,34 @@ export interface BoardActionsProps {
  * board read, so a workspace admin, who the server treats as an owner, sees
  * the menu too.
  */
-export const BoardActions = ({ board }: BoardActionsProps) => {
+export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const updateBoard = useUpdateBoard();
+  const { deleteBoard } = useDeleteBoardWithUndo();
 
   if (board.viewerRole !== 'owner') return null;
+
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await deleteBoard(board);
+    } catch {
+      // Said in the dialog, which stays open: the person is looking at it, and
+      // closing over a failure would read as the board having been deleted.
+      setDeleteError('The board could not be deleted. Nothing was changed, so you can try again.');
+      return;
+    } finally {
+      setIsDeleting(false);
+    }
+
+    setConfirmingDelete(false);
+    onDeleted();
+  };
 
   return (
     <>
@@ -42,7 +69,26 @@ export const BoardActions = ({ board }: BoardActionsProps) => {
           <Pencil size={16} className="text-gray-400" aria-hidden="true" />
           <span>Edit board</span>
         </MenuItem>
+
+        <MenuItem
+          onSelect={() => {
+            setDeleteError(null);
+            setConfirmingDelete(true);
+          }}
+          className="text-red-600 hover:bg-red-50"
+        >
+          <Trash2 size={16} className="text-red-500" aria-hidden="true" />
+          <span>Delete board</span>
+        </MenuItem>
       </Menu>
+
+      <DeleteBoardDialog
+        board={confirmingDelete ? board : null}
+        isWorking={isDeleting}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setConfirmingDelete(false)}
+      />
 
       <EditBoardModal
         open={editing}

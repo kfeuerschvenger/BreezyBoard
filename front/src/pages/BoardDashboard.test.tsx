@@ -17,7 +17,7 @@ import type { Board } from '@/models';
 // all six are stubbed to keep the real axios client out of the suite.
 vi.mock('@/services', () => ({
   AuthService: { getCurrentUser: vi.fn(), logout: vi.fn() },
-  BoardService: { getAll: vi.fn(), create: vi.fn(), delete: vi.fn(), addMembers: vi.fn() },
+  BoardService: { getAll: vi.fn(), create: vi.fn(), delete: vi.fn(), restore: vi.fn(), addMembers: vi.fn() },
   DashboardService: { getStats: vi.fn() },
   ColorService: { getByType: vi.fn(), getById: vi.fn() },
   TemplateService: { getAll: vi.fn() },
@@ -85,6 +85,7 @@ beforeEach(() => {
   mockedAuthService.getCurrentUser.mockReset().mockReturnValue(null);
   mockedBoardService.getAll.mockReset().mockResolvedValue(BOARDS);
   mockedBoardService.delete.mockReset().mockResolvedValue(undefined);
+  mockedBoardService.restore.mockReset();
   mockedDashboardService.getStats.mockReset().mockResolvedValue(STATS);
   mockedColorService.getByType.mockReset().mockResolvedValue([]);
   mockedColorService.getById.mockReset().mockResolvedValue({ _id: 'color-green', name: 'Green', value: '#10B981' });
@@ -280,54 +281,89 @@ describe('BoardDashboard per board menu', () => {
 });
 
 describe('BoardDashboard deletion', () => {
-  const openDelete = async (user: ReturnType<typeof userEvent.setup>) => {
+  const askToDelete = async (user: ReturnType<typeof userEvent.setup>, title = 'Launch Plan') => {
     renderDashboard();
-    await screen.findByRole('link', { name: 'Launch Plan' });
-    await user.click(screen.getByRole('button', { name: 'Options for Launch Plan' }));
-    await user.click(screen.getByRole('button', { name: /Delete/ }));
+    await screen.findByRole('link', { name: title });
+    await user.click(screen.getByRole('button', { name: `Options for ${title}` }));
+    await user.click(screen.getByRole('button', { name: /^Delete$/ }));
+    return screen.findByRole('dialog', { name: 'Delete this board?' });
   };
 
-  // Deleting a board cascades to every task on it, so the confirmation is
-  // the only thing between a misclick and losing all of them.
-  it('deletes nothing when the confirmation is declined', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const confirm = (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'Delete board' }));
+
+  // Deleting a board takes every task on it out of sight, so the confirmation
+  // is what stands between a misclick and losing them.
+  it('asks first, naming the board, and deletes nothing when it is declined', async () => {
     const user = userEvent.setup();
 
-    await openDelete(user);
+    const dialog = await askToDelete(user);
+    expect(dialog).toHaveTextContent('Launch Plan');
 
-    expect(window.confirm).toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
     expect(mockedBoardService.delete).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // The menu stays open behind the dialog, so focus has somewhere to return.
+    expect(screen.getByRole('button', { name: /^Delete$/ })).toHaveFocus();
   });
 
-  it('deletes the board that the menu was opened on once confirmed', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('leaves the menu open when Escape closes the dialog, so focus has an item to return to', async () => {
     const user = userEvent.setup();
 
-    await openDelete(user);
+    await askToDelete(user);
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^Delete$/ })).toHaveFocus();
+  });
+
+  it('deletes the board that the menu was opened on once confirmed, and offers Undo', async () => {
+    const user = userEvent.setup();
+
+    await askToDelete(user);
+    await confirm(user);
 
     await waitFor(() => expect(mockedBoardService.delete).toHaveBeenCalledWith('board-launch'));
+    expect(await screen.findByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Deleted "Launch Plan"');
+    // Left open it would reopen over the card if the board were restored.
+    expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument();
+  });
+
+  it('restores the board when Undo is pressed', async () => {
+    mockedBoardService.restore.mockResolvedValue(BOARDS[0]);
+    const user = userEvent.setup();
+
+    await askToDelete(user);
+    await confirm(user);
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
+
+    await waitFor(() => expect(mockedBoardService.restore).toHaveBeenCalledWith('board-launch'));
+    expect(await screen.findByText('Restored "Launch Plan"')).toBeInTheDocument();
   });
 
   it('says so and keeps the board listed when the delete fails', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedBoardService.delete.mockRejectedValue(new Error('refused'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
 
-    await openDelete(user);
+    await askToDelete(user);
+    await confirm(user);
 
     expect(await screen.findByText('Failed to delete board. Please try again.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
   });
 
-  // Deleting a board cascades to its tasks and is not fast. With no sign
-  // that it started, the only thing the person can do is click again, and
-  // every click is another cascade against the same board.
+  // Deleting a board is not instant. With no sign that it started, the only
+  // thing the person can do is click again, and every click is another
+  // request against the same board.
   it('says the delete is under way and refuses a second click while it is', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedBoardService.delete.mockReturnValue(new Promise(() => {}));
     const user = userEvent.setup();
 
-    await openDelete(user);
+    await askToDelete(user);
+    await confirm(user);
 
     const deleting = await screen.findByRole('button', { name: /Deleting/ });
     expect(deleting).toBeDisabled();
@@ -336,11 +372,11 @@ describe('BoardDashboard deletion', () => {
 
   // The in-flight state belongs to the board being deleted, not to the page.
   it('leaves the other boards deletable while one is being deleted', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedBoardService.delete.mockReturnValue(new Promise(() => {}));
     const user = userEvent.setup();
 
-    await openDelete(user);
+    await askToDelete(user);
+    await confirm(user);
     await screen.findByRole('button', { name: /Deleting/ });
 
     await user.click(screen.getByRole('button', { name: 'Options for Hiring' }));

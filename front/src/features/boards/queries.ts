@@ -118,7 +118,29 @@ export const useUpdateBoard = () => {
 export const useCreateBoard = () =>
   useBoardMutation((board: Pick<Board, 'title' | 'description' | 'color' | 'template'>) => BoardService.create(board));
 
-export const useDeleteBoard = () => useBoardMutation((boardId: string) => BoardService.delete(boardId));
+/**
+ * A soft delete on the server. The board's own cache entry goes with it, so
+ * going back to its address fetches fresh and meets the 404 instead of
+ * showing a board that is no longer there. Its tasks stay cached: the server
+ * keeps them untouched, and a restore makes them valid again as they are.
+ */
+export const useDeleteBoard = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (boardId: string) => BoardService.delete(boardId),
+    onSuccess: async (_result, boardId) => {
+      queryClient.removeQueries({ queryKey: boardKeys.detail(boardId) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: boardKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: boardKeys.stats() }),
+      ]);
+    },
+  });
+};
+
+/** Brings back a soft deleted board; the list and the totals count it again. */
+export const useRestoreBoard = () => useBoardMutation((boardId: string) => BoardService.restore(boardId));
 
 export const useAddBoardMembers = () =>
   useBoardMutation(({ boardId, memberIds }: { boardId: string; memberIds: string[] }) =>

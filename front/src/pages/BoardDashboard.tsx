@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Folder, Plus } from 'lucide-react';
-import { BoardCard, BoardStats, CreateBoardModal, useBoardDashboard, useBoardMenu } from '@/features/boards';
+import {
+  BoardCard,
+  BoardStats,
+  CreateBoardModal,
+  DeleteBoardDialog,
+  useBoardDashboard,
+  useBoardMenu,
+} from '@/features/boards';
 import { resolveColor } from '@/features/colors';
 import { AddMemberModal } from '@/features/users';
 import type { NewBoard } from '@/features/boards';
@@ -13,6 +20,7 @@ import UserAvatar from '../components/UserAvatar';
 const BoardDashboard: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [memberBoard, setMemberBoard] = useState<Board | null>(null);
+  const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
 
   const dashboard = useBoardDashboard();
   const menu = useBoardMenu();
@@ -32,12 +40,18 @@ const BoardDashboard: React.FC = () => {
     menu.close();
   };
 
-  // Asked here rather than in the hook: deleting a board cascades to every
-  // task on it, and whether to ask before an irreversible action is a
-  // question about this screen, not about the write.
-  const confirmAndDelete = (boardId: string) => {
-    if (!window.confirm('Are you sure you want to delete this board? This action cannot be undone.')) return;
-    void dashboard.deleteBoard(boardId);
+  // Asked here rather than in the hook: whether to ask before deleting is a
+  // question about this screen, not about the write. The menu stays open
+  // behind the dialog, which is what lets the card say "Deleting..." while
+  // the request runs, and it closes once the board is gone: left open, it
+  // would reopen over the card if the board were restored.
+  const confirmDelete = async () => {
+    const board = boardToDelete;
+    setBoardToDelete(null);
+    if (!board) return;
+
+    await dashboard.deleteBoard(board);
+    menu.close();
   };
 
   if (dashboard.isLoading) return <LoadingScreen label="Loading boards..." showLabel />;
@@ -89,7 +103,7 @@ const BoardDashboard: React.FC = () => {
               isDeleting={dashboard.isDeleting(board._id)}
               onToggleMenu={() => menu.toggle(board._id)}
               onAddMember={() => openAddMember(board._id)}
-              onDelete={() => confirmAndDelete(board._id)}
+              onDelete={() => setBoardToDelete(board)}
             />
           ))}
         </div>
@@ -115,6 +129,12 @@ const BoardDashboard: React.FC = () => {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreateBoard={handleCreateBoard}
+      />
+
+      <DeleteBoardDialog
+        board={boardToDelete}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setBoardToDelete(null)}
       />
 
       <AddMemberModal

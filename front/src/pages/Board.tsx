@@ -143,7 +143,7 @@ const Board = () => {
           <Plus size={20} />
           Add Task
         </button>
-        {board && <BoardActions board={board} />}
+        {board && <BoardActions board={board} onDeleted={() => navigate('/')} />}
         <UserAvatar />
       </PageHeader>
 

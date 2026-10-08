@@ -17,13 +17,19 @@ export interface UseBoardMenuResult {
  * close on a click it never receives. The click handler recognises its own
  * markup by the two data attributes the menu carries, so a click on the
  * trigger reaches the toggle instead of being closed out from under it.
+ *
+ * A dialog opened from a menu item is not outside the menu: pressing Cancel
+ * or Escape in it must leave the menu open, because the dialog returns focus
+ * to the item that opened it and that item has to still exist.
  */
 export const useBoardMenu = (): UseBoardMenuResult => {
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenId(null);
+      if (event.key !== 'Escape') return;
+      if ((event.target as HTMLElement | null)?.closest?.('[role="dialog"]')) return;
+      setOpenId(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -34,6 +40,7 @@ export const useBoardMenu = (): UseBoardMenuResult => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
       if (target.closest('[data-board-menu]') || target.closest('[data-board-menu-btn]')) return;
+      if (target.closest('[role="dialog"]')) return;
       setOpenId(null);
     };
     window.addEventListener('click', onClick);

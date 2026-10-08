@@ -9,6 +9,7 @@ export {
   useDashboardStats,
   useCreateBoard,
   useDeleteBoard,
+  useRestoreBoard,
   useAddBoardMembers,
   useTemplates,
 } from './queries';
@@ -31,5 +32,9 @@ export { BoardStats } from './components/BoardStats';
 export type { BoardStatsProps } from './components/BoardStats';
 export { useBoardDashboard } from './hooks/useBoardDashboard';
 export type { NewBoard, UseBoardDashboardResult } from './hooks/useBoardDashboard';
+export { useDeleteBoardWithUndo } from './hooks/useDeleteBoardWithUndo';
+export type { BoardToDelete, UseDeleteBoardWithUndoResult } from './hooks/useDeleteBoardWithUndo';
+export { DeleteBoardDialog } from './components/DeleteBoardDialog';
+export type { DeleteBoardDialogProps } from './components/DeleteBoardDialog';
 export { useBoardMenu } from './hooks/useBoardMenu';
 export type { UseBoardMenuResult } from './hooks/useBoardMenu';

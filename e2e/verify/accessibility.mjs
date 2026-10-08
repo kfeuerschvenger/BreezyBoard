@@ -72,6 +72,12 @@ const BASELINE = {
   // numbers are the board's own, unchanged: no main landmark, and the one
   // region node the board already carries. The popup adds nothing to either.
   'board, move menu open': { 'landmark-one-main': 1, region: 1 },
+  // Added with board deletion. The dashboard with an undo toast showing. The
+  // numbers are the dashboard's own, empty because the only board was just
+  // deleted: the toast, its live region and its landmark add nothing to any
+  // of the three. The delete confirmation scans clean, the page behind a
+  // modal being inert to axe, so it carries no entry.
+  'dashboard, undo toast showing': { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
   // Added on 2026-09-25, when this surface was scanned for the first time.
   // Its two numbers are the same debt every other surface carries: no main
   // landmark, and content sitting outside one. aria-prohibited-attr was also
@@ -256,6 +262,18 @@ await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
 await page.getByRole('radio').first().waitFor({ state: 'attached' });
 await scan('board, edit dialog open');
 await page.keyboard.press('Escape');
+
+// The delete confirmation is a second dialog from the same menu, and the
+// toast that follows a delete is the one live region the application
+// mounts. The toast is scanned showing, on the dashboard the person lands on,
+// because an empty region says nothing about the content that goes into it.
+await page.getByRole('button', { name: /^options for /i }).click();
+await page.getByRole('menuitem', { name: 'Delete board' }).click();
+await page.getByRole('dialog', { name: 'Delete this board?' }).waitFor();
+await scan('board, delete confirmation open');
+await page.getByRole('dialog', { name: 'Delete this board?' }).getByRole('button', { name: 'Delete board' }).click();
+await page.getByTestId('toast').waitFor();
+await scan('dashboard, undo toast showing');
 
 // The profile page was outside this gate until now, which is how its joined
 // date printed "Invalid Date" and its avatar input sat at display:none

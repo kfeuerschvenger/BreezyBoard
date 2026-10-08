@@ -3,7 +3,9 @@ import { toColorLookup } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import { useColors } from '@/features/colors';
 import type { Board, DashboardStats, User } from '@/models';
-import { useAddBoardMembers, useBoards, useCreateBoard, useDashboardStats, useDeleteBoard } from '../queries';
+import { useAddBoardMembers, useBoards, useCreateBoard, useDashboardStats } from '../queries';
+import { useDeleteBoardWithUndo } from './useDeleteBoardWithUndo';
+import type { BoardToDelete } from './useDeleteBoardWithUndo';
 
 export type NewBoard = Pick<Board, 'title' | 'description' | 'color' | 'template'>;
 
@@ -17,7 +19,7 @@ export interface UseBoardDashboardResult {
   isDeleting: (boardId: string) => boolean;
   /** Each write answers whether it landed, so the caller knows to close its form. */
   createBoard: (board: NewBoard) => Promise<boolean>;
-  deleteBoard: (boardId: string) => Promise<boolean>;
+  deleteBoard: (board: BoardToDelete) => Promise<boolean>;
   addMembers: (boardId: string, members: User[]) => Promise<boolean>;
 }
 
@@ -53,7 +55,7 @@ export function useBoardDashboard(): UseBoardDashboardResult {
   const colorLookup = useMemo(() => toColorLookup(palette ?? []), [palette]);
 
   const createBoardMutation = useCreateBoard();
-  const deleteBoardMutation = useDeleteBoard();
+  const boardDeletion = useDeleteBoardWithUndo();
   const addMembersMutation = useAddBoardMembers();
 
   const run = async (action: () => Promise<unknown>, failure: string, logAs: string): Promise<boolean> => {
@@ -80,13 +82,13 @@ export function useBoardDashboard(): UseBoardDashboardResult {
     // Read from the mutation rather than mirrored into state beside it. The
     // mirror was the defect recorded as P4-8: nothing ever wrote a board id
     // into it, so the in-flight state could not be reached at all.
-    isDeleting: (boardId: string) => deleteBoardMutation.isPending && deleteBoardMutation.variables === boardId,
+    isDeleting: (boardId: string) => boardDeletion.pendingId === boardId,
 
     createBoard: board =>
       run(() => createBoardMutation.mutateAsync(board), 'Failed to create board. Please try again.', 'Error creating board:'),
 
-    deleteBoard: boardId =>
-      run(() => deleteBoardMutation.mutateAsync(boardId), 'Failed to delete board. Please try again.', 'Error deleting board:'),
+    deleteBoard: board =>
+      run(() => boardDeletion.deleteBoard(board), 'Failed to delete board. Please try again.', 'Error deleting board:'),
 
     addMembers: (boardId, members) =>
       run(

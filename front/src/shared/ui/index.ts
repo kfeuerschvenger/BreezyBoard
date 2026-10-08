@@ -37,5 +37,11 @@ export type { StatTileProps, StatTileTone } from './StatTile';
 export { SwatchPicker } from './SwatchPicker';
 export type { SwatchLayout, SwatchOption, SwatchPickerProps } from './SwatchPicker';
 
+export { ConfirmDialog } from './ConfirmDialog';
+export type { ConfirmDialogProps } from './ConfirmDialog';
+
+export { ToastProvider } from './ToastProvider';
+export type { ToastAction, ToastContextValue, ToastOptions } from './toastContext';
+
 export { Menu, MenuItem } from './Menu';
 export type { MenuItemProps, MenuProps, MenuTriggerProps } from './Menu';
