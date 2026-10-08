@@ -1,6 +1,6 @@
 import React from 'react';
-import { ArrowRightLeft } from 'lucide-react';
-import { Menu, MenuItem } from '@/shared/ui';
+import { IconArrowsLeftRight } from '@tabler/icons-react';
+import { Menu, MenuItem, Icon } from '@/shared/ui';
 import type { MoveTarget } from '../hooks/useTaskMover';
 
 export interface TaskMoveMenuProps {
@@ -42,7 +42,7 @@ export const TaskMoveMenu: React.FC<TaskMoveMenuProps> = ({ taskId, taskTitle, c
           open ? 'bg-gray-100 text-gray-700' : ''
         }`}
       >
-        <ArrowRightLeft size={16} aria-hidden="true" />
+        <Icon as={IconArrowsLeftRight} size={16} aria-hidden="true" />
       </button>
     )}
   >

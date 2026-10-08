@@ -1,6 +1,6 @@
 import React from 'react';
-import { Check } from 'lucide-react';
-import { Button, Modal } from '@/shared/ui';
+import { IconCheck } from '@tabler/icons-react';
+import { Button, Modal, Icon } from '@/shared/ui';
 
 type Props = {
   open: boolean;
@@ -45,7 +45,7 @@ const SuccessModal: React.FC<Props> = ({ open, title = 'Success', message = 'Cha
         than only being readable by somebody who goes looking for it. */}
     <div role="status" className="flex items-center gap-4">
       <span className="flex items-center justify-center w-12 h-12 bg-green-50 rounded-full shrink-0">
-        <Check className="text-green-600" size={20} aria-hidden="true" />
+        <Icon as={IconCheck} className="text-green-600" size={20} aria-hidden="true" />
       </span>
       <p className="text-sm text-gray-600">{message}</p>
     </div>

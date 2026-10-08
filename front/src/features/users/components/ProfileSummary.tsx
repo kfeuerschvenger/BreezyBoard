@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, MapPin } from 'lucide-react';
+import { IconCalendar, IconMapPin } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 import type { ProfileFormValues } from '../hooks/useProfile';
 import { AvatarUploader } from './AvatarUploader';
 
@@ -46,11 +47,11 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({ values, isUpload
 
       <div className="space-y-4">
         <div className="flex items-center gap-3 text-sm">
-          <Calendar size={16} className="text-gray-400" aria-hidden="true" />
+          <Icon as={IconCalendar} size={16} className="text-gray-400" aria-hidden="true" />
           <span className="text-gray-600">Joined {formatJoined(values.createdAt)}</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <MapPin size={16} className="text-gray-400" aria-hidden="true" />
+          <Icon as={IconMapPin} size={16} className="text-gray-400" aria-hidden="true" />
           <span className="text-gray-600">{values.location || 'Unknown'}</span>
         </div>
         {isUploadingAvatar && <div className="text-sm text-gray-500">Uploading avatar...</div>}

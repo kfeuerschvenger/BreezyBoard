@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { User, X } from 'lucide-react';
+import { IconUser, IconX } from '@tabler/icons-react';
 import type { User as UserModel } from '@/models';
-import { Avatar } from '@/shared/ui';
+import { Avatar, Icon } from '@/shared/ui';
 import type { FieldControlProps } from '@/shared/ui';
 import { useUser } from '../queries';
 
@@ -183,7 +183,7 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
     <div className="relative">
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <User size={16} className="text-gray-400" />
+          <Icon as={IconUser} size={16} className="text-gray-400" />
         </div>
         <input
           type="text"
@@ -206,7 +206,7 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
             className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
             aria-label="Clear selected user"
           >
-            <X size={16} />
+            <Icon as={IconX} size={16} />
           </button>
         )}
       </div>

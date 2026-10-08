@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { IconArrowLeft } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 import { useNavigate } from 'react-router-dom';
 
 export interface PageHeaderProps {
@@ -68,7 +69,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 aria-label={backAriaLabel}
                 className="shrink-0 p-3 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                <ArrowLeft size={20} className="text-gray-600" aria-hidden="true" />
+                <Icon as={IconArrowLeft} size={20} className="text-gray-600" aria-hidden="true" />
               </button>
             )}
 

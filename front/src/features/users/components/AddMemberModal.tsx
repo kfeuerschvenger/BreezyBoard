@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { IconSearch } from '@tabler/icons-react';
 import type { User } from '@/models';
-import { Button, Modal } from '@/shared/ui';
+import { Button, Modal, Icon } from '@/shared/ui';
 import { useMemberSearch } from '../hooks/useMemberSearch';
 import { MemberSearchResults } from './MemberSearchResults';
 import { SelectedMembers } from './SelectedMembers';
@@ -91,7 +91,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       <div className="space-y-6">
         <div className="border-b border-gray-200 py-4 md:p-6">
           <div className="relative">
-            <Search
+            <Icon as={IconSearch}
               size={20}
               className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
               aria-hidden="true"

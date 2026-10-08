@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Check, Search, X } from 'lucide-react';
+import { IconCheck, IconSearch, IconX } from '@tabler/icons-react';
 import type { User } from '@/models';
-import { Avatar } from '@/shared/ui';
+import { Avatar, Icon } from '@/shared/ui';
 
 export interface MemberSearchResultsProps {
   members: User[];
@@ -56,7 +56,7 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
           className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"
           aria-hidden="true"
         >
-          <X className="text-red-500" size={24} />
+          <Icon as={IconX} className="text-red-500" size={24} />
         </div>
         <p className="text-red-500 font-body">{error}</p>
         <button type="button" onClick={onRetry} className="mt-4 text-blue-600 hover:text-blue-800 cursor-pointer">
@@ -73,7 +73,7 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
           className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4"
           aria-hidden="true"
         >
-          <Search className="text-gray-400" size={24} />
+          <Icon as={IconSearch} className="text-gray-400" size={24} />
         </div>
         <p className="text-gray-500 font-body">No members found matching your search</p>
       </Centered>
@@ -112,7 +112,7 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
               <Avatar name={fullName(member)} src={member.avatar} size="lg" decorative />
               {isSelected && (
                 <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                  <Check size={12} className="text-white" />
+                  <Icon as={IconCheck} size={12} className="text-white" />
                 </div>
               )}
             </div>

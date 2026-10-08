@@ -1,5 +1,6 @@
 import React from 'react';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { IconGripVertical, IconPlus, IconTrash } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import {
@@ -53,7 +54,7 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onU
         aria-label="Reorder checklist item"
         className={`${TARGET} cursor-grab active:cursor-grabbing text-gray-400`}
       >
-        <GripVertical size={14} aria-hidden="true" />
+        <Icon as={IconGripVertical} size={14} aria-hidden="true" />
       </div>
       <label className={`${TARGET} cursor-pointer`}>
         <input
@@ -77,7 +78,7 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, onU
         className={`${TARGET} text-red-600 hover:text-red-700 cursor-pointer`}
         aria-label="Delete checklist item"
       >
-        <Trash2 size={14} aria-hidden="true" />
+        <Icon as={IconTrash} size={14} aria-hidden="true" />
       </button>
     </div>
   );
@@ -137,7 +138,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
           onClick={handleAdd}
           className="flex min-h-11 items-center gap-1 px-1 text-sm text-blue-600 hover:text-blue-700 cursor-pointer md:min-h-7"
         >
-          <Plus size={16} aria-hidden="true" />
+          <Icon as={IconPlus} size={16} aria-hidden="true" />
           Add Item
         </button>
       </div>

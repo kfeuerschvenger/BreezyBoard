@@ -1,5 +1,6 @@
 import React from 'react';
-import { Flag } from 'lucide-react';
+import { IconFlag } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 import { PRIORITY_LABELS, PRIORITY_SELECTED_CLASSES, TASK_PRIORITIES } from '../priority';
 import type { TaskPriority } from '../priority';
 
@@ -27,7 +28,7 @@ const OPTION_CLASSES =
 export const PrioritySelect: React.FC<PrioritySelectProps> = ({ value, onChange }) => (
   <fieldset>
     <legend className={LEGEND_CLASSES}>
-      <Flag size={16} className="inline mr-1" aria-hidden="true" />
+      <Icon as={IconFlag} size={16} className="inline mr-1" aria-hidden="true" />
       Priority
     </legend>
     <div className="flex gap-2">

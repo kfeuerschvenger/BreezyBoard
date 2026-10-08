@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Mail } from 'lucide-react';
-import { Button, Field, Input, Modal } from '@/shared/ui';
+import { IconMail } from '@tabler/icons-react';
+import { Button, Field, Input, Modal, Icon } from '@/shared/ui';
 import { httpStatusOf } from '@/shared/lib/httpStatus';
 
 const forgotPasswordSchema = z.object({
@@ -102,7 +102,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ open, 
             </div>
           )}
 
-          <Field label="Email address" error={errors.email?.message} icon={<Mail className="h-5 w-5 text-gray-400" />}>
+          <Field label="Email address" error={errors.email?.message} icon={<Icon as={IconMail} className="h-5 w-5 text-gray-400" />}>
             {props => (
               <Input
                 {...props}

@@ -1,6 +1,7 @@
 import { forwardRef, useState } from 'react';
 import type { InputHTMLAttributes, ReactNode } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { IconEye, IconEyeOff } from '@tabler/icons-react';
+import { Icon } from './Icon';
 
 export interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   hasError?: boolean;
@@ -59,7 +60,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           aria-label={`${revealed ? 'Hide' : 'Show'} ${toggleLabel}`}
           className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
         >
-          {revealed ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+          {revealed ? <Icon as={IconEyeOff} className="h-5 w-5" aria-hidden="true" /> : <Icon as={IconEye} className="h-5 w-5" aria-hidden="true" />}
         </button>
       </div>
     );

@@ -2,7 +2,15 @@ import React, { useMemo, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
-import { User, CircleCheck, AlertCircle, GripVertical, ShieldAlert } from 'lucide-react';
+import {
+  IconAlertCircle,
+  IconCircleCheck,
+  IconGripVertical,
+  IconShieldExclamation,
+  IconUser,
+  type Icon as TablerGlyph,
+} from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 import type { Task } from '@/models';
 import { COLOR_FALLBACK } from '@/features/colors';
 import { asTaskPriority, PRIORITY_BADGE_CLASSES, TaskMoveMenu } from '@/features/tasks';
@@ -35,10 +43,10 @@ interface TaskCardProps {
  * is gets decided once, in features/tasks/priority, because it used to be
  * decided here and again in the picker. That is the priority half of P3-6.
  */
-const PRIORITY_ICONS: Record<TaskPriority, React.ElementType> = {
-  low: CircleCheck,
-  medium: AlertCircle,
-  high: ShieldAlert,
+const PRIORITY_ICONS: Record<TaskPriority, TablerGlyph> = {
+  low: IconCircleCheck,
+  medium: IconAlertCircle,
+  high: IconShieldExclamation,
 };
 
 /**
@@ -159,7 +167,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
             {...attributes}
             {...listeners}
           >
-            <GripVertical size={16} />
+            <Icon as={IconGripVertical} size={16} />
           </button>
         </div>
       </div>
@@ -202,7 +210,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
           <span
             className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${priorityClass}`}
           >
-            <PriorityIcon size={12} aria-hidden="true" />
+            <Icon as={PriorityIcon} size={12} />
             <span className="sr-only">Priority: </span>
             {priority}
           </span>
@@ -210,7 +218,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
         {ownerName ? (
           <div className="flex items-center gap-1 text-xs text-gray-600">
-            <User size={12} aria-hidden="true" />
+            <Icon as={IconUser} size={12} aria-hidden="true" />
             <span className="font-body">{ownerName}</span>
           </div>
         ) : null}

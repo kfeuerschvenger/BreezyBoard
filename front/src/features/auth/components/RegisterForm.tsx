@@ -5,10 +5,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-import { Mail, Lock, User } from 'lucide-react';
+import { IconLock, IconMail, IconUser } from '@tabler/icons-react';
 import { motion } from 'framer-motion';
 
-import { Field, Input, PasswordInput } from '@/shared/ui';
+import { Field, Input, PasswordInput, Icon } from '@/shared/ui';
 import LegalModal from '@/components/LegalModal';
 import { useAuth } from '@/hooks/useAuth';
 import type { RegisterCredentials } from '@/models';
@@ -95,16 +95,16 @@ const RegisterForm: React.FC = () => {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="First name" error={errors.firstName?.message} icon={<User className="h-5 w-5 text-gray-400" />}>
+          <Field label="First name" error={errors.firstName?.message} icon={<Icon as={IconUser} className="h-5 w-5 text-gray-400" />}>
             {props => <Input {...props} {...register('firstName')} placeholder="John" className="pl-10" />}
           </Field>
 
-          <Field label="Last name" error={errors.lastName?.message} icon={<User className="h-5 w-5 text-gray-400" />}>
+          <Field label="Last name" error={errors.lastName?.message} icon={<Icon as={IconUser} className="h-5 w-5 text-gray-400" />}>
             {props => <Input {...props} {...register('lastName')} placeholder="Doe" className="pl-10" />}
           </Field>
         </div>
 
-        <Field label="Email address" error={errors.email?.message} icon={<Mail className="h-5 w-5 text-gray-400" />}>
+        <Field label="Email address" error={errors.email?.message} icon={<Icon as={IconMail} className="h-5 w-5 text-gray-400" />}>
           {props => (
             <Input {...props} {...register('email')} type="email" placeholder="john@example.com" className="pl-10" />
           )}
@@ -116,7 +116,7 @@ const RegisterForm: React.FC = () => {
               {...props}
               {...register('password')}
               placeholder="Create a strong password"
-              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
               toggleLabel="password"
             />
           )}
@@ -128,7 +128,7 @@ const RegisterForm: React.FC = () => {
               {...props}
               {...register('confirmPassword')}
               placeholder="Confirm your password"
-              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
               toggleLabel="confirm password"
             />
           )}

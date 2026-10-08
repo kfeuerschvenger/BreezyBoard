@@ -1,5 +1,6 @@
 import React from 'react';
-import { Github, Linkedin, Mail } from 'lucide-react';
+import { IconBrandGithub, IconBrandLinkedin, IconMail } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 
 /**
  * Footer component
@@ -30,7 +31,7 @@ const Footer: React.FC = () => {
               className="inline-flex p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="LinkedIn profile"
             >
-              <Linkedin size={20} strokeWidth={1.75} />
+              <Icon as={IconBrandLinkedin} size={20} />
             </a>
             <a
               href="https://github.com/kfeuerschvenger"
@@ -40,7 +41,7 @@ const Footer: React.FC = () => {
               className="inline-flex p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="GitHub profile"
             >
-              <Github size={20} strokeWidth={1.75} />
+              <Icon as={IconBrandGithub} size={20} />
             </a>
             <a
               href="mailto:kfeuerschvenger@gmail.com"
@@ -48,7 +49,7 @@ const Footer: React.FC = () => {
               className="inline-flex p-2 text-gray-400 hover:text-gray-600 transition-colors"
               title="Email me"
             >
-              <Mail size={20} strokeWidth={1.75} />
+              <Icon as={IconMail} size={20} />
             </a>
           </div>
         </div>

@@ -45,3 +45,6 @@ export type { ToastAction, ToastContextValue, ToastOptions } from './toastContex
 
 export { Menu, MenuItem } from './Menu';
 export type { MenuItemProps, MenuProps, MenuTriggerProps } from './Menu';
+
+export { Icon } from './Icon';
+export type { IconProps } from './Icon';

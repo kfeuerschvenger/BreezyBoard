@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
-import { SearchX } from 'lucide-react';
+import { IconSearchOff } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
-import { LoadingScreen } from '@/shared/ui';
+import { LoadingScreen, Icon } from '@/shared/ui';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
 
@@ -41,7 +41,7 @@ const NotFound = ({
   const message = (
     <div className="text-center">
       <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100" aria-hidden="true">
-        <SearchX size={28} className="text-gray-500" />
+        <Icon as={IconSearchOff} size={28} className="text-gray-500" />
       </div>
       <p className="mx-auto mb-6 max-w-md text-gray-600">{description}</p>
       {isAuthenticated ? (

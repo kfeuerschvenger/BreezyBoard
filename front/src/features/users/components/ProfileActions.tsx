@@ -1,5 +1,6 @@
 import React from 'react';
-import { Save } from 'lucide-react';
+import { IconDeviceFloppy } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 
 export interface ProfileActionsProps {
   isDirty: boolean;
@@ -46,7 +47,7 @@ export const ProfileActions: React.FC<ProfileActionsProps> = ({
       {isSubmitting ? (
         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
       ) : (
-        <Save size={16} aria-hidden="true" />
+        <Icon as={IconDeviceFloppy} size={16} aria-hidden="true" />
       )}
       <span className="md:hidden">{isSubmitting ? 'Saving...' : 'Save'}</span>
       <span className="hidden md:inline">{isSubmitting ? 'Saving...' : 'Save Changes'}</span>

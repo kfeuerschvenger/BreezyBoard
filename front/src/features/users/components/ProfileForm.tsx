@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MapPin, User } from 'lucide-react';
+import { IconMail, IconMapPin, IconUser } from '@tabler/icons-react';
 import type { UseFormReturn } from 'react-hook-form';
-import { Field, Input } from '@/shared/ui';
+import { Field, Input, Icon } from '@/shared/ui';
 import type { ProfileFormValues } from '../hooks/useProfile';
 import { ProfileActions } from './ProfileActions';
 
@@ -16,8 +16,8 @@ export interface ProfileFormProps {
 
 /** The editable fields, in the order the form asks for them. */
 const FIELDS = [
-  { name: 'email', label: 'Email Address', placeholder: 'Enter email address', type: 'email', icon: <Mail size={16} className="text-gray-400" /> },
-  { name: 'location', label: 'Location', placeholder: 'Enter location', icon: <MapPin size={16} className="text-gray-400" /> },
+  { name: 'email', label: 'Email Address', placeholder: 'Enter email address', type: 'email', icon: <Icon as={IconMail} size={16} className="text-gray-400" /> },
+  { name: 'location', label: 'Location', placeholder: 'Enter location', icon: <Icon as={IconMapPin} size={16} className="text-gray-400" /> },
   { name: 'role', label: 'Role', placeholder: 'Enter your role' },
   { name: 'department', label: 'Department', placeholder: 'Enter department' },
 ] as const;
@@ -41,10 +41,10 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ form, error, onSubmit,
         <form className="space-y-6" onSubmit={onSubmit}>
           {/* The two names sit side by side; everything below is full width. */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="First Name" error={errors.firstName?.message} icon={<User size={16} className="text-gray-400" />}>
+            <Field label="First Name" error={errors.firstName?.message} icon={<Icon as={IconUser} size={16} className="text-gray-400" />}>
               {props => <Input {...props} {...register('firstName')} placeholder="Enter first name" className="pl-10" />}
             </Field>
-            <Field label="Last Name" error={errors.lastName?.message} icon={<User size={16} className="text-gray-400" />}>
+            <Field label="Last Name" error={errors.lastName?.message} icon={<Icon as={IconUser} size={16} className="text-gray-400" />}>
               {props => <Input {...props} {...register('lastName')} placeholder="Enter last name" className="pl-10" />}
             </Field>
           </div>
