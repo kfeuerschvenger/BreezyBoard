@@ -17,6 +17,10 @@ import { ErrorCode } from '../constants/errorCodes.js';
  */
 export const rateLimitTesting = { enabled: false };
 
+// Every limiter below is keyed on req.ip, the client's IP address as the
+// trusted proxies report it (see TRUST_PROXY_HOPS in config/env.js). A budget
+// is therefore per client address, never per account or per email address, and
+// clients behind one shared address (an office, a mobile carrier) share it.
 const shared = {
   standardHeaders: true,
   legacyHeaders: false,
@@ -39,7 +43,7 @@ export const authLimiter = rateLimit({
 });
 
 /**
- * Registration, limited per address to slow bulk account creation.
+ * Registration, limited per client IP address to slow bulk account creation.
  *
  * Configurable, unlike the login limiter above, and the distinction is the
  * point rather than an inconsistency. That one bounds credential stuffing
@@ -67,11 +71,11 @@ export const registrationLimiter = rateLimit({
  * since it must answer the same for an address that exists and one that
  * does not. A limiter that skipped successful requests would therefore
  * never count one, and the route would be unlimited while appearing
- * protected. What it bounds is the number of emails one address can make
+ * protected. What it bounds is the number of emails one client can make
  * the system send to somebody else's mailbox.
  *
  * Configurable for the reason registrationLimiter is: the end to end suite
- * requests resets from one address, and development raises the budget.
+ * requests resets from one client, and development raises the budget.
  * The default is the production value, and docker-compose.prod.yml does not
  * mention it.
  */

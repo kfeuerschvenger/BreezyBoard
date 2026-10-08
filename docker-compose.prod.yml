@@ -71,6 +71,14 @@ services:
       # https://breezyboard.example. The API refuses to start without it rather
       # than falling back to allowing every origin, which is what it used to do.
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS to the public origin of the site}
+      # Reverse proxies in front of the API, counted from the API outward.
+      # The front container's nginx is the one, and it overwrites
+      # X-Forwarded-For with the address it sees. A load balancer or CDN placed
+      # before it would make that address the balancer's, so such a deployment
+      # has to teach nginx the real client address (the realip module) before
+      # this count is raised. Every rate limit is keyed on the address this
+      # count produces.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       # Password reset mail. The API refuses to start without a relay, a
       # sender and the public origin: a reset link is an account takeover
       # waiting for the wrong recipient, so the alternative of logging it

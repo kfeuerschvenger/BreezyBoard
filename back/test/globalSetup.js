@@ -19,6 +19,9 @@ export default async function setup() {
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key';
   process.env.NODE_ENV = 'test';
   process.env.PASSWORD_RESET_COOLDOWN_MS = '1';
+  // The production topology, so the limiter tests run through the same hop
+  // count the deployed application uses.
+  process.env.TRUST_PROXY_HOPS = '1';
 
   return async () => {
     await mongod.stop();
