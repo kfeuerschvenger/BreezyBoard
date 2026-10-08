@@ -48,3 +48,21 @@ export type { MenuItemProps, MenuProps, MenuTriggerProps } from './Menu';
 
 export { Icon } from './Icon';
 export type { IconProps } from './Icon';
+
+export { Chip } from './Chip';
+export type { ChipProps, ChipVariant } from './Chip';
+
+export { SegmentedControl } from './SegmentedControl';
+export type { SegmentedControlProps, SegmentedOption, SegmentedSize } from './SegmentedControl';
+
+export { Switch } from './Switch';
+export type { SwitchProps } from './Switch';
+
+export { ProgressBar } from './ProgressBar';
+export type { ProgressBarProps, ProgressSize, ProgressVariant } from './ProgressBar';
+
+export { Cover } from './Cover';
+export type { CoverProps } from './Cover';
+
+export { HUES, HUE_ANGLE, coverGradient, hueFromSeed } from './hue';
+export type { Hue } from './hue';
