@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, logInThroughTheUi, seedBoard } from './fixtures';
+import { test, expect, logInThroughTheUi, makeUser, seedBoard } from './fixtures';
 
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
 
@@ -163,5 +163,31 @@ test.describe('editing and deleting a board from its page', () => {
     await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click();
     await expect(page.getByRole('status')).toContainText(`Restored "${title}"`);
     await expect(page.getByRole('link', { name: title })).toBeVisible();
+  });
+});
+
+test.describe('the dashboard card menu follows the role of whoever is looking', () => {
+  test('a member sees the board but not the owner actions, and the owner still does', async ({ page, authedUser }) => {
+    const boardId = await seedBoard(page, authedUser.token!, [['Shared task']]);
+
+    const member = makeUser();
+    const registered = await page.request.post(`${API_URL}/auth/register`, { data: member });
+    expect(registered.ok(), `Registration failed with ${registered.status()}`).toBe(true);
+    const memberId = (await registered.json()).data.user.id;
+
+    const added = await page.request.patch(`${API_URL}/boards/${boardId}/members`, {
+      headers: { Authorization: `Bearer ${authedUser.token}` },
+      data: { members: [memberId] },
+    });
+    expect(added.ok(), `Adding the member failed with ${added.status()}`).toBe(true);
+
+    await logInThroughTheUi(page, member);
+    await expect(page.getByRole('link', { name: /E2E Seeded/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Options for / })).toHaveCount(0);
+
+    await page.context().clearCookies();
+    await page.evaluate(() => window.localStorage.clear());
+    await logInThroughTheUi(page, authedUser);
+    await expect(page.getByRole('button', { name: /^Options for E2E Seeded/ })).toBeVisible();
   });
 });

@@ -147,6 +147,29 @@ describe('boards', () => {
     expect(asMember.body.data.viewerRole).toBe('member');
   });
 
+  test('the board list tells each caller their own role on every board, as the read does', async () => {
+    const member = await registerUser();
+    const board = await createBoard(owner.token, colors.boardColor._id);
+    await request(app)
+      .patch(`/api/boards/${board._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ members: [member.user.id ?? member.user._id] });
+
+    const roleInList = async who => {
+      const list = await request(app).get('/api/boards').set('Authorization', `Bearer ${who.token}`);
+      return list.body.data.find(entry => entry._id === board._id).viewerRole;
+    };
+    const roleInRead = async who => {
+      const read = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${who.token}`);
+      return read.body.data.viewerRole;
+    };
+
+    expect(await roleInList(owner)).toBe('owner');
+    expect(await roleInList(member)).toBe('member');
+    expect(await roleInList(owner)).toBe(await roleInRead(owner));
+    expect(await roleInList(member)).toBe(await roleInRead(member));
+  });
+
   test('registration creates a personal workspace and a board lands in it', async () => {
     const personal = await Workspace.findOne({ createdBy: owner.user.id ?? owner.user._id, isPersonal: true });
 

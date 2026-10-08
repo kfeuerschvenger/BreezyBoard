@@ -44,6 +44,9 @@ const makeBoard = (overrides: Partial<Board>): Board => ({
   taskCount: 0,
   memberCount: 0,
   progress: 0,
+  // The list says who may act on each board, and the options menu renders for
+  // owners only, so a board is an owner's unless a test says otherwise.
+  viewerRole: 'owner',
   ...overrides,
 });
 
@@ -246,6 +249,23 @@ describe('BoardDashboard per board menu', () => {
 
     expect(screen.getByRole('button', { name: /Add Member/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Delete/ })).toBeInTheDocument();
+  });
+
+  it('is not offered on a board the viewer is only a member of, where the server refuses both actions', async () => {
+    mockedBoardService.getAll.mockResolvedValue([
+      makeBoard({ _id: 'board-mine', title: 'Mine', viewerRole: 'owner' }),
+      makeBoard({ _id: 'board-theirs', title: 'Theirs', viewerRole: 'member' }),
+      makeBoard({ _id: 'board-unknown', title: 'Unknown', viewerRole: undefined }),
+    ]);
+
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Theirs' });
+
+    expect(screen.getByRole('button', { name: 'Options for Mine' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Options for Theirs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Options for Unknown' })).not.toBeInTheDocument();
+    // Still a board the viewer can open.
+    expect(screen.getByRole('link', { name: 'Theirs' })).toHaveAttribute('href', '/board/board-theirs');
   });
 
   it('closes on Escape', async () => {

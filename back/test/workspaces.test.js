@@ -240,5 +240,48 @@ describe('workspaces', () => {
 
       expect(notListed.body.data.map(entry => entry._id)).not.toContain(board._id);
     });
+
+    test('the board list gives a workspace admin the owner role on a board they were never added to', async () => {
+      const board = await createBoard(boardOwner.token, colors.boardColor._id, {
+        workspaceId: workspace._id.toString(),
+      });
+
+      const listed = await request(app).get('/api/boards').set('Authorization', `Bearer ${admin.token}`);
+      const read = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${admin.token}`);
+
+      const entry = listed.body.data.find(item => item._id === board._id);
+
+      expect(entry.viewerRole).toBe('owner');
+      expect(entry.viewerRole).toBe(read.body.data.viewerRole);
+    });
+
+    test('the board list gives the creator who is only a workspace member the owner role', async () => {
+      // Not an admin, so nothing but createdBy can make this person an owner.
+      // The list populates createdBy into an object, which is exactly what a
+      // comparison against the caller's id would silently fail on.
+      const board = await createBoard(boardOwner.token, colors.boardColor._id, {
+        workspaceId: workspace._id.toString(),
+      });
+
+      const listed = await request(app).get('/api/boards').set('Authorization', `Bearer ${boardOwner.token}`);
+      const entry = listed.body.data.find(item => item._id === board._id);
+
+      expect(entry.viewerRole).toBe('owner');
+    });
+
+    test('the board list gives a workspace member who was added to a board only the member role', async () => {
+      const board = await createBoard(admin.token, colors.boardColor._id, {
+        workspaceId: workspace._id.toString(),
+      });
+      await request(app)
+        .patch(`/api/boards/${board._id}/members`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ members: [idOf(boardOwner)] });
+
+      const listed = await request(app).get('/api/boards').set('Authorization', `Bearer ${boardOwner.token}`);
+      const entry = listed.body.data.find(item => item._id === board._id);
+
+      expect(entry.viewerRole).toBe('member');
+    });
   });
 });
