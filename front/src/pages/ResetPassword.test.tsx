@@ -67,24 +67,24 @@ beforeEach(() => {
 
 describe('ResetPassword with a token', () => {
   it('asks for a new password and names the tab', () => {
-    openAt('/reset-password?token=abc123');
+    openAt('/reset-password#token=abc123');
 
     expect(screen.getByRole('heading', { level: 1, name: 'Choose a new password' })).toBeInTheDocument();
     expect(document.title).toBe('Reset password | BreezyBoard');
   });
 
   it('removes the token from the address bar and the history entry', async () => {
-    openAt('/reset-password?token=abc123');
+    openAt('/reset-password#token=abc123');
 
-    await waitFor(() => expect(window.location.search).toBe(''));
+    await waitFor(() => expect(window.location.hash).toBe(''));
     expect(window.location.pathname).toBe('/reset-password');
     expect(window.location.href).not.toContain('abc123');
   });
 
   it('still sends the token it read after it is gone from the address bar', async () => {
     const user = userEvent.setup();
-    openAt('/reset-password?token=abc123');
-    await waitFor(() => expect(window.location.search).toBe(''));
+    openAt('/reset-password#token=abc123');
+    await waitFor(() => expect(window.location.hash).toBe(''));
 
     await fillAndSubmit(user);
 
@@ -93,7 +93,7 @@ describe('ResetPassword with a token', () => {
 
   it('ends the local session and goes to sign in with the confirmation on success', async () => {
     const user = userEvent.setup();
-    openAt('/reset-password?token=abc123');
+    openAt('/reset-password#token=abc123');
 
     await fillAndSubmit(user);
 
@@ -105,7 +105,7 @@ describe('ResetPassword with a token', () => {
   it('replaces the form with a way to ask for a new link when the token is refused', async () => {
     const user = userEvent.setup();
     resetPassword.mockRejectedValue(refusedWith('INVALID_RESET_TOKEN'));
-    openAt('/reset-password?token=abc123');
+    openAt('/reset-password#token=abc123');
 
     await fillAndSubmit(user);
 
@@ -119,7 +119,7 @@ describe('ResetPassword with a token', () => {
   it('keeps the form and what was typed when the failure is not about the token', async () => {
     const user = userEvent.setup();
     resetPassword.mockRejectedValue(new Error('network'));
-    openAt('/reset-password?token=abc123');
+    openAt('/reset-password#token=abc123');
 
     await fillAndSubmit(user);
 
@@ -139,8 +139,14 @@ describe('ResetPassword without a token', () => {
     expect(resetPassword).not.toHaveBeenCalled();
   });
 
+  it('does not read a token from the query string', () => {
+    openAt('/reset-password?token=abc123');
+
+    expect(screen.getByRole('heading', { level: 1, name: 'This link cannot be used' })).toBeInTheDocument();
+  });
+
   it('treats an empty token the same as a missing one', () => {
-    openAt('/reset-password?token=');
+    openAt('/reset-password#token=');
 
     expect(screen.getByRole('heading', { level: 1, name: 'This link cannot be used' })).toBeInTheDocument();
   });

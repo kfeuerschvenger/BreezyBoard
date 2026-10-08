@@ -31,7 +31,7 @@ async function waitForMailTo(page: Page, address: string): Promise<string> {
 
 /** The reset link inside an email body. */
 function linkIn(text: string): string {
-  const match = /https?:\/\/\S+\/reset-password\?token=[a-f0-9]+/.exec(text);
+  const match = /https?:\/\/\S+\/reset-password#token=[a-f0-9]+/.exec(text);
   expect(match, `No reset link in the email:\n${text}`).not.toBeNull();
   return match![0];
 }
@@ -63,6 +63,8 @@ test.describe('password recovery', () => {
     // The token is a credential: it must not stay in the address bar or the history.
     await expect(recovery).toHaveURL(/\/reset-password$/);
     expect(recovery.url()).not.toContain('token');
+    expect(link, 'the token rides in the fragment, which never reaches a server').toContain('#token=');
+    expect(link).not.toContain('?');
 
     await recovery.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
     await recovery.getByLabel('Confirm new password', { exact: true }).fill(NEW_PASSWORD);

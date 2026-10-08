@@ -522,7 +522,7 @@ const anonymous = [
   {
     name: 'reset password',
     open: async () => {
-      await anonPage.goto(`${FRONT}/reset-password?token=${'a'.repeat(64)}`);
+      await anonPage.goto(`${FRONT}/reset-password#token=${'a'.repeat(64)}`);
       await anonPage.getByRole('heading', { level: 1, name: 'Choose a new password' }).waitFor();
     },
   },

@@ -79,8 +79,9 @@ describe('POST /auth/forgot-password', () => {
 
     const token = tokenFrom(mail.sent[0]);
 
-    expect(mail.sent[0].text).toContain(`${env.FRONTEND_URL}/reset-password?token=${token}`);
-    expect(mail.sent[0].html).toContain(`${env.FRONTEND_URL}/reset-password?token=${token}`);
+    expect(mail.sent[0].text).toContain(`${env.FRONTEND_URL}/reset-password#token=${token}`);
+    expect(mail.sent[0].html).toContain(`${env.FRONTEND_URL}/reset-password#token=${token}`);
+    expect(mail.sent[0].text).not.toContain('?token');
     expect(mail.sent[0].text).not.toContain('evil.example');
     expect(token).toMatch(/^[a-f0-9]{64}$/);
   });
