@@ -176,15 +176,23 @@ const stale = await req('PATCH', `/tasks/${taskIds[1]}/move`, token, {
 check('a move against a stale neighbour is a conflict', stale.status, 409);
 check('and says so with a code the client can switch on', stale.body?.code, 'CONFLICT');
 
-log('\n--- the board delete cascade runs in a transaction ---');
-// A standalone mongod answers this with 500, because mongoose refuses to
-// open a transaction against a topology that has no oplog. A 200 here is
-// therefore evidence about the deployment, not only about the handler.
+log('\n--- a deleted board and its tasks are unreachable, and restore brings them back ---');
+// Delete is a soft delete: the board is marked and its tasks are untouched,
+// so the observable contract is that nothing can reach them until the owner
+// restores the board. The transactional cascade runs in the purge, which the
+// backend suite covers against a replica set.
 check('DELETE /boards/:id succeeds', (await req('DELETE', `/boards/${boardId}`, token)).status, 200);
 check('the board is gone', (await req('GET', `/boards/${boardId}`, token)).status, 404);
 
 for (const [index, taskId] of taskIds.entries()) {
-  check(`task ${index + 1} was cascaded away`, (await req('GET', `/tasks/${taskId}`, token)).status, 404);
+  check(`task ${index + 1} is unreachable`, (await req('GET', `/tasks/${taskId}`, token)).status, 404);
+}
+
+check('POST /boards/:id/restore succeeds', (await req('POST', `/boards/${boardId}/restore`, token)).status, 200);
+check('the board is back', (await req('GET', `/boards/${boardId}`, token)).status, 200);
+
+for (const [index, taskId] of taskIds.entries()) {
+  check(`task ${index + 1} is back with it`, (await req('GET', `/tasks/${taskId}`, token)).status, 200);
 }
 
 const failed = results.filter(r => !r).length;

@@ -116,40 +116,124 @@ export const updateBoard = async (id, updateData) => {
   return board;
 };
 
-// Removing a board and its tasks used to be two independent writes. If the
-// second one failed the board was already gone, and its tasks survived
-// pointing at a board that no longer existed, invisible to every query in the
-// application and reclaimed by nothing. One transaction makes the pair
-// atomic: either the board and all of its tasks are gone, or neither is.
+/**
+ * Soft delete: the board is marked, nothing is removed. Every read and
+ * authorization path treats a marked board as missing, and its tasks are not
+ * touched, so `restoreBoard` brings back exactly what was deleted. The data
+ * goes for good in `purgeExpiredBoards`.
+ *
+ * The filter on `deletedAt` makes a second delete of the same board a 404
+ * rather than a silent overwrite of the first deletion date, which would
+ * quietly extend the retention window.
+ *
+ * @param {string} id
+ * @returns {Promise<object>} the board, with its deletion date
+ */
+export const deleteBoard = async id => {
+  const board = await Board.findOneAndUpdate({ _id: id, deletedAt: null }, { deletedAt: new Date() }, { new: true });
+
+  if (!board) {
+    throw new ApiError(404, 'Board not found');
+  }
+
+  return board;
+};
+
+/**
+ * Clears the deletion mark. Idempotent: restoring a board that is not
+ * deleted answers with the board, because a double click on Undo or a retry
+ * after a timeout must not turn into an error for a state that is exactly
+ * what was asked for. A board that has been purged is gone, a 404.
+ *
+ * @param {string} id
+ * @returns {Promise<object>} the restored board
+ */
+export const restoreBoard = async id => {
+  const board = await Board.findByIdAndUpdate(id, { deletedAt: null }, { new: true })
+    .populate('color', 'name value')
+    .populate('columns.color', 'name value')
+    .populate('template', 'name iconName');
+
+  if (!board) {
+    throw new ApiError(404, 'Board not found');
+  }
+
+  return board;
+};
+
+// Removing a board and its tasks is two writes, and they must be atomic: if
+// the second failed after the first, the tasks would survive pointing at a
+// board that no longer exists, invisible to every query in the application
+// and reclaimed by nothing. One transaction makes the pair all or nothing.
 //
 // This is why docker-compose runs MongoDB as a single node replica set.
 // A standalone instance rejects transactions outright, so on a standalone
-// deployment this function throws rather than silently falling back to the
-// old unsafe pair, which is the correct failure: a deployment that cannot
+// deployment this function throws rather than silently falling back to an
+// unsafe pair, which is the correct failure: a deployment that cannot
 // guarantee the cascade should say so instead of orphaning data quietly.
-export const deleteBoard = async id => {
+//
+// The board is removed only while it is still past `cutoff`, checked inside
+// the transaction. A restore that lands between the scan and this call
+// clears the mark and the board survives; the loser of the race is the purge.
+const purgeBoard = async (id, cutoff) => {
   const session = await mongoose.startSession();
-  let board = null;
+  let purged = false;
 
   try {
     // withTransaction commits on success, aborts on any throw, and retries
-    // the callback on a transient error. The 404 below is raised inside the
-    // transaction on purpose: it aborts cleanly, and it is not transient, so
-    // it propagates on the first attempt rather than being retried.
+    // the callback on a transient error.
     await session.withTransaction(async () => {
-      board = await Board.findByIdAndDelete(id, { session });
+      const board = await Board.findOneAndDelete({ _id: id, deletedAt: { $lte: cutoff } }, { session });
 
-      if (!board) {
-        throw new ApiError(404, 'Board not found');
+      // The same callback may run again after a transient error, so the flag
+      // is assigned on every attempt rather than only set once.
+      purged = Boolean(board);
+
+      if (board) {
+        await Task.deleteMany({ boardId: id }, { session });
       }
-
-      await Task.deleteMany({ boardId: id }, { session });
     });
   } finally {
     await session.endSession();
   }
 
-  return board;
+  return purged;
+};
+
+/**
+ * Removes every board whose deletion is older than the retention window,
+ * with its tasks, one transaction per board. A failure on one board is
+ * reported through `onError` and does not stop the others, so one poisoned
+ * board cannot hold the rest of the backlog hostage; with no `onError` the
+ * first failure is thrown instead.
+ *
+ * Safe to run from several processes at once: the guarded delete inside
+ * `purgeBoard` lets only one of them remove a given board.
+ *
+ * @param {{ retentionMs: number, now?: Date, onError?: (error: Error, boardId: any) => void }} options
+ * @returns {Promise<number>} how many boards were removed
+ */
+export const purgeExpiredBoards = async ({ retentionMs, now = new Date(), onError }) => {
+  const cutoff = new Date(now.getTime() - retentionMs);
+  // `$type` is what lets the planner use the partial index on `deletedAt`: a
+  // bare `$lte` does not imply the index's own `$type` condition.
+  const ids = await Board.distinct('_id', { deletedAt: { $type: 'date', $lte: cutoff } });
+  let removed = 0;
+
+  for (const id of ids) {
+    try {
+      if (await purgeBoard(id, cutoff)) {
+        removed += 1;
+      }
+    } catch (error) {
+      if (!onError) {
+        throw error;
+      }
+      onError(error, id);
+    }
+  }
+
+  return removed;
 };
 
 // Pagination is opt-in: `limit` undefined means "return everything", exactly
@@ -187,6 +271,9 @@ export const visibleBoardFilter = async userId => {
 
   return {
     $and: [
+      // A soft-deleted board is in nobody's list. `null` also matches a board
+      // saved before the field existed.
+      { deletedAt: null },
       { workspaceId: { $in: memberOf } },
       { $or: [{ createdBy: userId }, { members: userId }, { workspaceId: { $in: adminOf } }] },
     ],
@@ -268,7 +355,7 @@ export const summariseBoardTasks = async boards => {
         completed: row.completed,
         progress: row.total === 0 ? 0 : Math.round((row.completed / row.total) * 100),
       },
-    ])
+    ]),
   );
 };
 

@@ -52,6 +52,15 @@ const boardSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    // Set when the owner deletes the board, cleared when they restore it.
+    // A board with a date here is invisible to every read and authorization
+    // path and its tasks are untouched, so a restore brings back exactly what
+    // was there. The purge job removes the board and its tasks for good once
+    // the date is older than the retention window.
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -100,6 +109,11 @@ boardSchema.virtual('memberCount').get(function () {
 boardSchema.index({ workspaceId: 1 });
 boardSchema.index({ createdBy: 1 });
 boardSchema.index({ members: 1 });
+
+// Serves the purge scan for boards past retention. Partial, so the index
+// holds only the few boards currently in the deleted state rather than one
+// null entry per live board.
+boardSchema.index({ deletedAt: 1 }, { partialFilterExpression: { deletedAt: { $type: 'date' } } });
 
 const Board = mongoose.model('Board', boardSchema);
 
