@@ -403,7 +403,7 @@ Four things are deliberately left open and are not oversights. Three of the line
 | 2, overall | Done | Backend, frontend and end to end suites all green. Phase 3 closes when the 11 tripwires are flipped |
 | 3, authorization | Done | Task and board routes role-gated, original exploit replayed and fully refused, 9 tripwires flipped |
 | 3, validation | Done | Zod layer replacing every request value with the parsed output, all 11 tripwires flipped |
-| 3, hardening | Done | Fail-fast secrets, CORS allowlist, helmet, rate limits, pinned JWT algorithm, escaped search, upload magic bytes, CSP |
+| 3, hardening | Done | Fail-fast secrets, CORS allowlist, helmet, rate limits, pinned JWT algorithm, escaped search, upload magic bytes, CSP. Member ids were checked for shape only until Phase 6, see P4-25 |
 | 3, sliding session | Done | Two clocks, real revocation via tokenVersion, warning toast, draft persistence, verified live |
 | 3, API surface | Done | Dual mount at /api/v1 and /api, opt-in pagination, error code enum, pino with request ids |
 | 3, overall | **Done** | Every P1 finding closed, all 11 tripwires flipped, verified live and in production |
@@ -482,6 +482,7 @@ Four things are deliberately left open and are not oversights. Three of the line
 | 6, mail transport | Done | `mail.service.js` sends through nodemailer over SMTP, configured by `FRONTEND_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` and `MAIL_FROM`. Development compose starts a Mailpit container (web interface on 8025) and points the API at it. Production refuses to start without `FRONTEND_URL`, `SMTP_HOST` and `MAIL_FROM`. 9 tests |
 | 6, password recovery, backend | Done | `POST /auth/forgot-password` answers 202 with one body for every address and does the same database work for an unknown one. The token is 32 random bytes, stored as its SHA-256 on the user, valid 30 minutes (`PASSWORD_RESET_TTL_MS`), and replaced by the next request. `POST /auth/reset-password` consumes it with one `findOneAndUpdate`, applies the registration password rule and bumps `tokenVersion`. A password change also cancels a pending link. 17 tests, 16 mutations caught |
 | 6, password recovery, frontend | Done | The sign in page's "Forgot password?" dialog asks for the address and shows a confirmation worded as a conditional, the same for every address the server accepted. A public `/reset-password` route reads the token, takes it out of the address bar with a history replace, asks for the new password twice, and on success ends the local session and goes to sign in with a notice. A refused token replaces the form with a way to request a new link. Referrer-Policy is `no-referrer` in nginx and in `index.html`. 29 new unit tests across the dialog, the form and the page, 4 end to end tests through Mailpit, the axe gate 24 to 27 surfaces clean, the responsive script 721 to 811 assertions. Closes the password recovery half of P4-6 |
+| 6, member id existence | Done | `addBoardMembers` and `createBoard` (when `members` is supplied) look every id up in `User` before writing and answer 400 `VALIDATION_ERROR` if any names nobody, so nothing is written and the workspace is not touched. The check is all or nothing, and an id repeated in one request counts once. Closes P4-25, and the member id half of P1-9. 5 tests, 5 mutations caught |
 | 6, layout and product surface | Done | Every item of the phase has landed. What remains of the product surface is Phase 6b |
 | 6b, visual redesign | Not started | Added to the plan, see Phase 6b |
 | 7, documentation and CI | Not started | The contributing guide is out of scope |
@@ -543,7 +544,7 @@ Phase 3 does not fit in one reviewable change. The tasks below together run well
 |---|---|---|
 | 1, authorization | P1-1, P1-2, P1-4, H2, and the role-shaped middleware from section 11.2 | Done |
 | 2, request validation | P1-3, P1-6, P3-2, L3 | Done |
-| 3, hardening | P1-5, P1-7, P1-8, and the remaining P1-9 items | Done |
+| 3, hardening | P1-5, P1-7, P1-8, and the remaining P1-9 items | Done, except member id existence, which landed in Phase 6 as P4-25 |
 | 4, sliding session | All of section 9, backend and frontend | Done |
 | 5, API surface | Versioning, pagination, error codes, request ids, structured logging | Done |
 
@@ -562,7 +563,7 @@ The remaining slice content is unchanged:
 | Fail fast at startup on missing secrets, remove the `secret-key` fallback, pin the JWT algorithm | P1-5, P1-9 |
 | Delete `VITE_JWT` from the frontend environment example | P1-7 |
 | Add `helmet`, an explicit CORS allowlist, rate limiting on the auth routes, and a CSP | P1-8 |
-| Validate member ids exist, verify upload magic bytes, escape the user search term | P1-9 |
+| Validate member ids exist (shape only here, existence closed by P4-25), verify upload magic bytes, escape the user search term | P1-9 |
 | Build the sliding session, the inactivity window and the absolute cap, per section 9 | Section 9 |
 | Add the per-board role model rather than a boolean membership check, per section 11.2 | Section 11 |
 | Add pagination, the `/api/v1` prefix and machine-readable error codes while every route is being touched | Section 11.2 |
@@ -1517,7 +1518,9 @@ Backend tests assert that the list and the read agree for an owner and for a mem
 
 Only existence is checked. The palette has a `type` (`board`, `task`, `column`), and a task colour is accepted as a board colour today and paints the board with the neutral fallback. Requiring `type: 'board'` is a one line change and is not made here, because it decides what a client may send; it is listed in the hand-off as a question.
 
-**P4-25, open: member ids are checked for shape and not for existence.** P1-9 lists "member ids added without checking the users exist" and the plan records the item as done. It is not enforced: `PATCH /boards/:id/members` with a well formed id that belongs to nobody answers 200, the id stays in `Board.members`, and `ensureWorkspaceMembership` adds it to the workspace as a member. The population on the response drops it silently, which is why nothing looks wrong. What exists is `objectIdSchema`, a 24 character hex check. Found by trying it against the running stack while looking for the member id validation this change was meant to copy. Not fixed in this change; the fix is a `User` lookup before the write in `addBoardMembers` and in `createBoard` when `members` is supplied.
+**P4-25, closed: member ids were checked for shape and not for existence.** P1-9 lists "member ids added without checking the users exist" and the plan recorded the item as done. It was not enforced: `PATCH /boards/:id/members` with a well formed id that belongs to nobody answered 200, the id stayed in `Board.members`, and `ensureWorkspaceMembership` added it to the workspace as a member. The population on the response dropped it silently, which is why nothing looked wrong. What existed was `objectIdSchema`, a 24 character hex check. Found by trying it against the running stack while looking for the member id validation the colour check was meant to copy.
+
+`assertUsersExist` in `board.service.js` counts the distinct ids in `User` and refuses with 400 `VALIDATION_ERROR` when the count is short. It runs before anything is written in `addBoardMembers`, ahead of the workspace grant, and in `createBoard` when `members` is supplied, so a refused request leaves neither the board nor its workspace changed. It is all or nothing: one real id beside a ghost adds nobody. Distinct ids are counted so a repeat in one request is accepted, as `$addToSet` already treats it. A 400 and not a 404, for the reason the colour check gives. The check does not say which id was wrong; the caller can already search users, so nothing more would be learned, and a list of ids in an error is something to avoid by default. Mutations caught: either call site's check removed, the deduplication removed, the count comparison weakened to any match, and the wrong code. P1-9 is now fully done: the plan's earlier statement that it was done was wrong for this item.
 
 **The mail transport.** Password recovery needs the API to send mail, and nothing in it could. `mail.service.js` wraps nodemailer behind two functions, `sendMail` and `setMailTransport`. The transport is built on first use, so loading the application never opens a connection, and a test installs its own object with a `sendMail` method to capture what would have been sent. With no transport installed the test environment uses nodemailer's JSON transport, which serialises the message and touches no network.
 

@@ -161,6 +161,72 @@ describe('boards', () => {
     expect(stored.title).toBe('Test Board');
   });
 
+  describe('member ids must belong to existing users', () => {
+    const nobody = 'ffffffffffffffffffffffff';
+    const idOf = account => account.user.id ?? account.user._id;
+
+    test('adding members refuses an id that belongs to nobody and changes neither board nor workspace', async () => {
+      const board = await createBoard(owner.token, colors.boardColor._id);
+      const workspaceBefore = await Workspace.findById(board.workspaceId);
+
+      const res = await request(app)
+        .patch(`/api/boards/${board._id}/members`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ members: [nobody] });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect((await Board.findById(board._id)).members.map(String)).not.toContain(nobody);
+      expect((await Workspace.findById(board.workspaceId)).members).toHaveLength(workspaceBefore.members.length);
+    });
+
+    test('adding members is all or nothing when only one id is real', async () => {
+      const board = await createBoard(owner.token, colors.boardColor._id);
+      const member = await registerUser();
+
+      const res = await request(app)
+        .patch(`/api/boards/${board._id}/members`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ members: [idOf(member), nobody] });
+
+      expect(res.status).toBe(400);
+      expect((await Board.findById(board._id)).members.map(String)).not.toContain(String(idOf(member)));
+    });
+
+    test('adding the same real user twice in one request is accepted', async () => {
+      const board = await createBoard(owner.token, colors.boardColor._id);
+      const member = await registerUser();
+
+      const res = await request(app)
+        .patch(`/api/boards/${board._id}/members`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ members: [idOf(member), idOf(member)] });
+
+      expect(res.status).toBe(200);
+    });
+
+    test('create refuses an id that belongs to nobody and writes no board', async () => {
+      const res = await request(app)
+        .post('/api/boards')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ title: 'Invited a ghost', color: colors.boardColor._id.toString(), members: [nobody] });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(await Board.countDocuments({ title: 'Invited a ghost' })).toBe(0);
+    });
+
+    test('create with real members still goes through, and without members too', async () => {
+      const member = await registerUser();
+
+      const withMember = await createBoard(owner.token, colors.boardColor._id, { members: [idOf(member)] });
+      const alone = await createBoard(owner.token, colors.boardColor._id, { title: 'Alone' });
+
+      expect(withMember.members.map(String)).toContain(String(idOf(member)));
+      expect(alone.title).toBe('Alone');
+    });
+  });
+
   test('update that leaves the colour out still goes through', async () => {
     const board = await createBoard(owner.token, colors.boardColor._id);
 
