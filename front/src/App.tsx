@@ -6,9 +6,9 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { AppShell } from '@/app/layouts/AppShell';
 import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
+import { AuthToastProvider } from '@/context/AuthToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { Board, Home, Login, NotFound, Profile, Register, ResetPassword } from '@/pages';
-import { ToastProvider } from '@/shared/ui';
 
 import './index.css';
 
@@ -78,13 +78,13 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <ToastProvider>
+        <AuthToastProvider>
           <Router>
             <AppShell>
               <AppRoutes />
             </AppShell>
           </Router>
-        </ToastProvider>
+        </AuthToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

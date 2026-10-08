@@ -118,6 +118,15 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
 
 let counter = 0;
 
+export interface ToastProviderProps {
+  children: ReactNode;
+  /**
+   * Identifies who the toasts belong to, such as the signed in user's id.
+   * When it changes every toast is discarded.
+   */
+  resetKey?: string | null;
+}
+
 /**
  * Toasts for the whole application: transient messages, optionally with one
  * action, announced politely and never taking focus.
@@ -133,8 +142,19 @@ let counter = 0;
  * order for anybody who tabs from the top of the page. For a keyboard user
  * whose focus was lost, see `ToastItem`.
  */
-export const ToastProvider = ({ children }: { children: ReactNode }) => {
+export const ToastProvider = ({ children, resetKey = null }: ToastProviderProps) => {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
+
+  // A toast belongs to whoever was signed in when it appeared: it can name
+  // their boards and carry an action that acts as them. Changing the key
+  // discards every toast, so a message and an Undo never outlive the session
+  // that raised them. Adjusted during render, not in an effect, so the old
+  // user's toasts are never painted for the new one.
+  const [currentKey, setCurrentKey] = useState(resetKey);
+  if (currentKey !== resetKey) {
+    setCurrentKey(resetKey);
+    setToasts([]);
+  }
 
   const dismiss = useCallback((id: string) => {
     setToasts(current => current.filter(toast => toast.id !== id));
