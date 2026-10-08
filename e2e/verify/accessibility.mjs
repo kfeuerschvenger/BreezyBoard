@@ -187,6 +187,12 @@ await page.goto(`${FRONT}/register`);
 await page.waitForSelector('form').catch(() => {});
 await scan('register');
 
+// An address that leads nowhere, before anyone has signed in. The page has to
+// stand on its own here: no account menu, no redirect to login.
+await page.goto(`${FRONT}/no/such/page`);
+await page.getByRole('heading', { level: 1, name: 'Page not found' }).waitFor();
+await scan('unknown address, signed out');
+
 // Sign in through the interface, so the session under test is a real one.
 await page.goto(`${FRONT}/login`);
 const form = page.locator('form').first();
@@ -274,6 +280,17 @@ await scan('board, delete confirmation open');
 await page.getByRole('dialog', { name: 'Delete this board?' }).getByRole('button', { name: 'Delete board' }).click();
 await page.getByTestId('toast').waitFor();
 await scan('dashboard, undo toast showing');
+
+// The two not found pages a signed in person can reach: an unknown route and
+// a board that does not exist. Both carry the app header, so they are
+// scanned where the account menu is on screen.
+await page.goto(`${FRONT}/no/such/page`);
+await page.getByRole('heading', { level: 1, name: 'Page not found' }).waitFor();
+await scan('unknown address, signed in');
+
+await page.goto(`${FRONT}/board/${'0'.repeat(24)}`);
+await page.getByRole('heading', { level: 1, name: 'Board not found' }).waitFor();
+await scan('board not found');
 
 // The profile page was outside this gate until now, which is how its joined
 // date printed "Invalid Date" and its avatar input sat at display:none

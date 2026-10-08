@@ -20,9 +20,16 @@ import type { AuthContextType } from '@/context/AuthContext';
 // AuthProvider/localStorage/network involved), and the page components are
 // replaced with tiny stubs so this is not also, incidentally, a test of
 // BoardDashboard/Login/etc.
+const route = vi.hoisted(() => ({ path: '/' }));
+
 vi.mock('react-router-dom', async importOriginal => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
-  return { ...actual, BrowserRouter: actual.MemoryRouter };
+  return {
+    ...actual,
+    BrowserRouter: ({ children }: { children: React.ReactNode }) => (
+      <actual.MemoryRouter initialEntries={[route.path]}>{children}</actual.MemoryRouter>
+    ),
+  };
 });
 
 vi.mock('@/hooks/useAuth');
@@ -33,6 +40,7 @@ vi.mock('@/pages', () => ({
   Login: () => <div>Login page</div>,
   Profile: () => <div>Profile page</div>,
   Register: () => <div>Register page</div>,
+  NotFound: () => <div>Not found page</div>,
 }));
 
 const mockedUseAuth = vi.mocked(useAuth);
@@ -50,6 +58,7 @@ const authState = (overrides: Partial<AuthContextType>): AuthContextType => ({
 describe('auth guard (ProtectedRoute)', () => {
   beforeEach(() => {
     mockedUseAuth.mockReset();
+    route.path = '/';
   });
 
   it('redirects an unauthenticated visitor to /login', async () => {
@@ -80,5 +89,30 @@ describe('auth guard (ProtectedRoute)', () => {
     expect(container.querySelector('.animate-spin')).toBeInTheDocument();
     expect(screen.queryByText('Login page')).not.toBeInTheDocument();
     expect(screen.queryByText('Protected home content')).not.toBeInTheDocument();
+  });
+});
+
+describe('an unknown address', () => {
+  beforeEach(() => {
+    mockedUseAuth.mockReset();
+    route.path = '/no/such/page';
+  });
+
+  it('shows the not found page to a signed in visitor instead of redirecting to the dashboard', async () => {
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
+
+    render(<App />);
+
+    expect(await screen.findByText('Not found page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected home content')).not.toBeInTheDocument();
+  });
+
+  it('shows the not found page to a signed out visitor instead of bouncing them to login', async () => {
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false }));
+
+    render(<App />);
+
+    expect(await screen.findByText('Not found page')).toBeInTheDocument();
+    expect(screen.queryByText('Login page')).not.toBeInTheDocument();
   });
 });

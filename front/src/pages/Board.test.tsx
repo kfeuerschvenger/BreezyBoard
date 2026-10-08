@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { AxiosError, AxiosHeaders } from 'axios';
 import Board from './Board';
 import { BoardService, TaskService, ColorService, UserService } from '@/services';
 import type { Board as BoardModel, Color, Task, User } from '@/models';
@@ -16,6 +17,12 @@ vi.mock('@/services', () => ({
   TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
+}));
+
+// The not found page asks who is signed in to choose its link, and the page
+// is rendered here without an AuthProvider.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ isAuthenticated: true, loading: false, user: null }),
 }));
 
 const mockedBoardService = vi.mocked(BoardService);
@@ -61,6 +68,16 @@ const makeTask = (overrides: Partial<Task>): Task => ({
   order: 'a0',
   ...overrides,
 });
+
+// A failed request as axios reports it: a rejection carrying the response.
+const rejectedWith = (status: number) =>
+  new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+    status,
+    statusText: '',
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+    data: {},
+  });
 
 const renderBoard = () =>
   renderWithQuery(
@@ -149,6 +166,34 @@ describe('Board page rendering', () => {
     expect(within(alert).getByText('This board could not be loaded')).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: /try again/i })).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Loading this board' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [404, 'a board that is missing or deleted'],
+    [403, 'a board the caller may not read'],
+    [400, 'an address that is not an id'],
+  ])('shows a not found page, with no retry, for a %i (%s)', async status => {
+    mockedBoardService.getById.mockRejectedValue(rejectedWith(status));
+    mockedTaskService.getByBoard.mockRejectedValue(rejectedWith(status));
+
+    renderBoard();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Board not found' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to my boards' })).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.title).toBe('Board not found | BreezyBoard');
+  });
+
+  it('keeps the retry for a server failure, where trying again can change the answer', async () => {
+    mockedBoardService.getById.mockRejectedValue(rejectedWith(500));
+    mockedTaskService.getByBoard.mockRejectedValue(rejectedWith(500));
+
+    renderBoard();
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByRole('button', { name: /try again/i })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Board not found' })).not.toBeInTheDocument();
   });
 });
 
