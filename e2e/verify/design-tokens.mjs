@@ -198,8 +198,10 @@ const measurePairs = async (target, pairs) =>
       ctx.clearRect(0, 0, 1, 1);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, 1, 1);
-      ctx.fillStyle = resolve(bg);
-      ctx.fillRect(0, 0, 1, 1);
+      for (const layer of Array.isArray(bg) ? bg : [bg]) {
+        ctx.fillStyle = resolve(layer);
+        ctx.fillRect(0, 0, 1, 1);
+      }
       const under = [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3);
       ctx.fillStyle = resolve(fg);
       ctx.fillRect(0, 0, 1, 1);
@@ -305,6 +307,8 @@ const paintOf = async (target, cssColor) =>
 const tokenValue = (target, name) =>
   target.evaluate(n => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
 
+const isIdentity = transform => transform === 'none' || transform === 'matrix(1, 0, 0, 1, 0, 0)';
+
 const field = await fieldMetrics(page);
 check('an input is 48 pixels tall', field.height, '48px');
 check('an input has the field radius', field.radius, '14px');
@@ -368,6 +372,34 @@ check(
   await paintOf(page, ring.outlineColor),
   await paintOf(page, await tokenValue(page, '--color-focus'))
 );
+// The surface of the shared Modal.
+const panelStyle = await styleOf(probeDialog, ['borderTopLeftRadius', 'boxShadow', 'backgroundColor']);
+check('a dialog panel has the modal radius', panelStyle.borderTopLeftRadius, '26px');
+check('a dialog panel casts the modal shadow', panelStyle.boxShadow.includes('0px 40px 80px -30px'), true);
+check('a dialog panel is white', await paintOf(page, panelStyle.backgroundColor), '255,255,255');
+const scrimStyle = await probeDialog
+  .locator('xpath=preceding-sibling::*[1]')
+  .evaluate(element => {
+    const style = getComputedStyle(element);
+    return { filter: style.backdropFilter, background: style.backgroundColor };
+  });
+check('the scrim blurs what is behind it by 6 pixels', scrimStyle.filter, 'blur(6px)');
+check(
+  'the scrim is the navy scrim token',
+  await paintOf(page, scrimStyle.background),
+  await paintOf(page, await tokenValue(page, '--color-scrim'))
+);
+const titleStyle = await styleOf(probeDialog.getByRole('heading'), ['fontFamily', 'fontWeight', 'fontSize']);
+check('a dialog title is set in the display face', leads(titleStyle.fontFamily, 'Bricolage Grotesque'), true);
+check('a dialog title is bold and 22 pixels', `${titleStyle.fontWeight} ${titleStyle.fontSize}`, '700 22px');
+const closeButton = probeDialog.getByRole('button', { name: 'Close' });
+const closeStyle = await styleOf(closeButton, ['width', 'height', 'borderTopLeftRadius']);
+check('the close button is a 36 pixel circle', `${closeStyle.width} ${closeStyle.height} ${closeStyle.borderTopLeftRadius}`, '36px 36px 99px');
+await closeButton.hover();
+await page.waitForTimeout(450);
+check('the close glyph turns a quarter on hover', (await styleOf(closeButton.locator('svg'), ['rotate'])).rotate, '90deg');
+await page.mouse.move(2, 2);
+
 await page.keyboard.press('Escape');
 await probeDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 
@@ -610,6 +642,154 @@ check('a cover whose image is missing falls back to its gradient', await page.lo
 check('a named cover is an image with that name', await page.locator('#probe-host [role="img"][aria-label="A named cover"]').count(), 1);
 await unmountPrimitives(page);
 
+log('\n--- the menu, the confirm dialog and the toast, signed in ---');
+
+// A real account, so the surfaces that only exist behind the sign in can be
+// measured: the account menu and the board menu, the confirm dialog that
+// deleting a board asks, and the toast that offers to undo it.
+const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
+const gateUser = {
+  firstName: 'Token',
+  lastName: 'Gate',
+  email: `tokens-${Date.now()}@example.test`,
+  password: 'TokenGate1',
+};
+const registered = await page.request.post(`${API}/auth/register`, { data: gateUser });
+check('the gate account registers', registered.ok(), true);
+await page.goto(`${FRONT}/login`);
+const loginForm = page.locator('form').first();
+await loginForm.getByLabel('Email address', { exact: true }).fill(gateUser.email);
+await loginForm.getByLabel('Password', { exact: true }).fill(gateUser.password);
+await loginForm.getByRole('button', { name: /sign in/i }).click();
+await page.getByText('My Boards').waitFor();
+
+const gateBoard = `Token Board ${Date.now()}`;
+await page.getByRole('button', { name: /create board/i }).first().click();
+await page.getByLabel(/board name/i).fill(gateBoard);
+await page.getByRole('button', { name: /^create board$/i }).last().click();
+await page.getByText(gateBoard).first().waitFor();
+await page.waitForTimeout(600);
+
+// The account menu: it rises in, and while it leaves it is already out of
+// reach.
+const menuOpening = await page.evaluate(
+  () =>
+    new Promise(resolve => {
+      document.querySelector('button[aria-label^="Account menu for"]').click();
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const style = getComputedStyle(document.querySelector('[role="menu"]'));
+            resolve({ opacity: Number(style.opacity), transform: style.transform });
+          })
+        )
+      );
+    })
+);
+check('a menu fades in', menuOpening.opacity < 1, true);
+check('a menu rises and scales in', isIdentity(menuOpening.transform), false);
+await page.waitForTimeout(500);
+const menuSurface = await styleOf(page.getByRole('menu'), ['borderTopLeftRadius', 'backgroundColor', 'boxShadow']);
+check('a menu has the control radius', menuSurface.borderTopLeftRadius, '12px');
+check('a menu is white', await paintOf(page, menuSurface.backgroundColor), '255,255,255');
+check('a menu casts the raised tile shadow', menuSurface.boxShadow.includes('0px 26px 44px -24px'), true);
+const menuItem = await styleOf(page.getByRole('menuitem').first(), ['borderTopLeftRadius', 'fontWeight']);
+check('a menu item is a rounded medium weight row', `${menuItem.borderTopLeftRadius} ${menuItem.fontWeight}`, '10px 500');
+await reportPairs(page, [
+  ['a menu item on the menu', '--color-ink-secondary', '--color-surface', 4.5],
+  ['a hovered menu item on its fill', '--color-ink', '--color-line-06', 4.5],
+]);
+
+const menuLeaving = await page.evaluate(
+  () =>
+    new Promise(resolve => {
+      const menu = document.querySelector('[role="menu"]');
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      requestAnimationFrame(() => {
+        const still = document.querySelector('[role="menu"]');
+        resolve(still ? { hidden: still.getAttribute('aria-hidden'), inert: still.hasAttribute('inert') } : null);
+      });
+    })
+);
+// The popup may already be gone, which is fine. If it is not, it must not be
+// reachable while it fades.
+check(
+  'a leaving menu is hidden and inert, or already gone',
+  menuLeaving === null || (menuLeaving.hidden === 'true' && menuLeaving.inert),
+  true
+);
+await page.waitForTimeout(500);
+check('the menu is gone from the page after its exit', await page.getByRole('menu').count(), 0);
+
+// The confirm dialog and the toast.
+await page.getByRole('button', { name: `Options for ${gateBoard}` }).click();
+// The board card's menu is its own component of plain buttons, not the Menu primitive.
+await page.getByRole('button', { name: 'Delete', exact: true }).click();
+const confirmDialog = page.getByRole('dialog', { name: 'Delete this board?' });
+await confirmDialog.waitFor({ state: 'visible' });
+await page.waitForTimeout(500);
+check(
+  'the confirm dialog puts focus on Cancel',
+  await confirmDialog.getByRole('button', { name: 'Cancel' }).evaluate(el => el === document.activeElement),
+  true
+);
+const destructive = await styleOf(confirmDialog.getByRole('button', { name: 'Delete board' }), ['backgroundColor', 'height']);
+check(
+  'the destructive confirm button is the danger fill',
+  await paintOf(page, destructive.backgroundColor),
+  await paintOf(page, await tokenValue(page, '--color-danger'))
+);
+check('the destructive confirm button is 44 pixels tall', destructive.height, '44px');
+await confirmDialog.getByRole('button', { name: 'Delete board' }).click();
+
+const toast = page.getByTestId('toast');
+await toast.waitFor({ state: 'visible' });
+const toastStyle = await styleOf(toast, ['backgroundColor', 'borderTopLeftRadius', 'boxShadow', 'animationName']);
+check(
+  'a toast is a dark ink pill',
+  `${await paintOf(page, toastStyle.backgroundColor)} ${toastStyle.borderTopLeftRadius}`,
+  `${await paintOf(page, await tokenValue(page, '--color-ink'))} 24px`
+);
+check('a toast casts the toast shadow', toastStyle.boxShadow.includes('0px 20px 40px -18px'), true);
+check('a toast enters on bbToast', toastStyle.animationName, 'bbToast');
+// The entrance slides in from the left on a tilt, which moves the box, so the
+// position is measured once it has settled.
+await page.waitForTimeout(700);
+const toastBox = await toast.boundingBox();
+const viewport = page.viewportSize();
+check('a toast is centred at the bottom of the screen', Math.abs(toastBox.x + toastBox.width / 2 - viewport.width / 2) <= 1, true);
+check('a toast sits 28 pixels above the bottom edge', Math.round(viewport.height - (toastBox.y + toastBox.height)), 28);
+const windIcon = await styleOf(toast.locator('svg').first(), ['color']);
+check(
+  'a toast carries the wind icon in the on-ink accent',
+  await paintOf(page, windIcon.color),
+  await paintOf(page, await tokenValue(page, '--color-on-ink-accent'))
+);
+const undo = toast.getByRole('button', { name: 'Undo' });
+const undoStyle = await styleOf(undo, ['borderTopLeftRadius']);
+check('the toast action is a round translucent pill', undoStyle.borderTopLeftRadius, '99px');
+await reportPairs(page, [
+  ['a toast message on the ink', '#ffffff', '--color-ink', 4.5],
+  ['the toast wind icon on the ink', '--color-on-ink-accent', '--color-ink', 3],
+  ['the toast action text on its pill', '#ffffff', ['#0f1b2d', 'rgb(255 255 255 / 0.14)'], 4.5],
+  ['the toast action text on its hovered pill', '#ffffff', ['#0f1b2d', 'rgb(255 255 255 / 0.26)'], 4.5],
+  ['the toast dismiss glyph on the ink', 'rgb(255 255 255 / 0.8)', '--color-ink', 3],
+]);
+// The toast is first in the tab order, so Tab walks onto its controls.
+let reached = false;
+for (let press = 0; press < 6 && !reached; press += 1) {
+  await page.keyboard.press('Tab');
+  reached = await undo.evaluate(el => el === document.activeElement);
+}
+check('the keyboard reaches the toast action', reached, true);
+const toastRing = await styleOf(undo, ['outlineStyle', 'outlineWidth', 'outlineColor']);
+check(
+  'the toast action draws a 2px white ring',
+  `${toastRing.outlineStyle} ${toastRing.outlineWidth} ${await paintOf(page, toastRing.outlineColor)}`,
+  'solid 2px 255,255,255'
+);
+await page.getByRole('button', { name: 'Dismiss notification' }).click();
+
 log('\n--- the reduced motion policy ---');
 
 // A person who asks the system for less motion gets animations and
@@ -617,6 +797,27 @@ log('\n--- the reduced motion policy ---');
 // waits on an animation to finish: a dialog unmounts only after its exit
 // completes, so a dialog that opens and then never leaves the page under
 // this setting would be the failure to catch.
+// Three animation frames after the click: late enough for the panel to exist
+// and for a reduced motion preference to have dropped its transform (the
+// first frame still carries the initial one), early enough that a 350
+// millisecond entrance has barely started.
+const sampleOpening = pg =>
+  pg.evaluate(
+    () =>
+      new Promise(resolve => {
+        const trigger = [...document.querySelectorAll('button')].find(b => /forgot password/i.test(b.textContent));
+        trigger.click();
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const style = getComputedStyle(document.querySelector('[role="dialog"]'));
+              resolve({ opacity: Number(style.opacity), transform: style.transform });
+            })
+          )
+        );
+      })
+  );
+
 const calm = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 const calmPage = await calm.newPage();
 await calmPage.goto(`${FRONT}/login`);
@@ -672,10 +873,12 @@ for (const [name, animationName, duration, iterations] of animationTokens) {
   check(`--animate-${name} collapses to under 1ms and plays once`, duration < 1 && iterations === '1', true);
 }
 
-await calmPage.getByRole('button', { name: /forgot password/i }).click();
+const calmOpening = await sampleOpening(calmPage);
 const dialog = calmPage.getByRole('dialog');
 await dialog.waitFor({ state: 'visible' });
 check('a dialog opens under reduced motion', await dialog.isVisible(), true);
+check('under reduced motion the panel does not travel or scale', isIdentity(calmOpening.transform), true);
+check('under reduced motion the panel still fades in', calmOpening.opacity < 1, true);
 await calmPage.keyboard.press('Escape');
 await dialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 check('the dialog unmounts after its exit under reduced motion', await dialog.count(), 0);
@@ -686,9 +889,11 @@ const normal = await browser.newContext({ viewport: { width: 1440, height: 900 }
 const normalPage = await normal.newPage();
 await normalPage.goto(`${FRONT}/login`);
 await normalPage.waitForSelector('form');
-await normalPage.getByRole('button', { name: /forgot password/i }).click();
+const normalOpening = await sampleOpening(normalPage);
 const normalDialog = normalPage.getByRole('dialog');
 await normalDialog.waitFor({ state: 'visible' });
+check('with motion on the panel rises and scales in', isIdentity(normalOpening.transform), false);
+check('with motion on the panel fades in', normalOpening.opacity < 1, true);
 await normalPage.keyboard.press('Escape');
 await normalDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 check('the dialog unmounts after its exit with motion on', await normalDialog.count(), 0);

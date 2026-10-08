@@ -656,15 +656,28 @@ for (const viewport of VIEWPORTS) {
 
   // The body scrolls inside the panel and the actions do not move with it.
   const bottomBefore = g.save?.bottom;
-  const scrolled = await page.evaluate(() => {
-    const dialog = document.querySelector('[role="dialog"]');
-    const scroller = [...dialog.querySelectorAll('*')].find(
-      el => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1
-    );
-    if (!scroller) return null;
-    scroller.scrollTop = scroller.scrollHeight;
-    return scroller.scrollTop;
-  });
+  const scrollTheForm = () =>
+    page.evaluate(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      const scroller = [...dialog.querySelectorAll('*')].find(
+        el => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1
+      );
+      if (!scroller) return null;
+      scroller.scrollTop = scroller.scrollHeight;
+      return scroller.scrollTop;
+    });
+  let scrolled = await scrollTheForm();
+  if (scrolled === null && viewport.height <= 844) {
+    // A form that fits has nothing to scroll, which says nothing about the
+    // panel. How tall the form is depends on its header and its padding, so
+    // the height is taken down until it overflows, and the body is asked to
+    // scroll there.
+    await page.setViewportSize({ width: viewport.width, height: 420 });
+    await page.waitForTimeout(250);
+    scrolled = await scrollTheForm();
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(250);
+  }
   if (viewport.height <= 844) {
     check(`${label}: the form scrolls inside the panel`, scrolled !== null && scrolled > 0, `scrollTop ${scrolled}`);
   }

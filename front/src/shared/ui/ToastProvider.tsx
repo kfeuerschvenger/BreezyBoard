@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { ReactNode } from 'react';
-import { IconX } from '@tabler/icons-react';
+import { IconWind, IconX } from '@tabler/icons-react';
 import { Icon } from './Icon';
 import { ToastContext } from './toastContext';
 import type { ToastContextValue, ToastOptions } from './toastContext';
@@ -89,8 +89,9 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
       onKeyDown={event => {
         if (event.key === 'Escape') onDismiss(toast.id);
       }}
-      className="pointer-events-auto flex w-full max-w-md items-center gap-2 rounded-lg bg-gray-900 py-2 pl-4 pr-2 text-sm text-white shadow-lg"
+      className="pointer-events-auto flex w-fit max-w-md animate-bb-toast items-center gap-2.5 rounded-3xl bg-ink py-2 pl-4 pr-2 text-sm font-medium text-white shadow-toast"
     >
+      <Icon as={IconWind} size={18} className="shrink-0 text-on-ink-accent" aria-hidden="true" />
       <p className="min-w-0 flex-1 break-words">{toast.message}</p>
 
       {toast.action && (
@@ -102,7 +103,7 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
             if (rootRef.current) moveFocusOffToast(rootRef.current);
             onDismiss(toast.id);
           }}
-          className="min-h-11 shrink-0 cursor-pointer rounded px-3 font-semibold text-blue-300 underline hover:text-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:min-h-8"
+          className="focus-ring-on-ink min-h-11 shrink-0 cursor-pointer rounded-pill bg-white/14 px-3.5 font-semibold text-white transition-colors duration-200 hover:bg-white/26 sm:min-h-8"
         >
           {toast.action.label}
         </button>
@@ -112,7 +113,7 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
         type="button"
         aria-label="Dismiss notification"
         onClick={() => onDismiss(toast.id)}
-        className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded text-gray-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:h-8 sm:w-8"
+        className="focus-ring-on-ink flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-pill text-white/80 transition-colors duration-200 hover:text-white sm:size-8"
       >
         <Icon as={IconX} size={16} aria-hidden="true" />
       </button>
@@ -220,7 +221,7 @@ export const ToastProvider = ({ children, resetKey = null }: ToastProviderProps)
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4"
+          className="pointer-events-none fixed inset-x-0 bottom-3 z-[60] flex flex-col items-center gap-2 p-4"
         >
           {toasts.map(toast => (
             <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} keyboardRef={keyboardRef} />

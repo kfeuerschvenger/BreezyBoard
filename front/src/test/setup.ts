@@ -88,5 +88,8 @@ vi.mock('motion/react', () => {
   // Reduced motion is a policy of the real provider; here nothing animates.
   const MotionConfig = ({ children }: { children?: ReactNode }) => React.createElement(React.Fragment, null, children);
 
-  return { motion, AnimatePresence, MotionConfig };
+  // Nothing exits slowly here, so everything is always present.
+  const usePresence = () => [true, undefined] as const;
+
+  return { motion, AnimatePresence, MotionConfig, usePresence };
 });

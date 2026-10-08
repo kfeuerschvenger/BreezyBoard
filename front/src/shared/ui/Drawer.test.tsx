@@ -39,7 +39,7 @@ describe('Drawer', () => {
     // `dvh`, not `vh`: the latter is taller than what a phone shows while its
     // browser chrome or keyboard is up. The md utilities turn the sheet into
     // the side panel and lift the height cap.
-    expect(panel).toHaveClass('inset-x-0', 'bottom-0', 'max-h-[90dvh]', 'rounded-t-2xl');
+    expect(panel).toHaveClass('inset-x-0', 'bottom-0', 'max-h-[90dvh]', 'rounded-t-modal');
     expect(panel).toHaveClass('md:inset-y-0', 'md:right-0', 'md:max-h-none', 'md:max-w-xl');
   });
 

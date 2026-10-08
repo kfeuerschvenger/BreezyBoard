@@ -166,6 +166,32 @@ describe('Menu', () => {
     expect(screen.getByRole('menuitem', { name: 'One' })).toHaveFocus();
   });
 
+  it('is present and reachable while open: not hidden and not inert', async () => {
+    renderMenu();
+    await userEvent.click(trigger());
+
+    const menu = screen.getByRole('menu');
+    expect(menu).not.toHaveAttribute('aria-hidden');
+    expect(menu.hasAttribute('inert')).toBe(false);
+  });
+
+  it('draws the popup as a white rounded surface and each item as a rounded row with a focus ring', async () => {
+    renderMenu();
+    await userEvent.click(trigger());
+
+    expect(screen.getByRole('menu')).toHaveClass('rounded-control', 'bg-surface', 'shadow-tile-hover');
+    expect(screen.getByRole('menuitem', { name: 'One' })).toHaveClass('rounded-button-small', 'focus-ring-inset');
+  });
+
+  it('draws a disabled item in tertiary text and does not lift it on hover', async () => {
+    renderMenu();
+    await userEvent.click(trigger());
+
+    const disabled = screen.getByRole('menuitem', { name: 'Two' });
+    expect(disabled).toHaveClass('text-ink-tertiary', 'cursor-not-allowed');
+    expect(disabled.className).not.toContain('hover:bg-line-06');
+  });
+
   it('has no accessibility violations open', async () => {
     const { baseElement } = renderMenu();
     await userEvent.click(trigger());

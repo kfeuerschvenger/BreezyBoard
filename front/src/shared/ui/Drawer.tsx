@@ -83,7 +83,7 @@ export function Drawer({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={closeOnBackdrop ? onClose : undefined}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            className="fixed inset-0 z-40 bg-scrim backdrop-blur-[6px]"
           />
 
           <motion.div
@@ -95,27 +95,27 @@ export function Drawer({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl md:inset-x-auto md:inset-y-0 md:right-0 md:max-h-none md:rounded-none ${SIZE_CLASSES[size]}`}
+            className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-modal bg-surface shadow-modal md:inset-x-auto md:inset-y-0 md:right-0 md:max-h-none md:rounded-tr-none md:rounded-bl-modal ${SIZE_CLASSES[size]}`}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 md:p-6">
+            <div className="flex items-center justify-between gap-3 border-b border-line-08 px-4 py-4 md:px-6 md:py-5">
               <div className="min-w-0">
-                <h2 id={titleId} className="text-xl font-bold text-gray-900 font-heading break-words">
+                <h2 id={titleId} className="font-heading text-[22px] font-bold tracking-tight text-ink break-words">
                   {title}
                 </h2>
-                {subtitle && <p className="text-sm text-gray-600 font-body mt-1">{subtitle}</p>}
+                {subtitle && <p className="mt-1 text-sm text-ink-secondary">{subtitle}</p>}
               </div>
               {/* See the same block in Modal: an icon-only close with no
                   accessible name is what axe reports as button-name, and
                   IconButton demands the label in its own type. */}
-              <IconButton type="button" aria-label="Close" onClick={onClose}>
-                <Icon as={IconX} size={20} className="text-gray-500" aria-hidden="true" />
+              <IconButton type="button" aria-label="Close" shape="round" onClick={onClose} className="group">
+                <Icon as={IconX} size={20} className="transition-transform duration-300 group-hover:rotate-90" aria-hidden="true" />
               </IconButton>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">{children}</div>
 
             {footer && (
-              <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-6">
+              <div className="flex items-center justify-between border-t border-line-08 bg-surface-subtle px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:p-6">
                 {footer}
               </div>
             )}
