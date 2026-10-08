@@ -4,6 +4,7 @@ import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
 import ColorPalette from '../models/ColorPalette.js';
 import Task from '../models/Task.js';
+import User from '../models/User.js';
 import Workspace from '../models/Workspace.js';
 import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middleware.js';
 import { ensureWorkspaceMembership } from './workspace.service.js';
@@ -46,6 +47,22 @@ const assertColorExists = async colorId => {
   }
 };
 
+// The schema checks that each member id is shaped like an id, and nothing
+// checks that it names a person. Without this, an id that belongs to nobody
+// is stored in Board.members and ensureWorkspaceMembership then makes it a
+// member of the workspace too; the populated response drops it silently, so
+// nothing looks wrong while the board and its workspace carry a ghost.
+//
+// Repeats are counted once, since $addToSet and the workspace grant both
+// treat them as one.
+const assertUsersExist = async userIds => {
+  const unique = [...new Set(userIds.map(String))];
+
+  if ((await User.countDocuments({ _id: { $in: unique } })) !== unique.length) {
+    throw new ApiError(400, 'members must be ids of existing users', [], ErrorCode.VALIDATION_ERROR);
+  }
+};
+
 // A board always belongs to exactly one workspace. A client that names one
 // must be a member of it; a client that names none gets the caller's
 // personal workspace, which is what keeps the common case free of a concept
@@ -79,6 +96,10 @@ const resolveWorkspaceId = async (requestedWorkspaceId, userId) => {
 
 export const createBoard = async (boardData, userId) => {
   await assertColorExists(boardData.color);
+
+  if (boardData.members?.length) {
+    await assertUsersExist(boardData.members);
+  }
 
   // Ensures that the creator is included in the members
   const members = boardData.members || [];
@@ -456,6 +477,8 @@ export const addBoardMembers = async (boardId, members) => {
   if (!target) {
     throw new ApiError(404, 'Board not found');
   }
+
+  await assertUsersExist(members);
 
   // Board membership is inert without workspace membership: resolveBoardRole
   // gives no role at all to somebody outside the workspace, so they would
