@@ -9,8 +9,15 @@ import { ErrorCode } from '../constants/errorCodes.js';
 // own, copied out of its template when it was created, so this is a single
 // document read. It still cannot be a schema enum: the valid set differs for
 // every board and Mongoose has no way to say that.
+//
+// A soft deleted board is a missing board. The authorization middleware has
+// read the board before this runs, and a delete can land in between, so the
+// check is repeated here and a task is not written onto a deleted board. The
+// check and the write are two operations, so a delete in the gap between them
+// is not excluded; the task would then be restored or purged with the board
+// and never seen on its own.
 const loadColumnIds = async boardId => {
-  const board = await Board.findById(boardId).select('columns');
+  const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns');
 
   if (!board) {
     throw new ApiError(404, 'Board not found');
@@ -95,7 +102,7 @@ export const createTask = async taskData => {
     throw new ApiError(400, 'boardId is required to create a task');
   }
   if (taskData.owner) {
-    const board = await Board.findById(taskData.boardId).populate('members');
+    const board = await Board.findOne({ _id: taskData.boardId, deletedAt: null }).populate('members');
     if (!board) {
       throw new ApiError(404, 'Board not found');
     }
