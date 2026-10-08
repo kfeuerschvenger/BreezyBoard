@@ -81,7 +81,7 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
         message is not reliably announced.
       */}
       <div role="status" data-move-announcer className="sr-only">
-        {mover.announcement}
+        {mover.announcement && <span key={mover.announcementId}>{mover.announcement}</span>}
       </div>
 
       {/*

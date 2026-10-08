@@ -33,6 +33,7 @@ const makeMover = (overrides: Partial<UseTaskMoverResult> = {}): UseTaskMoverRes
   move: vi.fn(),
   moveToColumn: vi.fn().mockResolvedValue('moved'),
   announcement: '',
+  announcementId: 0,
   announce: vi.fn(),
   focusRequest: null,
   requestFocus: vi.fn(),
