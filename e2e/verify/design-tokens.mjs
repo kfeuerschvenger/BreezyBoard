@@ -371,6 +371,245 @@ check(
 await page.keyboard.press('Escape');
 await probeDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 
+log('\n--- the new primitives, rendered for real ---');
+
+// No page uses the new primitives yet, and a utility class that is not in the
+// stylesheet is a silent no-op, so jsdom cannot vouch for them. The page the
+// dev server already serves is borrowed instead: the React and ReactDOM it
+// loaded are found in the transformed entry module and imported by URL, so the
+// primitives are rendered with the same instances, the same stylesheet and the
+// same fonts as the application, with nothing added to the repository.
+const mountPrimitives = async (target, build) =>
+  target.evaluate(async source => {
+    const entry = await (await fetch('/src/main.tsx')).text();
+    const urlOf = name => entry.match(new RegExp(`/node_modules/[.]vite/deps/${name}[.]js[?]v=[a-f0-9]+`))?.[0];
+    const react = await import(urlOf('react'));
+    const dom = await import(urlOf('react-dom_client'));
+    const ui = await import('/src/shared/ui/index.ts');
+    const createElement = react.createElement ?? react.default.createElement;
+    const createRoot = dom.createRoot ?? dom.default.createRoot;
+
+    document.getElementById('probe-host')?.remove();
+    const host = document.createElement('div');
+    host.id = 'probe-host';
+    host.style.cssText = 'position:fixed;inset:0;z-index:100;padding:24px;background:#fff;overflow:auto';
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    window.__probeRoot = root;
+    // eslint-disable-next-line no-new-func
+    root.render(new Function('ui', 'h', 'React', `return (${source})(ui, h, React)`)(ui, createElement, react.default ?? react));
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }, build.toString());
+
+const unmountPrimitives = async target =>
+  target.evaluate(() => {
+    window.__probeRoot?.unmount();
+    document.getElementById('probe-host')?.remove();
+  });
+
+const probeText = (target, text, props) =>
+  target.locator('#probe-host').getByText(text, { exact: true }).evaluate(
+    (element, names) => {
+      const style = getComputedStyle(element);
+      return Object.fromEntries(names.map(name => [name, style[name]]));
+    },
+    props
+  );
+
+const probe = (target, selector, props) =>
+  target.locator(`#probe-host ${selector}`).first().evaluate(
+    (element, names) => {
+      const style = getComputedStyle(element);
+      return Object.fromEntries(names.map(name => [name, style[name]]));
+    },
+    props
+  );
+
+// Chip: every hue is its deep step on its tint, measured from what the
+// browser painted rather than from the token table.
+await mountPrimitives(page, (ui, h) =>
+  h(
+    'div',
+    null,
+    ['sky', 'teal', 'green', 'sand', 'coral', 'lavender'].map(hue =>
+      h(ui.Chip, { key: hue, hue, 'data-hue': hue }, `Chip ${hue}`)
+    ),
+    h(ui.Chip, { hue: 'neutral' }, 'Chip neutral')
+  )
+);
+for (const hue of ['sky', 'teal', 'green', 'sand', 'coral', 'lavender']) {
+  const painted = await probeText(page, `Chip ${hue}`, ['color', 'backgroundColor', 'borderTopLeftRadius', 'fontSize']);
+  check(`the ${hue} chip text is its deep step`, await paintOf(page, painted.color), await paintOf(page, await tokenValue(page, `--color-${hue}-deep`)));
+  check(`the ${hue} chip fill is its tint`, await paintOf(page, painted.backgroundColor), await paintOf(page, await tokenValue(page, `--color-${hue}-tint`)));
+  await reportPairs(page, [[`the ${hue} chip text on its fill`, painted.color, painted.backgroundColor, 4.5]]);
+}
+const neutralChip = await probeText(page, 'Chip neutral', ['color', 'backgroundColor']);
+await reportPairs(page, [['the neutral chip text on its fill', neutralChip.color, neutralChip.backgroundColor, 4.5]]);
+const labelChip = await probeText(page, 'Chip sky', ['fontSize', 'fontWeight', 'borderTopLeftRadius']);
+check('a label chip is 11.5 pixels, semibold and round', `${labelChip.fontSize} ${labelChip.fontWeight} ${labelChip.borderTopLeftRadius}`, '11.5px 600 99px');
+await unmountPrimitives(page);
+
+const focusRing = async (target, locator) => {
+  await locator.focus();
+  await target.keyboard.press('Shift+Tab');
+  await target.keyboard.press('Tab');
+  return locator.evaluate(element => {
+    const style = getComputedStyle(element);
+    return `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset}`;
+  });
+};
+
+// Switch
+await mountPrimitives(page, (ui, h, React) => {
+  const Harness = () => {
+    const [on, setOn] = React.useState(false);
+    return h(ui.Switch, { 'aria-label': 'Probe switch', checked: on, onCheckedChange: setOn });
+  };
+  return h(Harness);
+});
+const switchControl = page.locator('#probe-host [role="switch"]');
+const offTrack = await probe(page, '[role="switch"]', ['width', 'height', 'backgroundColor', 'borderTopLeftRadius']);
+check('a switch is 44 by 26', `${offTrack.width} ${offTrack.height}`, '44px 26px');
+check('a switch track is fully round', offTrack.borderTopLeftRadius, '99px');
+check(
+  'an off switch is drawn with the control border colour',
+  await paintOf(page, offTrack.backgroundColor),
+  await paintOf(page, await tokenValue(page, '--color-line-control'))
+);
+const knobOff = await probe(page, '[role="switch"] span', ['width', 'height', 'translate', 'backgroundColor']);
+check('the knob is a 20 pixel white circle at rest', `${knobOff.width} ${knobOff.height} ${knobOff.backgroundColor}`, '20px 20px rgb(255, 255, 255)');
+check('the knob rests at the start of the track', knobOff.translate === 'none' || knobOff.translate === '0px', true);
+await reportPairs(page, [
+  ['an off switch track on white', offTrack.backgroundColor, '--color-surface', 3],
+  ['the knob on an off track', '#ffffff', offTrack.backgroundColor, 3],
+]);
+check('a keyboard focused switch draws a 2px outline offset by 2px', await focusRing(page, switchControl), 'solid 2px 2px');
+await page.keyboard.press('Space');
+await page.waitForTimeout(500);
+check('pressing Space turns the switch on', await switchControl.getAttribute('aria-checked'), 'true');
+const onTrack = await probe(page, '[role="switch"]', ['backgroundColor']);
+const knobOn = await probe(page, '[role="switch"] span', ['translate']);
+check(
+  'an on switch is drawn with the strong accent',
+  await paintOf(page, onTrack.backgroundColor),
+  await paintOf(page, await tokenValue(page, '--color-accent-strong'))
+);
+check('the knob travels 18 pixels when on', knobOn.translate, '18px');
+await reportPairs(page, [
+  ['an on switch track on white', onTrack.backgroundColor, '--color-surface', 3],
+  ['the knob on an on track', '#ffffff', onTrack.backgroundColor, 3],
+]);
+await unmountPrimitives(page);
+
+// Segmented control
+await mountPrimitives(page, (ui, h, React) => {
+  const Harness = () => {
+    const [value, setValue] = React.useState('breezy');
+    return h(ui.SegmentedControl, {
+      label: 'Breeze',
+      value,
+      onChange: setValue,
+      options: [
+        { id: 'calm', label: 'Calm' },
+        { id: 'breezy', label: 'Breezy' },
+        { id: 'gusty', label: 'Gusty' },
+      ],
+    });
+  };
+  return h(Harness);
+});
+const frame = await probe(page, '[role="radiogroup"]', ['borderTopColor', 'backgroundColor', 'borderTopLeftRadius']);
+check(
+  'the segmented frame is drawn with the control border colour',
+  await paintOf(page, frame.borderTopColor),
+  await paintOf(page, await tokenValue(page, '--color-line-control'))
+);
+const selectedSegment = await probe(page, 'label:has(input:checked)', ['backgroundColor', 'color', 'boxShadow', 'height']);
+const idleSegment = await probe(page, 'label:has(input:not(:checked))', ['backgroundColor', 'color']);
+check('a segment is 28 pixels tall', selectedSegment.height, '28px');
+check('the selected segment is white', await paintOf(page, selectedSegment.backgroundColor), '255,255,255');
+check('the selected segment carries the ink ring', selectedSegment.boxShadow.includes('rgb(15, 27, 45)'), true);
+check('an unselected segment is transparent', idleSegment.backgroundColor, 'rgba(0, 0, 0, 0)');
+await reportPairs(page, [
+  ['the segmented frame on white', frame.borderTopColor, '--color-surface', 3],
+  ['the selected segment ring on its segment', '--color-ink', selectedSegment.backgroundColor, 3],
+  ['selected segment text on white', selectedSegment.color, selectedSegment.backgroundColor, 4.5],
+  ['an unselected segment text on the track', idleSegment.color, frame.backgroundColor, 4.5],
+]);
+await page.locator('#probe-host input:checked').focus();
+await page.keyboard.press('Shift+Tab');
+await page.keyboard.press('Tab');
+const ringOnSegment = await page
+  .locator('#probe-host label:has(input:focus-visible)')
+  .evaluate(label => {
+    const style = getComputedStyle(label);
+    return `${style.outlineStyle} ${style.outlineWidth}`;
+  })
+  .catch(() => 'no segment has the keyboard');
+check('the segment whose radio has the keyboard draws the focus ring', ringOnSegment, 'solid 2px');
+await page.keyboard.press('ArrowRight');
+check(
+  'the right arrow selects the next segment in a real browser',
+  await page.locator('#probe-host input:checked').evaluate(radio => radio.value),
+  'gusty'
+);
+await page.keyboard.press('ArrowRight');
+check('the arrows wrap from the last segment to the first', await page.locator('#probe-host input:checked').evaluate(radio => radio.value), 'calm');
+await unmountPrimitives(page);
+
+// Progress bar
+await mountPrimitives(page, (ui, h) =>
+  h(
+    'div',
+    { style: { width: 300 } },
+    h(ui.ProgressBar, { value: 40, label: 'Probe six', size: 6, hue: 'sky' }),
+    h('div', { style: { height: 12 } }),
+    h(ui.ProgressBar, { value: 40, label: 'Probe eight', size: 8, variant: 'gradient', hue: 'sky', toHue: 'green' })
+  )
+);
+const sixTrack = await probe(page, '[aria-label="Probe six"]', ['height', 'width']);
+const eightTrack = await probe(page, '[aria-label="Probe eight"]', ['height']);
+check('the small bar is 6 pixels', sixTrack.height, '6px');
+check('the large bar is 8 pixels', eightTrack.height, '8px');
+const sixFill = await probe(page, '[aria-label="Probe six"] div', ['width', 'backgroundColor', 'transitionProperty', 'transitionDuration']);
+check('the fill is 40 percent of the track', Math.round(Number.parseFloat(sixFill.width) / Number.parseFloat(sixTrack.width) * 100), 40);
+check(
+  'a solid fill is the edge step of its hue',
+  await paintOf(page, sixFill.backgroundColor),
+  await paintOf(page, await tokenValue(page, '--color-sky-edge'))
+);
+check('the fill animates its width', sixFill.transitionProperty.includes('width'), true);
+const gradientFill = await probe(page, '[aria-label="Probe eight"] div', ['backgroundImage']);
+check('a gradient fill is a linear gradient', gradientFill.backgroundImage.startsWith('linear-gradient'), true);
+for (const hue of ['sky', 'teal', 'green', 'sand', 'coral', 'lavender']) {
+  await reportPairs(page, [
+    [`the ${hue} progress fill on its track over white`, `--color-${hue}-edge`, 'rgb(15 27 45 / 0.07)', 3],
+    [`the ${hue} progress fill on its track over the ground`, `--color-${hue}-edge`, 'rgb(243 246 249)', 3],
+  ]);
+}
+await unmountPrimitives(page);
+
+// Cover
+// The caller sizes a cover. The probe sizes a wrapper and lets the cover fill
+// it, since a utility class that only this script names is not in the sheet.
+await mountPrimitives(page, (ui, h) => {
+  const sized = child => h('div', { style: { width: 192, height: 96, display: 'inline-block' } }, child);
+  return h(
+    'div',
+    null,
+    sized(h(ui.Cover, { hue: 'coral', className: 'size-full' })),
+    sized(h(ui.Cover, { hue: 'teal', src: '/definitely-missing.png', className: 'size-full' })),
+    sized(h(ui.Cover, { hue: 'sky', alt: 'A named cover', className: 'size-full' }))
+  );
+});
+const plainCover = await probe(page, 'div[aria-hidden="true"]', ['height', 'width', 'backgroundImage']);
+check('a cover takes its size from the caller', `${plainCover.width} ${plainCover.height}`, '192px 96px');
+check('a cover draws its gradient', plainCover.backgroundImage.startsWith('linear-gradient'), true);
+await page.waitForTimeout(300);
+check('a cover whose image is missing falls back to its gradient', await page.locator('#probe-host img').count(), 0);
+check('a named cover is an image with that name', await page.locator('#probe-host [role="img"][aria-label="A named cover"]').count(), 1);
+await unmountPrimitives(page);
+
 log('\n--- the reduced motion policy ---');
 
 // A person who asks the system for less motion gets animations and
