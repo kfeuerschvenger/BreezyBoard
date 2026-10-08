@@ -388,7 +388,7 @@ Related: 10 or more source files import from `framer-motion`, which is not a dec
 
 ### Status
 
-Phases 0 through 6 are complete. Phases 6b and 7 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
+Phases 0 through 6 are complete. Phases 6b, 7 and 8 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
 
 Four things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. `P2-6a`, the intermittent drag pickup, is a known issue deferred out of every phase, see section 5.3. The contrast of the colours the new `Avatar` introduced has not been measured. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
 
@@ -484,8 +484,9 @@ Four things are deliberately left open and are not oversights. Three of the line
 | 6, password recovery, frontend | Done | The sign in page's "Forgot password?" dialog asks for the address and shows a confirmation worded as a conditional, the same for every address the server accepted. A public `/reset-password` route reads the token from the URL fragment, takes it out of the address bar with `history.replaceState`, asks for the new password twice, and on success ends the local session and goes to sign in with a notice. A refused token replaces the form with a way to request a new link. Referrer-Policy is `no-referrer` in nginx and in `index.html`. 29 new unit tests across the dialog, the form and the page, 4 end to end tests through Mailpit, the axe gate 24 to 27 surfaces clean, the responsive script 721 to 811 assertions. Closes the password recovery half of P4-6 |
 | 6, member id existence | Done | `addBoardMembers` and `createBoard` (when `members` is supplied) look every id up in `User` before writing and answer 400 `VALIDATION_ERROR` if any names nobody, so nothing is written and the workspace is not touched. The check is all or nothing, and an id repeated in one request counts once. Closes P4-25, and the member id half of P1-9. 5 tests, 5 mutations caught |
 | 6, layout and product surface | Done | Every item of the phase has landed. What remains of the product surface is Phase 6b |
-| 6b, visual redesign | Not started | Added to the plan, see Phase 6b |
+| 6b, visual redesign | Planned | Reference design in `docs/design`, nine slices and the decisions in Phase 6b |
 | 7, documentation and CI | Not started | The contributing guide is out of scope |
+| 8, product growth | Planned | Labels and due dates, notes, column management, profile preferences, Google sign-in, Today's view |
 
 Two things were pulled forward into Phase 1 because they blocked it. The `app.js` split into an importable app plus a `server.js` that owns the connection, the listen and the shutdown handlers was a prerequisite for testing anything, and it closes the missing graceful shutdown from P5-6. The first three shared primitives, `Field`, `Modal` and `Button`, were built early because they are additive and because the React Hook Form migration in `TaskDrawer` lands on them.
 
@@ -504,6 +505,7 @@ graph LR
   P5 --> P6[Phase 6<br/>Layout and product]
   P6 --> P6b[Phase 6b<br/>Visual redesign]
   P6b --> P7[Phase 7<br/>Docs and CI]
+  P7 --> P8[Phase 8<br/>Product growth]
 ```
 
 Phase 2 sits before the security and integrity work deliberately. Those phases change authorization and data shape, which is exactly the kind of change that needs a safety net underneath it.
@@ -601,17 +603,77 @@ The accessibility enforcement gate from section 10.2 should be wired at the star
 
 ### Phase 6b. Visual redesign. Size: L.
 
-The interface works and is accessible, but it reads as generic: it has no visual identity of its own. This phase gives it one. It covers a brand direction, a palette, a type pairing, an icon treatment, motion, and the density and rhythm of the board, the dashboard and the auth screens.
+The interface works and is accessible, but it reads as generic: it has no visual identity of its own. This phase gives it one, from a reference design: `docs/design/prototype/BreezyBoard.dc.html`, exported from Claude Design, and `docs/design/SPEC.md`, the readable specification of it with every token, component, animation and string. Where this section and the specification disagree, this section wins.
 
-It runs after Phase 6 so it styles the final layout rather than one about to be rebuilt. That costs little because of Phase 5: colour, type and spacing live in the token layer and the `shared/ui` primitives, so most of the redesign lands there instead of in every feature component. Where a screen needs more than a restyle, that is a finding against the primitive layer and is fixed there.
+The identity is wind and Patagonia. A cool ground (`#F3F6F9`) and ink (`#0F1B2D`), a palette keyed on six hues (sky, teal, green, sand, coral, lavender) each with a tint, a deep and a mid step, frosted glass surfaces over three soft radial gradients, Bricolage Grotesque for display, Instrument Sans for text, DM Mono for small labels, Tabler icons. Motion carries the theme: an ambient wind layer of streaks and drifting leaves, cards that land with a settle after a drop, deletions that blow away, an undo called "Catch it". The copy speaks the same language ("Landed", "Still air", "Blow it away").
 
-The accessibility gate stays in force throughout. Every new colour pair is measured for contrast before it lands, which also closes the unmeasured `Avatar` colours left open from Phase 5.
+It runs after Phase 6 so it styles the final layout rather than one about to be rebuilt. That costs little because of Phase 5: colour, type and spacing land in the token layer and the `shared/ui` primitives instead of in every feature component. Where a screen needs more than a restyle, that is a finding against the primitive layer and is fixed there.
 
-Acceptance: the axe gate and the rendered layout gate stay green on every surface, every text and control colour pair meets WCAG 2.2 AA contrast by measurement, and the change is visible in the tokens and primitives rather than as overrides scattered across features.
+**What the reference does not decide, decided here.**
+
+| Question | Decision |
+|---|---|
+| Accessibility gaps in the reference | Not copied. The tertiary grey `#8391A4` measures 3:1 and is darkened until text passes 4.5:1. Every control keeps a visible focus ring, dialogs keep their semantics and focus trap, cards stay focusable, keyboard drag and the Move to menu stay, targets stay at the sizes the responsive gate enforces. |
+| Mobile | The reference is desktop only. The sidebar becomes an off-canvas panel below the large breakpoint, opened from a header button. The responsive gate keeps its five widths. |
+| Dark mode | Out of scope. Tokens are semantic so it can be added later without touching features. |
+| Priority | Kept as low, medium and high, drawn as a chip in the hue system. Labels arrive in Phase 8a and sit beside it. |
+| Task editing | A centered modal from the medium breakpoint up, a bottom sheet below it, replacing the side drawer. A task is created by typing its title in a composer at the foot of its column; clicking the card opens the modal for everything else. |
+| Ambient motion | The Breeze setting offers Still, Calm, Breezy and Gusty. Still stops every ambient animation, which WCAG 2.2.2 requires for motion that runs longer than five seconds. Breezy is the default, a reduced-motion preference forces Still, and the choice is stored on the user so it follows them across devices. |
+| Imagery | The reference has five image slots: the login postcard, the Home photo, the profile cover and two empty-state illustrations. Each renders its gradient fallback until real images exist. The Home photo comes from an image source chosen in Phase 8f. |
+| Voice | The wind vocabulary is adopted in interface copy: toasts, empty states, buttons. User data such as column names is never renamed. |
+| Fonts and icons | Fonts are self-hosted, so the CSP no longer allows a third-party font origin. Tabler replaces Lucide. One animation package, `motion`, replaces the `framer-motion` and `motion` pair. |
+
+**Slices, in order.**
+
+| # | Slice | Contents |
+|---|---|---|
+| 1 | Foundation | Colour, radius, shadow, easing and duration tokens in `@theme`, self-hosted fonts, Tabler icons, a single motion package, a global reduced-motion policy. The design tokens gate and the CSP gate are updated in the same commit. |
+| 2 | Primitives | `Button`, `Input`, `Field`, `Modal`, `Drawer`, `Menu` (its enter and exit animation returns), `Toast`, `Avatar` restyled. New: `Chip`, `SegmentedControl`, `Switch`, `ProgressBar`, `Cover` (an image with a gradient fallback), `WindLayer`. |
+| 3 | App shell | Glass sidebar with Home, Notes (hidden until Phase 8b), the board list, the Breeze control and the account button; a header with a breadcrumb and the view's main action; the gradient ground and the wind layer; the off-canvas sidebar on small screens. |
+| 4 | Auth | Login and register as one screen with two modes, the brand panel with the postcard and floating cards, the form with its error banner and shake. Forgot password, reset and the terms dialog keep working, restyled. |
+| 5 | Home | Greeting by time of day, board tiles with a hue cover, members and progress, the "New board" tile, the board totals. "Up next" and "Pinned notes" join in Phases 8a and 8b. |
+| 6 | Board | Header with cover, title, progress, member stack and the board menu. Glass columns at 292 pixels, the composer at the foot of each column, the redesigned card, a drop gap while dragging and a landing animation after, "Still air" for an empty column, the empty board hero, the last column drawn as "Landed". The board layout gate takes the new column width. |
+| 7 | Task modal | The modal and sheet above, with the header strip, Move to, priority, owner, colour, description, checklist, and "Blow it away" with undo. Unsaved drafts and the failed-save report keep working. |
+| 8 | Profile | Cover, avatar with upload, About, password change, the "Your breeze" panel, sign out. |
+| 9 | Close | Not found pages, loading states, the remaining copy, a final contrast measurement of every colour pair, the plan updated. |
+
+**Nothing that exists today is lost.** Every current capability has a place in the new layout:
+
+| Today | In the redesign |
+|---|---|
+| Login, register, forgot password dialog, reset page, terms dialog | One auth screen with two modes; "Forgot it?" opens the existing dialog; terms stay in the sign-up mode |
+| Sliding session, idle warning, drafts | Unchanged, on the restyled toast |
+| Dashboard board cards, totals, create board dialog with template and colour | Home: board tiles, totals in the hero, "New board" tile opening the same dialog |
+| Board card menu: add member, delete with undo | The same menu on each tile |
+| Board header: edit, delete, members, add task | Board header: menu with edit and delete, member stack with add member, "Add card" focusing the first column's composer |
+| Move to menu, keyboard drag, move announcements | Unchanged, restyled |
+| Empty board banner with Add task | The empty board hero |
+| Task drawer: title, description, priority, colour, owner, checklist, draft, failed save | The task modal, every field kept |
+| Profile: summary, form, avatar upload, password change, joined date | The profile page, with password change in its own panel |
+| Account menu | The account button at the foot of the sidebar |
+| Legal links in the footer | The auth screen and the sidebar foot |
+| Not found pages | Restyled |
+
+Acceptance: the axe gate and the rendered layout gate stay green on every surface, every text and control colour pair meets WCAG 2.2 AA contrast by measurement, no capability in the table above is lost, and the change is visible in the tokens and primitives rather than as overrides scattered across features.
 
 ### Phase 7. Documentation and CI. Size: M.
 
 A real root `README.md` in ASCII per the formatting standard, a `README_es.md` with Mermaid, an architecture document, an environment variable reference, and an OpenAPI specification generated from the Zod schemas written in Phase 3. A contributing guide is out of scope. Guard the seed scripts against running outside development. Add a CI pipeline running lint, type check, tests and a Docker build on every pull request. Add graceful shutdown, a health check that verifies the database connection, request ids and structured request logging.
+
+### Phase 8. Product growth from the reference design. Size: L.
+
+The reference design in `docs/design` proposes capabilities the product does not have: the task model has no due date, no labels and a single owner; boards cannot add or rename a column after creation; there are no notes. These are features, not styling, so they are a phase of their own, built directly in the Phase 6b visual language and after the Phase 7 CI exists to guard them. Each sub-phase ships backend, frontend and tests together.
+
+| Sub-phase | Contents |
+|---|---|
+| 8a, labels and due dates | A board owns its set of labels (name and hue), added and removed from the edit board dialog. A task carries any number of them, chosen in the task modal and shown on the card. A task gets a due date, set from presets (today, tomorrow, in a week) or a date picker, shown as a chip that turns sand when due soon and coral when overdue. Home gains "Up next": open tasks with a due date, soonest first, with a quick complete that moves the task to the board's last column. |
+| 8b, notes | A notes module in the sidebar: quick capture, title and body, seven colours, pinning, search, colour filter, an editor modal, delete with undo. Home gains "Pinned notes". |
+| 8c, column management | In the edit board dialog: add a column with its name and its position (first, last, or between two named columns), and rename any existing column. The board header's "Add column" opens the dialog on that section. The board title can also be edited in place on the board page. |
+| 8d, profile and preferences | Bio and a cover image on the profile. Preferences for due date reminders and a weekly digest, which need scheduled mail jobs on the existing transport. |
+| 8e, Google sign-in | OAuth sign-in alongside the password, last because it touches the session model of section 9. |
+| 8f, Today's view | The Home photo comes from an image source with Patagonia pictures, ideally free. The choice weighs licence and attribution, request limits, and whether a key must stay on the server behind a proxy route; the CSP gains only that image origin. |
+
+Open questions for the phase, decided when it starts: whether "assignees" replaces the single owner, and whether comments are built or the count the reference shows is dropped.
 
 ## 7. Recommended sequence
 
@@ -625,7 +687,9 @@ Phase 5 before Phase 6, because redesigning components that are about to be spli
 
 Phase 6b after Phase 6, so the redesign styles the final layout rather than one about to be rebuilt.
 
-Phase 7 last, since documenting the architecture, and taking screenshots of an interface, before it stops changing means writing it twice.
+Phase 7 after Phase 6b, since documenting the architecture, and taking screenshots of an interface, before it stops changing means writing it twice.
+
+Phase 8 last, because it adds features rather than fixing the product, and the CI from Phase 7 should be guarding every change before the data model grows.
 
 Two decisions block Phase 5 and should be made before it starts rather than during it: the real-time transport and the workspace question, both in section 11.2. They are decisions, not implementations, so they cost a conversation now and a migration later. The real-time one additionally interacts with the session design, as explained in section 9.7.
 
