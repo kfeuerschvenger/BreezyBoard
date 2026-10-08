@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -17,6 +17,8 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     'flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl',
   secondary: 'px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-body',
   ghost: 'px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors',
+  // White on red-600 measures 4.83:1, above the 4.5:1 AA threshold for text.
+  danger: 'flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors',
 };
 
 /**

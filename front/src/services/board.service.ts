@@ -24,8 +24,15 @@ export const BoardService = {
     return response.data.data;
   },
 
+  // A soft delete: the board stays on the server, restorable, until the
+  // purge removes it.
   async delete(id: string): Promise<void> {
     await api.delete(`/boards/${id}`);
+  },
+
+  async restore(id: string): Promise<Board> {
+    const response = await api.post(`/boards/${id}/restore`);
+    return response.data.data;
   },
 
   async addMembers(boardId: string, memberIds: string[]): Promise<Board> {

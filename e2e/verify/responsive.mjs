@@ -234,7 +234,9 @@ const audit = target =>
       if (!visible) continue;
 
       const dialog = el.closest('[role="dialog"]');
-      const layer = el.closest('[role="dialog"],[role="menu"]');
+      // A toast is a layer of its own: it floats over the page by design, so
+      // what it covers is not an overlap between controls.
+      const layer = el.closest('[role="dialog"],[role="menu"],[role="status"]');
       measured.push({ el, visible, layer });
 
       if (clippedBy) problems.clipped.push(`${describe(el)} is cut off by ${clippedBy}`);
@@ -401,6 +403,36 @@ const authed = [
       await page.getByRole('menuitem', { name: 'Edit board' }).click();
       await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
       await page.getByRole('radio').first().waitFor({ state: 'attached' });
+    },
+  },
+  {
+    name: 'board, delete confirmation',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByText('Short task', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /^Options for / }).click();
+      await page.getByRole('menuitem', { name: 'Delete board' }).click();
+      await page.getByRole('dialog', { name: 'Delete this board?' }).waitFor();
+    },
+  },
+  {
+    name: 'dashboard, undo toast',
+    open: async () => {
+      // A board of its own to delete, so the one every other surface measures
+      // is still there. Created through the API and found by its title.
+      const title = `Throwaway ${Date.now()}`;
+      await req('POST', '/boards', token, {
+        title,
+        description: 'deleted to put the undo toast on screen',
+        color: boardColors.body.data[0]._id,
+        template: templates.body.data[0]._id,
+      });
+      await page.goto(`${FRONT}/`);
+      await page.getByRole('link', { name: title }).waitFor();
+      await page.getByRole('button', { name: `Options for ${title}` }).click();
+      await page.getByRole('button', { name: /^Delete$/ }).click();
+      await page.getByRole('dialog', { name: 'Delete this board?' }).getByRole('button', { name: 'Delete board' }).click();
+      await page.getByTestId('toast').waitFor();
     },
   },
   {

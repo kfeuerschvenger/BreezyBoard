@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
+import { ToastProvider } from '@/shared/ui';
 
 /**
  * Renders a component that reads from the query cache.
@@ -29,7 +30,9 @@ export const renderWithQuery = (ui: ReactElement) => {
   const queryClient = createTestQueryClient();
 
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>{children}</ToastProvider>
+    </QueryClientProvider>
   );
 
   return { queryClient, ...render(ui, { wrapper }) };

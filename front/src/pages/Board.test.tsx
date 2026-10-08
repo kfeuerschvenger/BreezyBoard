@@ -12,7 +12,7 @@ import type { Board as BoardModel, Color, Task, User } from '@/models';
 // its open state. Every case below stubs ColorService/UserService too so
 // that side effect never reaches the real, unmocked axios client.
 vi.mock('@/services', () => ({
-  BoardService: { getById: vi.fn(), update: vi.fn() },
+  BoardService: { getById: vi.fn(), update: vi.fn(), delete: vi.fn(), restore: vi.fn() },
   TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
@@ -235,6 +235,8 @@ describe('Board page owner actions', () => {
   beforeEach(() => {
     mockedBoardService.getById.mockReset();
     mockedBoardService.update.mockReset();
+    mockedBoardService.delete.mockReset();
+    mockedBoardService.restore.mockReset();
     mockedTaskService.getByBoard.mockReset().mockResolvedValue([]);
     mockedColorService.getByType.mockReset().mockResolvedValue([{ _id: 'c-blue', name: 'Blue', value: '#3B82F6' }]);
     mockedUserService.getBoardMembers.mockReset().mockResolvedValue([]);
@@ -267,5 +269,27 @@ describe('Board page owner actions', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Relaunch Plan' })).toBeInTheDocument();
     expect(mockedBoardService.getById).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves for the dashboard once the board is deleted, and the Undo toast goes with the person', async () => {
+    const user = userEvent.setup();
+    mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+    mockedBoardService.delete.mockResolvedValue(undefined);
+    renderWithQuery(
+      <MemoryRouter initialEntries={[`/board/${BOARD_ID}`]}>
+        <Routes>
+          <Route path="/" element={<h1>Dashboard page</h1>} />
+          <Route path="/board/:boardId" element={<Board />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Options for Launch Plan' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete board' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete board' }));
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard page' })).toBeInTheDocument();
+    expect(mockedBoardService.delete).toHaveBeenCalledWith(BOARD_ID);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });
 });

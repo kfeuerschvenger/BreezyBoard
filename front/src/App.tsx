@@ -8,6 +8,7 @@ import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { Board, Home, Login, Profile, Register } from '@/pages';
+import { ToastProvider } from '@/shared/ui';
 
 import './index.css';
 
@@ -71,11 +72,13 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router>
-          <AppShell>
-            <AppRoutes />
-          </AppShell>
-        </Router>
+        <ToastProvider>
+          <Router>
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </Router>
+        </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
