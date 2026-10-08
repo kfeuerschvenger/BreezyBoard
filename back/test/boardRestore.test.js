@@ -4,7 +4,7 @@ import app from '../src/app.js';
 import { startBoardPurgeJob } from '../src/jobs/boardPurge.job.js';
 import Board from '../src/models/Board.js';
 import Task from '../src/models/Task.js';
-import { deleteBoard, purgeExpiredBoards } from '../src/services/board.service.js';
+import { deleteBoard, purgeExpiredBoards, restoreBoard } from '../src/services/board.service.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
 import { boardColumns, createTask } from './helpers/task.factory.js';
@@ -179,6 +179,32 @@ describe('board soft delete and restore', () => {
       expect(res.status).toBe(404);
     });
 
+    test('answers 404 for a board deleted longer ago than the retention window, even before the purge has run', async () => {
+      await Board.updateOne({ _id: board._id }, { deletedAt: new Date(Date.now() - RETENTION_MS - 60 * 1000) });
+
+      const res = await asUser('post', `/boards/${board._id}/restore`, owner);
+
+      expect(res.status).toBe(404);
+      expect((await Board.findById(board._id)).deletedAt).toBeInstanceOf(Date);
+    });
+
+    test('still restores a board deleted just inside the window', async () => {
+      await Board.updateOne({ _id: board._id }, { deletedAt: new Date(Date.now() - RETENTION_MS + 60 * 1000) });
+
+      const res = await asUser('post', `/boards/${board._id}/restore`, owner);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.deletedAt).toBeNull();
+    });
+
+    test('draws the line where the purge does: a board at exactly the cutoff belongs to the purge, not to a restore', async () => {
+      const now = new Date('2026-01-10T12:00:00.000Z');
+      await Board.updateOne({ _id: board._id }, { deletedAt: new Date(now.getTime() - RETENTION_MS) });
+
+      await expect(restoreBoard(board._id, { retentionMs: RETENTION_MS, now })).rejects.toMatchObject({ statusCode: 404 });
+      expect(await purgeExpiredBoards({ retentionMs: RETENTION_MS, now })).toBe(1);
+    });
+
     test('requires a valid id', async () => {
       const res = await asUser('post', '/boards/not-an-id/restore', owner);
 
@@ -238,8 +264,11 @@ describe('board soft delete and restore', () => {
     });
 
     test('never removes a board restored between the scan and the removal', async () => {
-      await expire(board._id, RETENTION_MS + DAY_MS);
-      await asUser('post', `/boards/${board._id}/restore`, owner);
+      // A restore that landed inside the window, after the scan had already
+      // read the board's old date. The write is direct because the route now
+      // refuses a board that is past the window, which is the reverse of the
+      // race this test sets up.
+      await Board.updateOne({ _id: board._id }, { deletedAt: null });
 
       // The scan names the board as if it had run before the restore, so only
       // the guard inside the transaction can save it.

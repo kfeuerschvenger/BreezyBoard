@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 
+import env from '../config/env.js';
 import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
 import ColorPalette from '../models/ColorPalette.js';
@@ -189,13 +190,28 @@ export const deleteBoard = async id => {
  * Clears the deletion mark. Idempotent: restoring a board that is not
  * deleted answers with the board, because a double click on Undo or a retry
  * after a timeout must not turn into an error for a state that is exactly
- * what was asked for. A board that has been purged is gone, a 404.
+ * what was asked for.
+ *
+ * A board deleted longer ago than the retention window is gone as far as
+ * this function is concerned, a 404, whether or not the purge job has got to
+ * it yet. The job runs on an interval, so without this check the window
+ * would stretch by up to one interval and a restore could succeed on a
+ * board that is about to be removed. The comparison is the exact complement
+ * of the purge's: the purge removes `deletedAt <= cutoff`, this restores
+ * only `deletedAt > cutoff`, so no instant belongs to both.
  *
  * @param {string} id
+ * @param {{ retentionMs?: number, now?: Date }} [options]
  * @returns {Promise<object>} the restored board
  */
-export const restoreBoard = async id => {
-  const board = await Board.findByIdAndUpdate(id, { deletedAt: null }, { new: true })
+export const restoreBoard = async (id, { retentionMs = env.BOARD_RETENTION_MS, now = new Date() } = {}) => {
+  const cutoff = new Date(now.getTime() - retentionMs);
+
+  const board = await Board.findOneAndUpdate(
+    { _id: id, $or: [{ deletedAt: null }, { deletedAt: { $gt: cutoff } }] },
+    { deletedAt: null },
+    { new: true }
+  )
     .populate('color', 'name value')
     .populate('columns.color', 'name value')
     .populate('template', 'name iconName');
