@@ -49,28 +49,33 @@ const buildResetMessage = link => {
 /**
  * Start a password reset for an email address.
  *
- * Resolves the same way, and does the same amount of database work, whether
- * or not the address belongs to anybody. That is the whole contract: the
- * route must not become a way to ask whether an address has an account. So
- * both paths look the address up, both generate and hash a token, and both
- * issue one `updateOne`, which for an unknown address is aimed at an id
- * nothing has and matches no document. Only the sending differs, and the
- * sending is not awaited, so it cannot show in the response time.
+ * Resolves the same way, and issues the same statements, whether or not the
+ * address belongs to anybody. That is the whole contract: the route must not
+ * become a way to ask whether an address has an account. So both paths look
+ * the address up, both generate and hash a token, and both issue one
+ * `updateOne`. The writes themselves are not alike: for a known address the
+ * `updateOne` stores the token, and for an unknown one it is aimed at an id
+ * nothing has and matches no document, so it writes nothing. The response,
+ * the statements and their order are what match. The sending is not awaited,
+ * so it cannot show in the response time.
  *
- * Saving the token overwrites the previous pair on the user, which is what
- * makes a new request invalidate the old link.
+ * The new token is added to the user's outstanding links and the earlier ones
+ * stay valid until their own expiry. The request is anonymous, so replacing
+ * them would let anybody who knew an address destroy the link its owner had
+ * just been sent, as often as they liked. Only the `PASSWORD_RESET_MAX_OUTSTANDING`
+ * most recent are kept, the oldest dropped, which bounds the list and the
+ * number of live tokens there are to guess.
  *
  * At most one link is issued per address per `PASSWORD_RESET_COOLDOWN_MS`, so
  * the route cannot be used to fill someone's mailbox. The cooldown is read
- * from the stored expiry: a token's issue time is its expiry minus the
+ * from the stored expiries: a token's issue time is its expiry minus the
  * lifetime, which needs no extra field, survives a restart and holds across
  * instances. The check lives in the filter of the same `updateOne` that saves
  * the token, so two simultaneous requests cannot both pass it. A request
- * inside the cooldown matches nothing, leaves the earlier token alive (the
- * link already in the mailbox keeps working) and sends nothing. Its response
- * and its database work are those of any other request, and an unknown
- * address matches nothing for the same reason, so no one can tell the two
- * apart from outside.
+ * inside the cooldown matches nothing, adds nothing and sends nothing. Its
+ * response and its database work are those of any other request, and an
+ * unknown address matches nothing for the same reason, so no one can tell the
+ * two apart from outside.
  *
  * @param {string} email - already trimmed and lowercased by the validation layer
  * @returns {Promise<void>}
@@ -84,11 +89,14 @@ export const requestPasswordReset = async email => {
   const issuedBefore = now + env.PASSWORD_RESET_TTL_MS - env.PASSWORD_RESET_COOLDOWN_MS;
 
   const { modifiedCount } = await User.updateOne(
-    { _id: target, passwordResetExpiresAt: { $not: { $gt: new Date(issuedBefore) } } },
+    { _id: target, passwordResets: { $not: { $elemMatch: { expiresAt: { $gt: new Date(issuedBefore) } } } } },
     {
-      $set: {
-        passwordResetTokenHash: hashToken(token),
-        passwordResetExpiresAt: new Date(now + env.PASSWORD_RESET_TTL_MS),
+      // Appended in issue order, so a negative $slice keeps the newest.
+      $push: {
+        passwordResets: {
+          $each: [{ tokenHash: hashToken(token), expiresAt: new Date(now + env.PASSWORD_RESET_TTL_MS) }],
+          $slice: -env.PASSWORD_RESET_MAX_OUTSTANDING,
+        },
       },
     }
   );
@@ -112,9 +120,11 @@ export const requestPasswordReset = async email => {
  * The token is looked up by its hash and consumed in the same operation, a
  * single `findOneAndUpdate`, so two requests carrying the same token cannot
  * both succeed: whichever the database applies second finds no match. The
- * match requires an unexpired token, and the update clears it, replaces the
+ * match requires that link to be unexpired, each link having its own expiry,
+ * and the update clears every outstanding link of the account, replaces the
  * password and bumps `tokenVersion`, which fails every session token issued
- * before now on its next request.
+ * before now on its next request. Clearing all of them is what stops a link
+ * emailed earlier from overwriting the password just chosen.
  *
  * An unknown, expired or already used token all fail with one error, so a
  * caller learns nothing about which of the three it was. The new password is
@@ -130,10 +140,10 @@ export const resetPassword = async (token, newPassword) => {
   const password = await bcrypt.hash(newPassword, salt);
 
   const user = await User.findOneAndUpdate(
-    { passwordResetTokenHash: hashToken(token), passwordResetExpiresAt: { $gt: new Date() } },
+    { passwordResets: { $elemMatch: { tokenHash: hashToken(token), expiresAt: { $gt: new Date() } } } },
     {
       $set: { password },
-      $unset: { passwordResetTokenHash: '', passwordResetExpiresAt: '' },
+      $unset: { passwordResets: '' },
       $inc: { tokenVersion: 1 },
     }
   );
