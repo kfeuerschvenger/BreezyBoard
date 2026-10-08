@@ -233,4 +233,58 @@ describe('useToast', () => {
       expect(screen.getByText('Deleted "Mine"')).toBeInTheDocument();
     });
   });
+
+  describe('focus after the action', () => {
+    const renderWithHeading = (options: ToastOptions) =>
+      render(
+        <ToastProvider>
+          <h1>My Boards</h1>
+          <Launcher options={options} />
+          <button type="button">Somewhere else</button>
+        </ToastProvider>
+      );
+
+    it('moves focus to the page heading when the action removes the button that had it', async () => {
+      vi.useRealTimers();
+      renderWithHeading({ message: 'Deleted', action: { label: 'Undo', onAction: vi.fn() } });
+      launch();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+      expect(screen.queryByText('Deleted')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'My Boards' })).toHaveFocus();
+    });
+
+    it('works from the keyboard as well', async () => {
+      vi.useRealTimers();
+      renderWithHeading({ message: 'Deleted', action: { label: 'Undo', onAction: vi.fn() } });
+      launch();
+      screen.getByRole('button', { name: 'Undo' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+
+      expect(screen.getByRole('heading', { name: 'My Boards' })).toHaveFocus();
+    });
+
+    it('leaves focus alone when it was not inside the toast', () => {
+      renderWithHeading({ message: 'Deleted', action: { label: 'Undo', onAction: vi.fn() } });
+      launch();
+      const elsewhere = screen.getByRole('button', { name: 'Somewhere else' });
+      elsewhere.focus();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+      expect(elsewhere).toHaveFocus();
+    });
+
+    it('does nothing when the page has no heading to go to', async () => {
+      vi.useRealTimers();
+      renderToast({ message: 'Deleted', action: { label: 'Undo', onAction: vi.fn() } });
+      launch();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+      expect(screen.queryByText('Deleted')).not.toBeInTheDocument();
+    });
+  });
 });

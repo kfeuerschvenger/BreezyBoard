@@ -38,6 +38,7 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
   const [focused, setFocused] = useState(false);
   const remainingRef = useRef(toast.duration ?? DEFAULT_DURATION_MS);
   const actionRef = useRef<HTMLButtonElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const paused = hovered || focused;
 
   // A toast never takes focus from something that has it. But a keyboard user
@@ -76,6 +77,7 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
     // toast itself is not an interactive element: its two buttons are.
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
+      ref={rootRef}
       data-testid="toast"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -96,6 +98,7 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
           type="button"
           onClick={() => {
             toast.action?.onAction();
+            if (rootRef.current) moveFocusOffToast(rootRef.current);
             onDismiss(toast.id);
           }}
           className="min-h-11 shrink-0 cursor-pointer rounded px-3 font-semibold text-blue-300 underline hover:text-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:min-h-8"
@@ -114,6 +117,29 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
       </button>
     </div>
   );
+};
+
+/**
+ * Where focus goes when the toast's action is pressed. Pressing it removes the
+ * button that holds focus, and a browser answers that by dropping focus on
+ * the document, so the next Tab starts again from the top of the page and a
+ * screen reader goes quiet. The page's own heading is the one stable place
+ * every page has: it names where the person is, and the thing the action
+ * changed (a restored board, say) may not be on screen yet.
+ *
+ * Only when focus is inside the toast being closed. Somebody who pressed the
+ * action with a pointer and has since put focus elsewhere keeps it there.
+ */
+const moveFocusOffToast = (toastElement: HTMLElement) => {
+  if (!toastElement.contains(document.activeElement)) return;
+
+  const heading = Array.from(document.querySelectorAll<HTMLElement>('h1')).find(
+    candidate => !toastElement.contains(candidate)
+  );
+  if (!heading) return;
+
+  if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+  heading.focus();
 };
 
 let counter = 0;
