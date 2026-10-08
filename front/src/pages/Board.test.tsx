@@ -337,4 +337,41 @@ describe('Board page owner actions', () => {
     expect(mockedBoardService.delete).toHaveBeenCalledWith(BOARD_ID);
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });
+
+  it('never reads the board again, or shows it as missing, on the way out after deleting it', async () => {
+    const user = userEvent.setup();
+    mockedBoardService.getById
+      .mockResolvedValueOnce({ ...board, viewerRole: 'owner' })
+      .mockRejectedValue(rejectedWith(404));
+    mockedBoardService.delete.mockResolvedValue(undefined);
+    renderWithQuery(
+      <MemoryRouter initialEntries={[`/board/${BOARD_ID}`]}>
+        <Routes>
+          <Route path="/" element={<h1>Dashboard page</h1>} />
+          <Route
+            path="/board/:boardId"
+            element={<Board />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Options for Launch Plan' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete board' }));
+
+    // Watches every change to the document, so a not found page that is
+    // shown for one commit and gone the next is still caught.
+    let sawNotFound = false;
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes('Board not found')) sawNotFound = true;
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    await user.click(await screen.findByRole('button', { name: 'Delete board' }));
+    await screen.findByRole('heading', { name: 'Dashboard page' });
+    observer.disconnect();
+
+    expect(mockedBoardService.getById).toHaveBeenCalledTimes(1);
+    expect(sawNotFound).toBe(false);
+  });
 });

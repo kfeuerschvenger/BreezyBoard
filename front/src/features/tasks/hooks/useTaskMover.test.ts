@@ -154,6 +154,17 @@ describe('useTaskMover moving a card to a column from the menu', () => {
 
     expect(result.current.announcement).toBe('Could not move First to Done.');
   });
+
+  it('gives an announcement a new id even when its words are the same as the last one', () => {
+    const { result } = renderHook(() => useTaskMover({ tasks: TASKS, cache: makeCache() }));
+
+    act(() => result.current.announce('Could not move First to Done.'));
+    const first = result.current.announcementId;
+    act(() => result.current.announce('Could not move First to Done.'));
+
+    expect(result.current.announcement).toBe('Could not move First to Done.');
+    expect(result.current.announcementId).not.toBe(first);
+  });
 });
 
 describe('useTaskMover sharing its in-flight guard with dragging', () => {

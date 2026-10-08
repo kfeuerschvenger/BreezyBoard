@@ -56,6 +56,14 @@ export interface UseTaskMoverResult {
   /** The latest result of a move the mover announces itself, for a polite live region. */
   announcement: string;
   /**
+   * Changes with every announcement, including one whose words are the same
+   * as the last. The region renders the message under this key: a screen
+   * reader speaks what is added to a live region, and text rewritten to what
+   * it already said is not added, so the same failure twice in a row would be
+   * heard once.
+   */
+  announcementId: number;
+  /**
    * Says something in that live region. A drag is announced by dnd-kit's own,
    * so the only thing it needs this for is the one thing dnd-kit cannot know:
    * that the request failed.
@@ -80,7 +88,8 @@ export interface UseTaskMoverResult {
  * aborts it exactly as a second drag would.
  */
 export function useTaskMover({ tasks, cache }: UseTaskMoverOptions): UseTaskMoverResult {
-  const [announcement, setAnnouncement] = useState('');
+  const [spoken, setSpoken] = useState({ message: '', id: 0 });
+  const announce = useCallback((message: string) => setSpoken(previous => ({ message, id: previous.id + 1 })), []);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const nonce = useRef(0);
 
@@ -161,15 +170,23 @@ export function useTaskMover({ tasks, cache }: UseTaskMoverOptions): UseTaskMove
       // without choosing a position agrees.
       const outcome = await move(task, target.id);
 
-      if (outcome === 'moved') setAnnouncement(`Moved ${task.title} to ${target.title}.`);
-      if (outcome === 'failed') setAnnouncement(`Could not move ${task.title} to ${target.title}.`);
+      if (outcome === 'moved') announce(`Moved ${task.title} to ${target.title}.`);
+      if (outcome === 'failed') announce(`Could not move ${task.title} to ${target.title}.`);
 
       return outcome;
     },
-    [move, requestFocus],
+    [move, requestFocus, announce],
   );
 
-  return { move, moveToColumn, announcement, announce: setAnnouncement, focusRequest, requestFocus };
+  return {
+    move,
+    moveToColumn,
+    announcement: spoken.message,
+    announcementId: spoken.id,
+    announce,
+    focusRequest,
+    requestFocus,
+  };
 }
 
 export default useTaskMover;
