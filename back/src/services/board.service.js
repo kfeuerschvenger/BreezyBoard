@@ -142,12 +142,19 @@ export const getBoardById = async id => {
   return board;
 };
 
+/**
+ * The authorization middleware has already read the board by the time a write
+ * runs, and a delete can land in between. A write that filtered on the id
+ * alone would then edit a board that is meant to be invisible, so the writes
+ * below carry `deletedAt: null` in their own filter and treat no match as a
+ * missing board.
+ */
 export const updateBoard = async (id, updateData) => {
   if (updateData.color !== undefined) {
     await assertBoardColorExists(updateData.color);
   }
 
-  const board = await Board.findByIdAndUpdate(id, updateData, {
+  const board = await Board.findOneAndUpdate({ _id: id, deletedAt: null }, updateData, {
     new: true,
     runValidators: true,
   })
@@ -492,7 +499,7 @@ export const getUserBoards = async (userId, { limit, offset } = {}) => {
 };
 
 export const addBoardMembers = async (boardId, members) => {
-  const target = await Board.findById(boardId).select('workspaceId');
+  const target = await Board.findOne({ _id: boardId, deletedAt: null }).select('workspaceId');
 
   if (!target) {
     throw new ApiError(404, 'Board not found');
@@ -507,7 +514,11 @@ export const addBoardMembers = async (boardId, members) => {
   // what to revisit once workspace management has a real interface.
   await ensureWorkspaceMembership(target.workspaceId, members);
 
-  const board = await Board.findByIdAndUpdate(boardId, { $addToSet: { members: { $each: members } } }, { new: true })
+  const board = await Board.findOneAndUpdate(
+    { _id: boardId, deletedAt: null },
+    { $addToSet: { members: { $each: members } } },
+    { new: true }
+  )
     .populate('members', 'firstName lastName email role department avatar')
     .populate('color', 'name value')
     .populate('columns.color', 'name value')
