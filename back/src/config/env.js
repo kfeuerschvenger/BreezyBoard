@@ -200,6 +200,16 @@ const env = {
   // anyone finds it. Tunable so tests can exercise expiry without waiting.
   PASSWORD_RESET_TTL_MS: parseDurationMs('PASSWORD_RESET_TTL_MS', process.env.PASSWORD_RESET_TTL_MS, THIRTY_MINUTES_MS),
 
+  // How many reset links may be outstanding for one account at once. Asking
+  // for a new link keeps the earlier ones alive, so this bounds the list and
+  // the number of live tokens an attacker could ever have to guess against.
+  // Past it the oldest link is dropped.
+  PASSWORD_RESET_MAX_OUTSTANDING: parseCount(
+    'PASSWORD_RESET_MAX_OUTSTANDING',
+    process.env.PASSWORD_RESET_MAX_OUTSTANDING,
+    5
+  ),
+
   // The shortest gap between two reset emails to the same address. Requests
   // inside it get the usual answer and send nothing. The tests shorten it so
   // they can ask for several links in a row.

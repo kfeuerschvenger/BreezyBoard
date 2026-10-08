@@ -135,11 +135,10 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   const salt = await bcrypt.genSalt(env.SALT);
   user.password = await bcrypt.hash(newPassword, salt);
   user.tokenVersion += 1;
-  // A reset link requested before this change must not outlive it: whoever
-  // holds the link would otherwise be able to overwrite the password the
+  // Every reset link requested before this change must not outlive it:
+  // whoever holds one would otherwise be able to overwrite the password the
   // person has just chosen.
-  user.passwordResetTokenHash = undefined;
-  user.passwordResetExpiresAt = undefined;
+  user.passwordResets = undefined;
   await user.save();
 
   return user;

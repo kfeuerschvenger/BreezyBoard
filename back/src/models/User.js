@@ -56,19 +56,25 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    // The pending password reset, if any. Only the SHA-256 of the token is
-    // kept, so a read of the database cannot be turned into a working reset
-    // link. One pair per user: issuing a new token overwrites the pair and
-    // that is what invalidates the previous one. Never selected by default,
-    // like the password.
-    passwordResetTokenHash: {
-      type: String,
+    // The password reset links that are still outstanding, oldest first. Only
+    // the SHA-256 of each token is kept, so a read of the database cannot be
+    // turned into a working reset link. Each carries its own expiry. Asking
+    // for a new link adds to the list and never touches the earlier ones,
+    // because the request is anonymous: if it replaced them, anybody who knew
+    // an address could kill the link its owner had just been sent. The list is
+    // capped, dropping the oldest, so it cannot grow without bound. A
+    // successful reset or a password change empties it. Never selected by
+    // default, like the password.
+    passwordResets: {
+      type: [
+        {
+          _id: false,
+          tokenHash: { type: String, required: true },
+          expiresAt: { type: Date, required: true },
+        },
+      ],
       select: false,
-      index: { sparse: true },
-    },
-    passwordResetExpiresAt: {
-      type: Date,
-      select: false,
+      default: undefined,
     },
   },
   {
@@ -82,8 +88,7 @@ const userSchema = new mongoose.Schema(
         delete ret.password;
         delete ret.__v;
         delete ret.tokenVersion;
-        delete ret.passwordResetTokenHash;
-        delete ret.passwordResetExpiresAt;
+        delete ret.passwordResets;
         return ret;
       },
     },
@@ -124,6 +129,9 @@ userSchema.pre('findOneAndUpdate', function (next) {
 
   next();
 });
+
+// Looked up by hash when a link is used.
+userSchema.index({ 'passwordResets.tokenHash': 1 }, { sparse: true });
 
 const User = mongoose.model('User', userSchema);
 

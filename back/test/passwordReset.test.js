@@ -17,7 +17,7 @@ const reset = (token, newPassword = 'NewPassword456!') =>
   request(app).post('/api/v1/auth/reset-password').send({ token, newPassword });
 
 const storedReset = email =>
-  User.findOne({ email }).select('+passwordResetTokenHash +passwordResetExpiresAt +tokenVersion').lean();
+  User.findOne({ email }).select('+passwordResets +tokenVersion').lean();
 
 /** Registers a user, requests a reset for them and returns the reset token mailed to them beside the session token they registered with. */
 async function userWithResetToken(mail) {
@@ -92,11 +92,12 @@ describe('POST /auth/forgot-password', () => {
 
     const stored = await storedReset(user.email);
 
-    expect(stored.passwordResetTokenHash).toBe(sha256(token));
+    expect(stored.passwordResets).toHaveLength(1);
+    expect(stored.passwordResets[0].tokenHash).toBe(sha256(token));
     expect(JSON.stringify(stored)).not.toContain(token);
 
     const expectedExpiry = Date.now() + env.PASSWORD_RESET_TTL_MS;
-    expect(Math.abs(stored.passwordResetExpiresAt.getTime() - expectedExpiry)).toBeLessThan(5000);
+    expect(Math.abs(stored.passwordResets[0].expiresAt.getTime() - expectedExpiry)).toBeLessThan(5000);
   });
 
   test('the token hash is not loaded with the user and never serialises', async () => {
@@ -104,31 +105,124 @@ describe('POST /auth/forgot-password', () => {
     const { user } = await userWithResetToken(mail);
 
     const ordinaryRead = await User.findOne({ email: user.email }).lean();
-    expect(ordinaryRead.passwordResetTokenHash).toBeUndefined();
+    expect(ordinaryRead.passwordResets).toBeUndefined();
 
-    const document = await User.findOne({ email: user.email }).select('+passwordResetTokenHash +passwordResetExpiresAt');
-    const json = document.toJSON();
-
-    expect(json.passwordResetTokenHash).toBeUndefined();
-    expect(json.passwordResetExpiresAt).toBeUndefined();
+    const document = await User.findOne({ email: user.email }).select('+passwordResets');
+    expect(document.passwordResets).toHaveLength(1);
+    expect(document.toJSON().passwordResets).toBeUndefined();
   });
 
-  test('a new request invalidates the link from the previous one', async () => {
-    const mail = installFakeTransport();
-    const { user, token: first } = await userWithResetToken(mail);
+  describe('outstanding links', () => {
+    /** Asks for another link for the account and returns the token mailed for it. */
+    const requestAnother = async (mail, email) => {
+      const expected = mail.sent.length + 1;
+      await forgot(email);
+      await mail.waitForMail(expected);
 
-    await forgot(user.email);
-    await mail.waitForMail(2);
-    const second = tokenFrom(mail.sent[1]);
+      return tokenFrom(mail.sent.at(-1));
+    };
 
-    expect(second).not.toBe(first);
+    const expireLink = (email, index) =>
+      User.updateOne({ email }, { $set: { [`passwordResets.${index}.expiresAt`]: new Date(Date.now() - 1000) } });
 
-    const withFirst = await reset(first);
-    expect(withFirst.status).toBe(400);
-    expect(withFirst.body.code).toBe('INVALID_RESET_TOKEN');
+    test('a new request leaves the earlier link working, so an anonymous requester cannot kill it', async () => {
+      const mail = installFakeTransport();
+      const { user, token: first } = await userWithResetToken(mail);
 
-    const withSecond = await reset(second);
-    expect(withSecond.status).toBe(200);
+      const second = await requestAnother(mail, user.email);
+
+      expect(second).not.toBe(first);
+      expect((await reset(first)).status).toBe(200);
+    });
+
+    test('keeps every link until one is used, then none of the others works', async () => {
+      const mail = installFakeTransport();
+      const { user, token: first } = await userWithResetToken(mail);
+      const second = await requestAnother(mail, user.email);
+      const third = await requestAnother(mail, user.email);
+      expect((await storedReset(user.email)).passwordResets).toHaveLength(3);
+
+      expect((await reset(second)).status).toBe(200);
+
+      for (const dead of [first, third, second]) {
+        const res = await reset(dead, 'AnotherPassword789!');
+        expect(res.status).toBe(400);
+        expect(res.body.code).toBe('INVALID_RESET_TOKEN');
+      }
+      expect((await storedReset(user.email)).passwordResets).toBeUndefined();
+    });
+
+    test('a used link takes the session version up once, however many links were outstanding', async () => {
+      const mail = installFakeTransport();
+      const { user, token: first } = await userWithResetToken(mail);
+      await requestAnother(mail, user.email);
+      const before = (await storedReset(user.email)).tokenVersion;
+
+      await reset(first);
+
+      expect((await storedReset(user.email)).tokenVersion).toBe(before + 1);
+    });
+
+    test('each link expires on its own clock', async () => {
+      const mail = installFakeTransport();
+      const { user, token: first } = await userWithResetToken(mail);
+      const second = await requestAnother(mail, user.email);
+      await expireLink(user.email, 0);
+
+      const withFirst = await reset(first);
+      expect(withFirst.status).toBe(400);
+      expect(withFirst.body.code).toBe('INVALID_RESET_TOKEN');
+
+      expect((await reset(second)).status).toBe(200);
+    });
+
+    test('an expired link does not stop a later one, and a live one is not extended by it', async () => {
+      const mail = installFakeTransport();
+      const { user, token: first } = await userWithResetToken(mail);
+      await expireLink(user.email, 0);
+      const second = await requestAnother(mail, user.email);
+
+      expect((await reset(first)).status).toBe(400);
+      expect((await reset(second)).status).toBe(200);
+    });
+
+    describe('the cap', () => {
+      const normal = env.PASSWORD_RESET_MAX_OUTSTANDING;
+
+      beforeEach(() => {
+        env.PASSWORD_RESET_MAX_OUTSTANDING = 2;
+      });
+
+      afterEach(() => {
+        env.PASSWORD_RESET_MAX_OUTSTANDING = normal;
+      });
+
+      test('keeps only the most recent links and drops the oldest', async () => {
+        const mail = installFakeTransport();
+        const { user, token: first } = await userWithResetToken(mail);
+        const second = await requestAnother(mail, user.email);
+        const third = await requestAnother(mail, user.email);
+
+        const stored = await storedReset(user.email);
+        expect(stored.passwordResets.map(link => link.tokenHash)).toEqual([sha256(second), sha256(third)]);
+
+        expect((await reset(first)).status).toBe(400);
+        expect((await reset(second)).status).toBe(200);
+      });
+
+      test('the newest link survives the cap', async () => {
+        const mail = installFakeTransport();
+        const { user } = await userWithResetToken(mail);
+        await requestAnother(mail, user.email);
+        const third = await requestAnother(mail, user.email);
+
+        expect((await reset(third)).status).toBe(200);
+      });
+    });
+
+    test('defaults to five outstanding links', () => {
+      expect(env.PASSWORD_RESET_MAX_OUTSTANDING).toBe(5);
+    });
   });
 
   describe('per-address cooldown', () => {
@@ -174,7 +268,7 @@ describe('POST /auth/forgot-password', () => {
 
       await User.updateOne(
         { email: user.email },
-        { $set: { passwordResetExpiresAt: new Date(Date.now() + env.PASSWORD_RESET_TTL_MS - 61_000) } }
+        { $set: { 'passwordResets.0.expiresAt': new Date(Date.now() + env.PASSWORD_RESET_TTL_MS - 61_000) } }
       );
       await forgot(user.email);
       await mail.waitForMail(2);
@@ -238,8 +332,7 @@ describe('POST /auth/reset-password', () => {
     expect(res.body).toEqual({ success: true, data: { reset: true } });
 
     const stored = await storedReset(user.email);
-    expect(stored.passwordResetTokenHash).toBeUndefined();
-    expect(stored.passwordResetExpiresAt).toBeUndefined();
+    expect(stored.passwordResets).toBeUndefined();
 
     const withOld = await request(app).post('/api/v1/auth/login').send({ email: user.email, password: 'Password123!' });
     expect(withOld.status).toBe(401);
@@ -272,7 +365,7 @@ describe('POST /auth/reset-password', () => {
   test('an expired token is refused and the password is left alone', async () => {
     const mail = installFakeTransport();
     const { user, token } = await userWithResetToken(mail);
-    await User.updateOne({ email: user.email }, { passwordResetExpiresAt: new Date(Date.now() - 1000) });
+    await User.updateOne({ email: user.email }, { $set: { 'passwordResets.0.expiresAt': new Date(Date.now() - 1000) } });
 
     const res = await reset(token);
 
@@ -289,7 +382,10 @@ describe('POST /auth/reset-password', () => {
     await reset(used.token);
 
     const expired = await userWithResetToken(mail);
-    await User.updateOne({ email: expired.user.email }, { passwordResetExpiresAt: new Date(Date.now() - 1000) });
+    await User.updateOne(
+      { email: expired.user.email },
+      { $set: { 'passwordResets.0.expiresAt': new Date(Date.now() - 1000) } }
+    );
 
     const responses = await Promise.all([reset('f'.repeat(64)), reset(expired.token), reset(used.token)]);
 
@@ -305,7 +401,7 @@ describe('POST /auth/reset-password', () => {
     const { user } = await userWithResetToken(mail);
     const stored = await storedReset(user.email);
 
-    const res = await reset(stored.passwordResetTokenHash);
+    const res = await reset(stored.passwordResets[0].tokenHash);
 
     expect(res.status).toBe(400);
   });
@@ -343,9 +439,12 @@ describe('POST /auth/reset-password', () => {
 });
 
 describe('a password change', () => {
-  test('cancels a reset link requested before it', async () => {
+  test('cancels every reset link requested before it', async () => {
     const mail = installFakeTransport();
-    const { user, token: resetToken } = await userWithResetToken(mail);
+    const { user, token: firstLink } = await userWithResetToken(mail);
+    await forgot(user.email);
+    await mail.waitForMail(2);
+    const secondLink = tokenFrom(mail.sent[1]);
     const login = await request(app).post('/api/v1/auth/login').send({ email: user.email, password: 'Password123!' });
 
     const change = await request(app)
@@ -353,10 +452,13 @@ describe('a password change', () => {
       .set('Authorization', `Bearer ${login.body.data.token}`)
       .send({ currentPassword: 'Password123!', newPassword: 'ChangedPassword123!' });
     expect(change.status).toBe(200);
+    expect((await storedReset(user.email)).passwordResets).toBeUndefined();
 
-    const res = await reset(resetToken);
+    for (const link of [firstLink, secondLink]) {
+      const res = await reset(link);
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('INVALID_RESET_TOKEN');
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('INVALID_RESET_TOKEN');
+    }
   });
 });
