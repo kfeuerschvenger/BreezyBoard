@@ -1,5 +1,6 @@
+import nodemailer from 'nodemailer';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { sendMail, setMailTransport } from '../src/services/mail.service.js';
+import { buildTransport, sendMail, setMailTransport, smtpOptions } from '../src/services/mail.service.js';
 
 afterEach(() => {
   setMailTransport(null);
@@ -71,5 +72,54 @@ describe('mail configuration in production', () => {
   test('refuses a user without a password and a password without a user', async () => {
     await expect(loadEnv({ SMTP_USER: 'mailer' })).rejects.toThrow('SMTP_USER and SMTP_PASSWORD must be set together');
     await expect(loadEnv({ SMTP_PASSWORD: 'secret' })).rejects.toThrow('SMTP_USER and SMTP_PASSWORD must be set together');
+  });
+});
+
+describe('SMTP transport security', () => {
+  const relay = { SMTP_HOST: 'smtp.example.com', SMTP_PORT: 587, SMTP_SECURE: false, SMTP_ALLOW_PLAINTEXT: false };
+
+  test('requires STARTTLS on a connection that is not encrypted from the start', () => {
+    expect(smtpOptions(relay)).toMatchObject({ secure: false, requireTLS: true });
+  });
+
+  test('an implicit TLS connection needs no upgrade', () => {
+    expect(smtpOptions({ ...relay, SMTP_PORT: 465, SMTP_SECURE: true })).toMatchObject({ secure: true, requireTLS: false });
+  });
+
+  test('the explicit plain text opt-out drops the requirement', () => {
+    expect(smtpOptions({ ...relay, SMTP_ALLOW_PLAINTEXT: true })).toMatchObject({ secure: false, requireTLS: false });
+  });
+
+  test('credentials are passed only when configured', () => {
+    expect(smtpOptions(relay).auth).toBeUndefined();
+    expect(smtpOptions({ ...relay, SMTP_USER: 'mailer', SMTP_PASSWORD: 'secret' }).auth).toEqual({
+      user: 'mailer',
+      pass: 'secret',
+    });
+  });
+
+  test('the transport outside test is built from those options', () => {
+    const create = vi.spyOn(nodemailer, 'createTransport').mockReturnValue({});
+
+    buildTransport({ ...relay, NODE_ENV: 'production' });
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ host: 'smtp.example.com', requireTLS: true }));
+    create.mockRestore();
+  });
+
+  test('is never plain text by default', async () => {
+    const env = await loadEnv({});
+
+    expect(env.SMTP_ALLOW_PLAINTEXT).toBe(false);
+  });
+
+  test('production refuses to start with the plain text opt-out', async () => {
+    await expect(loadEnv({ SMTP_ALLOW_PLAINTEXT: 'true' })).rejects.toThrow('SMTP_ALLOW_PLAINTEXT is not allowed in production');
+  });
+
+  test('outside production the opt-out is honoured', async () => {
+    const env = await loadEnv({ NODE_ENV: 'development', SMTP_ALLOW_PLAINTEXT: 'true' });
+
+    expect(env.SMTP_ALLOW_PLAINTEXT).toBe(true);
   });
 });
