@@ -194,4 +194,43 @@ describe('useToast', () => {
 
     expect(() => render(<Launcher options={{ message: 'x' }} />)).toThrow(/ToastProvider/);
   });
+
+  describe('who the toasts belong to', () => {
+    const Harness = ({ resetKey, message = 'Deleted "Mine"' }: { resetKey: string | null; message?: string }) => (
+      <ToastProvider resetKey={resetKey}>
+        <Launcher options={{ message }} />
+      </ToastProvider>
+    );
+
+    it('discards every toast when the key changes, so a sign out leaves none behind', () => {
+      const { rerender } = render(<Harness resetKey="user-1" />);
+      launch();
+      launch();
+      expect(screen.getAllByTestId('toast')).toHaveLength(2);
+
+      rerender(<Harness resetKey={null} />);
+
+      expect(screen.queryAllByTestId('toast')).toHaveLength(0);
+    });
+
+    it('discards them when a different person signs in, and still shows what that person raises', () => {
+      const { rerender } = render(<Harness resetKey="user-1" />);
+      launch();
+
+      rerender(<Harness resetKey="user-2" />);
+      expect(screen.queryByText('Deleted "Mine"')).not.toBeInTheDocument();
+
+      launch();
+      expect(screen.getByText('Deleted "Mine"')).toBeInTheDocument();
+    });
+
+    it('keeps them while the key stays the same', () => {
+      const { rerender } = render(<Harness resetKey="user-1" />);
+      launch();
+
+      rerender(<Harness resetKey="user-1" message="Unrelated change" />);
+
+      expect(screen.getByText('Deleted "Mine"')).toBeInTheDocument();
+    });
+  });
 });
