@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import type { Board, Task } from '@/models';
 import { toColorLookup, useColors } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
-import { useBoard, useBoardTasks, useTaskCacheWriter } from '../queries';
+import { useBoard } from '@/features/boards';
+import { useBoardTasks, useTaskCacheWriter } from '../queries';
 
 /** A board column as the page renders it, with its colour already resolved. */
 export interface ColumnData {

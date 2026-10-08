@@ -245,6 +245,7 @@ export const requireBoardRole =
       }
 
       req.board = board;
+      req.boardRole = role;
       next();
     } catch (error) {
       next(error);

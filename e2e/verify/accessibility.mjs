@@ -247,6 +247,16 @@ await page.getByRole('menu', { name: 'Move Axe menu task to' }).waitFor();
 await scan('board, move menu open');
 await page.keyboard.press('Escape');
 
+// The edit dialog is a modal over the board page. It is scanned with the
+// board's own colours loaded, so the swatch radios are on screen: a radio
+// group is where a missing legend or an unnamed input would show.
+await page.getByRole('button', { name: /^options for /i }).click();
+await page.getByRole('menuitem', { name: 'Edit board' }).click();
+await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
+await page.getByRole('radio').first().waitFor({ state: 'attached' });
+await scan('board, edit dialog open');
+await page.keyboard.press('Escape');
+
 // The profile page was outside this gate until now, which is how its joined
 // date printed "Invalid Date" and its avatar input sat at display:none
 // without either being measured. A surface nobody scans is a surface nobody

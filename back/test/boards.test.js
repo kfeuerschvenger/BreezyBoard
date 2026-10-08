@@ -2,6 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, test } from 'vitest';
 import app from '../src/app.js';
 import Board from '../src/models/Board.js';
+import ColorPalette from '../src/models/ColorPalette.js';
 import Task from '../src/models/Task.js';
 import Workspace from '../src/models/Workspace.js';
 import { createBoard } from './helpers/board.factory.js';
@@ -93,6 +94,57 @@ describe('boards', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.title).toBe('Updated Title');
+  });
+
+  test('update changes name, description and colour together and answers with the new colour', async () => {
+    const board = await createBoard(owner.token, colors.boardColor._id, { title: 'Before', description: 'Old' });
+    const other = await ColorPalette.create({ name: 'Other', value: '#112233', type: 'board' });
+
+    const res = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'After', description: 'New', color: other._id.toString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ title: 'After', description: 'New' });
+    expect(res.body.data.color.value).toBe('#112233');
+  });
+
+  test('update refuses an empty name and a member', async () => {
+    const member = await registerUser();
+    const board = await createBoard(owner.token, colors.boardColor._id);
+    await request(app)
+      .patch(`/api/boards/${board._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ members: [member.user.id ?? member.user._id] });
+
+    const empty = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: '   ' });
+    const byMember = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${member.token}`)
+      .send({ title: 'Hijacked' });
+
+    expect(empty.status).toBe(400);
+    expect(byMember.status).toBe(403);
+    expect((await Board.findById(board._id)).title).toBe('Test Board');
+  });
+
+  test('get by id tells the caller their own role on the board', async () => {
+    const member = await registerUser();
+    const board = await createBoard(owner.token, colors.boardColor._id);
+    await request(app)
+      .patch(`/api/boards/${board._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ members: [member.user.id ?? member.user._id] });
+
+    const asOwner = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${owner.token}`);
+    const asMember = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${member.token}`);
+
+    expect(asOwner.body.data.viewerRole).toBe('owner');
+    expect(asMember.body.data.viewerRole).toBe('member');
   });
 
   test('registration creates a personal workspace and a board lands in it', async () => {

@@ -4,6 +4,7 @@ import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
+import { BoardActions } from '@/features/boards';
 import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
@@ -142,6 +143,7 @@ const Board = () => {
           <Plus size={20} />
           Add Task
         </button>
+        {board && <BoardActions board={board} />}
         <UserAvatar />
       </PageHeader>
 
