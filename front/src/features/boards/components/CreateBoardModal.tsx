@@ -1,18 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useColors } from '@/features/colors';
 import { useTemplates } from '../queries';
 import { TemplatePicker } from './TemplatePicker';
 import type { Template, Color } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
-import { Button, Field, Input, Modal, SwatchPicker, Textarea } from '@/shared/ui';
+import { Button, Modal } from '@/shared/ui';
+import { z } from 'zod';
+import { boardFieldsSchema } from '../boardForm';
+import { BoardFormFields } from './BoardFormFields';
 
-const boardSchema = z.object({
-  title: z.string().trim().min(1, 'A board needs a name'),
-  description: z.string().trim(),
-  color: z.string().min(1, 'Choose a colour'),
+const boardSchema = boardFieldsSchema.extend({
   template: z.string().min(1, 'Choose a template'),
 });
 
@@ -52,20 +51,20 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   const isLoading = colorsQuery.isPending || templatesQuery.isPending;
   const loadFailed = colorsQuery.isError || templatesQuery.isError;
 
+  const form = useForm<BoardFormData>({
+    resolver: zodResolver(boardSchema),
+    defaultValues: EMPTY,
+    mode: 'onChange',
+  });
   const {
-    control,
     register,
     handleSubmit,
     reset,
     watch,
     getValues,
     setValue,
-    formState: { errors, isValid },
-  } = useForm<BoardFormData>({
-    resolver: zodResolver(boardSchema),
-    defaultValues: EMPTY,
-    mode: 'onChange',
-  });
+    formState: { isValid },
+  } = form;
 
   // Persists an in-progress "new board" form across a reload or an
   // accidental close. The key stays constant (not gated by `open`) so that
@@ -225,38 +224,13 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
         </div>
       )}
 
-      <form id="create-board-form" onSubmit={onSubmit} className="space-y-6">
-        <Field label="Board Name" required error={errors.title?.message}>
-          {props => <Input {...props} {...register('title')} placeholder="Enter board name" />}
-        </Field>
+      <FormProvider {...form}>
+        <form id="create-board-form" onSubmit={onSubmit} className="space-y-6">
+          <BoardFormFields colors={boardColors} />
 
-        <Field label="Description" error={errors.description?.message}>
-          {props => (
-            <Textarea {...props} {...register('description')} rows={3} placeholder="Describe your board's purpose" />
-          )}
-        </Field>
-
-        <Controller
-          name="color"
-          control={control}
-          render={({ field }) => (
-            <SwatchPicker
-              name={field.name}
-              legend="Board Color"
-              layout="grid"
-              options={boardColors.map(color => ({
-                id: color._id ?? color.value,
-                label: color.name ?? color.value,
-                color: color.value,
-              }))}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-
-        <TemplatePicker templates={templates} value={selectedTemplate} registration={register('template')} />
-      </form>
+          <TemplatePicker templates={templates} value={selectedTemplate} registration={register('template')} />
+        </form>
+      </FormProvider>
     </Modal>
   );
 };

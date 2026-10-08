@@ -13,7 +13,10 @@ export const createBoard = async (req, res, next) => {
 export const getBoard = async (req, res, next) => {
   try {
     const board = await boardService.getBoardById(req.params.id);
-    responseHandler(res, 200, board);
+    // The caller's own role, resolved by the same middleware that authorized
+    // the request, so the interface can hide what the server would refuse
+    // without re-deriving the rule (workspace admins are owners here too).
+    responseHandler(res, 200, { ...board.toJSON(), viewerRole: req.boardRole });
   } catch (error) {
     next(error);
   }

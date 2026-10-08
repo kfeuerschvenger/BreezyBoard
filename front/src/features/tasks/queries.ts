@@ -1,29 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BoardService, TaskService } from '@/services';
+import { TaskService } from '@/services';
 import { byOrder } from '@/features/board';
 import type { Task } from '@/models';
 
 /**
- * Query keys for a single board and its tasks.
+ * Query keys for a board's tasks.
  *
  * Kept in one object for the same reason as the board list keys: a key typed
  * differently at one call site shows up as a view that quietly stops
- * refreshing, which is indistinguishable from having no cache at all.
+ * refreshing, which is indistinguishable from having no cache at all. The
+ * board itself is owned by `features/boards`, which is also what writes it.
  */
-export const boardKeys = {
-  detail: (boardId: string) => ['board', boardId] as const,
-};
-
 export const taskKeys = {
   byBoard: (boardId: string) => ['tasks', 'board', boardId] as const,
 };
-
-export const useBoard = (boardId?: string) =>
-  useQuery({
-    queryKey: boardKeys.detail(boardId ?? ''),
-    queryFn: () => BoardService.getById(boardId as string),
-    enabled: Boolean(boardId),
-  });
 
 export const useBoardTasks = (boardId?: string) =>
   useQuery({

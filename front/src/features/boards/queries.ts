@@ -13,6 +13,10 @@ import type { Board } from '@/models';
 export const boardKeys = {
   all: ['boards'] as const,
   list: () => [...boardKeys.all, 'list'] as const,
+  // One board as the board page reads it. Not under `all`: invalidating the
+  // list must not refetch a board page that is open in another tab of the
+  // same cache, and the page invalidates its own key when it needs to.
+  detail: (boardId: string) => ['board', boardId] as const,
   stats: () => ['dashboard', 'stats'] as const,
   templates: () => ['templates'] as const,
 };
@@ -32,6 +36,13 @@ export const useTemplates = (enabled = true) =>
     // Ungated it costs a request on every visit for a list most visits never
     // look at, which the effect it replaced avoided by fetching on open.
     enabled,
+  });
+
+export const useBoard = (boardId?: string) =>
+  useQuery({
+    queryKey: boardKeys.detail(boardId ?? ''),
+    queryFn: () => BoardService.getById(boardId as string),
+    enabled: Boolean(boardId),
   });
 
 export const useBoards = () =>
@@ -63,6 +74,43 @@ const useBoardMutation = <TArgs, TResult>(mutationFn: (args: TArgs) => Promise<T
         queryClient.invalidateQueries({ queryKey: boardKeys.list() }),
         queryClient.invalidateQueries({ queryKey: boardKeys.stats() }),
       ]);
+    },
+  });
+};
+
+/** The fields an edit can change. The template only seeds columns, so it is not among them. */
+export type BoardChanges = Pick<Board, 'title' | 'description'> & { color: string };
+
+/**
+ * Saves an edit and writes it into both caches that hold the board.
+ *
+ * The response is not stored whole. The server answers a PUT with the members
+ * populated and no `viewerRole`, a different shape from the read the board
+ * page holds, and replacing the cached board with it would silently drop the
+ * role and swap the members for objects the page never asked for. What
+ * changed is exactly the three fields, so those are merged into what each
+ * cache already has. The dashboard list and the board page therefore agree
+ * straight away, with no refetch: the totals do not depend on any of the
+ * three, so the stats are left alone.
+ */
+export const useUpdateBoard = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ boardId, changes }: { boardId: string; changes: BoardChanges }) =>
+      BoardService.update(boardId, changes),
+    onSuccess: (updated, { boardId }) => {
+      const merge = <T extends Pick<Board, 'title' | 'description' | 'color'>>(board: T): T => ({
+        ...board,
+        title: updated.title,
+        description: updated.description,
+        color: updated.color,
+      });
+
+      queryClient.setQueryData<Board>(boardKeys.detail(boardId), previous => previous && merge(previous));
+      queryClient.setQueryData<Board[]>(boardKeys.list(), previous =>
+        previous?.map(board => (board._id === boardId ? merge(board) : board))
+      );
     },
   });
 };

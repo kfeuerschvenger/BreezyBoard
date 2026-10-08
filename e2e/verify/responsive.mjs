@@ -393,6 +393,17 @@ const authed = [
     },
   },
   {
+    name: 'board, edit board dialog',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByText('Short task', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /^Options for / }).click();
+      await page.getByRole('menuitem', { name: 'Edit board' }).click();
+      await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
+      await page.getByRole('radio').first().waitFor({ state: 'attached' });
+    },
+  },
+  {
     name: 'board, new task drawer',
     open: async () => {
       await page.goto(`${FRONT}/board/${boardId}`);

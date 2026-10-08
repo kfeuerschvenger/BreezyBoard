@@ -12,7 +12,7 @@ import type { Board as BoardModel, Color, Task, User } from '@/models';
 // its open state. Every case below stubs ColorService/UserService too so
 // that side effect never reaches the real, unmocked axios client.
 vi.mock('@/services', () => ({
-  BoardService: { getById: vi.fn() },
+  BoardService: { getById: vi.fn(), update: vi.fn() },
   TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
@@ -148,7 +148,7 @@ describe('Board page rendering', () => {
     const alert = await screen.findByRole('alert');
     expect(within(alert).getByText('This board could not be loaded')).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: /try again/i })).toBeInTheDocument();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading this board' })).not.toBeInTheDocument();
   });
 });
 
@@ -228,5 +228,44 @@ describe('Board page saving a task', () => {
     expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Enter task title')).toHaveValue('Write the release notes');
+  });
+});
+
+describe('Board page owner actions', () => {
+  beforeEach(() => {
+    mockedBoardService.getById.mockReset();
+    mockedBoardService.update.mockReset();
+    mockedTaskService.getByBoard.mockReset().mockResolvedValue([]);
+    mockedColorService.getByType.mockReset().mockResolvedValue([{ _id: 'c-blue', name: 'Blue', value: '#3B82F6' }]);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue([]);
+  });
+
+  it('shows the owner a board options menu and a member none', async () => {
+    mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+    const owner = renderBoard();
+    expect(await screen.findByRole('button', { name: 'Options for Launch Plan' })).toBeInTheDocument();
+    owner.unmount();
+
+    mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'member' });
+    renderBoard();
+    await screen.findByRole('heading', { name: 'Launch Plan' });
+    expect(screen.queryByRole('button', { name: /options for/i })).not.toBeInTheDocument();
+  });
+
+  it('shows an edited name in the page header as soon as it is saved', async () => {
+    const user = userEvent.setup();
+    mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+    mockedBoardService.update.mockResolvedValue({ ...board, title: 'Relaunch Plan' });
+    renderBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Options for Launch Plan' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Edit board' }));
+    const name = await screen.findByRole('textbox', { name: /board name/i });
+    await user.clear(name);
+    await user.type(name, 'Relaunch Plan');
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Relaunch Plan' })).toBeInTheDocument();
+    expect(mockedBoardService.getById).toHaveBeenCalledTimes(1);
   });
 });
