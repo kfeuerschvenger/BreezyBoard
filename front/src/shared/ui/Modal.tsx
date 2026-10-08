@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import { X } from 'lucide-react';
+import { IconX } from '@tabler/icons-react';
+import { Icon } from './Icon';
 import { IconButton } from './IconButton';
 
 export type ModalSize = 'sm' | 'md' | 'lg';
@@ -92,7 +93,7 @@ export function Modal({
                   aria-label in its own type, so putting it here makes that
                   impossible to get wrong in any modal from now on. */}
               <IconButton type="button" aria-label="Close" onClick={onClose}>
-                <X size={20} className="text-gray-500" aria-hidden="true" />
+                <Icon as={IconX} size={20} className="text-gray-500" aria-hidden="true" />
               </IconButton>
             </div>
 

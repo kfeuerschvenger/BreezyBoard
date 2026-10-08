@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { IconX } from '@tabler/icons-react';
+import { Icon } from './Icon';
 import { ToastContext } from './toastContext';
 import type { ToastContextValue, ToastOptions } from './toastContext';
 
@@ -113,7 +114,7 @@ const ToastItem = ({ toast, onDismiss, keyboardRef }: ToastItemProps) => {
         onClick={() => onDismiss(toast.id)}
         className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded text-gray-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white sm:h-8 sm:w-8"
       >
-        <X size={16} aria-hidden="true" />
+        <Icon as={IconX} size={16} aria-hidden="true" />
       </button>
     </div>
   );

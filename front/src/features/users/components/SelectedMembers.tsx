@@ -1,7 +1,7 @@
 import React from 'react';
-import { UserPlus, X } from 'lucide-react';
+import { IconUserPlus, IconX } from '@tabler/icons-react';
 import type { User } from '@/models';
-import { Avatar } from '@/shared/ui';
+import { Avatar, Icon } from '@/shared/ui';
 
 export interface SelectedMembersProps {
   members: User[];
@@ -17,7 +17,7 @@ export const SelectedMembers: React.FC<SelectedMembersProps> = ({ members, onRem
   return (
     <div className="p-6 bg-blue-50 border-b border-gray-200">
       <div className="flex items-center gap-2 mb-3">
-        <UserPlus size={16} className="text-blue-600" aria-hidden="true" />
+        <Icon as={IconUserPlus} size={16} className="text-blue-600" aria-hidden="true" />
         <span className="text-sm font-medium text-blue-900">
           {members.length} member{members.length > 1 ? 's' : ''} selected
         </span>
@@ -36,7 +36,7 @@ export const SelectedMembers: React.FC<SelectedMembersProps> = ({ members, onRem
               aria-label={`Remove ${fullName(member)}`}
               className="text-gray-400 hover:text-gray-600 cursor-pointer"
             >
-              <X size={14} aria-hidden="true" />
+              <Icon as={IconX} size={14} aria-hidden="true" />
             </button>
           </div>
         ))}

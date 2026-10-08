@@ -1,6 +1,6 @@
 import React from 'react';
-import { ChevronDown, LogOut, User as UserIcon } from 'lucide-react';
-import { Avatar, Menu, MenuItem } from '@/shared/ui';
+import { IconChevronDown, IconLogout, IconUser } from '@tabler/icons-react';
+import { Avatar, Menu, MenuItem, Icon } from '@/shared/ui';
 import type { User } from '@/models';
 
 export interface UserMenuProps {
@@ -36,7 +36,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout })
         >
           <Avatar name={fullName} src={user.avatar} size="md" decorative />
           <span className="hidden md:block text-sm font-medium text-gray-700">{fullName}</span>
-          <ChevronDown
+          <Icon as={IconChevronDown}
             size={16}
             aria-hidden="true"
             className={`text-gray-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -60,12 +60,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout })
 
       <div className="py-1">
         <MenuItem onSelect={onProfile}>
-          <UserIcon size={16} className="text-gray-400" aria-hidden="true" />
+          <Icon as={IconUser} size={16} className="text-gray-400" aria-hidden="true" />
           <span>Profile</span>
         </MenuItem>
 
         <MenuItem onSelect={onLogout} className="text-red-600 hover:bg-red-50">
-          <LogOut size={16} className="text-red-500" aria-hidden="true" />
+          <Icon as={IconLogout} size={16} className="text-red-500" aria-hidden="true" />
           <span>Log out</span>
         </MenuItem>
       </div>

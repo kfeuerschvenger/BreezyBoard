@@ -1,6 +1,7 @@
 import React from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
-import { resolveIcon } from '@/shared/lib/lucideIcons';
+import { resolveIcon } from '@/shared/lib/templateIcons';
+import { Icon } from '@/shared/ui';
 import type { Template } from '@/models';
 
 export interface TemplatePickerProps {
@@ -43,7 +44,7 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({ templates, value
             <input type="radio" value={id} className="sr-only" {...registration} />
             <span className="flex items-start gap-3">
               <span className={`p-2 rounded-lg ${isSelected ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                <TemplateIcon size={20} aria-hidden="true" className={isSelected ? 'text-blue-600' : 'text-gray-600'} />
+                <Icon as={TemplateIcon} size={20} aria-hidden="true" className={isSelected ? 'text-blue-600' : 'text-gray-600'} />
               </span>
               <span className="flex-1">
                 {/* h3, not h4. The dialog's own title is an h2, and jumping a

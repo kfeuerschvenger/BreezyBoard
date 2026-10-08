@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo } from 'react';
-import { ClipboardList, Plus } from 'lucide-react';
+import { IconClipboardList, IconPlus } from '@tabler/icons-react';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import Column from '@/components/Column';
 import TaskCard from '@/components/TaskCard';
 import type { Task } from '@/models';
-import { EmptyState } from '@/shared/ui';
+import { EmptyState, Icon } from '@/shared/ui';
 import { resolveColor } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import type { ColumnData } from '../hooks/useBoardData';
@@ -95,7 +95,7 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
           <EmptyState
             compact
             headingLevel={2}
-            icon={<ClipboardList size={20} className="text-gray-500" />}
+            icon={<Icon as={IconClipboardList} size={20} className="text-gray-500" />}
             title="This board has no tasks yet"
             description="Add the first one, or drag tasks in once they exist."
             action={
@@ -104,7 +104,7 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
                 onClick={onAddTask}
                 className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
               >
-                <Plus size={18} aria-hidden="true" />
+                <Icon as={IconPlus} size={18} aria-hidden="true" />
                 Add task
               </button>
             }

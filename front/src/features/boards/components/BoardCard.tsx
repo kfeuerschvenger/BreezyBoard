@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Users } from 'lucide-react';
+import { IconUsers } from '@tabler/icons-react';
+import { Icon } from '@/shared/ui';
 import { Link } from 'react-router-dom';
-import { resolveIcon } from '@/shared/lib/lucideIcons';
+import { resolveIcon } from '@/shared/lib/templateIcons';
 import type { Board } from '@/models';
 import { BoardCardMenu } from './BoardCardMenu';
 
@@ -77,7 +78,7 @@ export const BoardCard: React.FC<BoardCardProps> = ({
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center p-1 rounded">
-              <TemplateIcon size={22} style={{ color }} aria-hidden="true" />
+              <Icon as={TemplateIcon} size={22} style={{ color }} aria-hidden="true" />
             </div>
             <h3 className="font-semibold text-gray-900 font-heading group-hover:text-blue-600 transition-colors">
               <Link
@@ -138,7 +139,7 @@ export const BoardCard: React.FC<BoardCardProps> = ({
               <span>{typeof board.taskCount === 'number' ? board.taskCount : 0} tasks</span>
             </div>
             <div className="flex items-center gap-1 text-gray-600">
-              <Users size={12} aria-hidden="true" />
+              <Icon as={IconUsers} size={12} aria-hidden="true" />
               <span>{typeof board.memberCount === 'number' ? board.memberCount : 0}</span>
             </div>
           </div>

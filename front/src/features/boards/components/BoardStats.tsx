@@ -1,6 +1,6 @@
 import React from 'react';
-import { Calendar, Folder, Users } from 'lucide-react';
-import { StatTile } from '@/shared/ui';
+import { IconCalendar, IconFolder, IconUsers } from '@tabler/icons-react';
+import { StatTile, Icon } from '@/shared/ui';
 import type { StatTileTone } from '@/shared/ui';
 import type { DashboardStats } from '@/models';
 
@@ -15,9 +15,9 @@ export interface BoardStatsProps {
  * which is the only reason `icon` is a node instead of a component.
  */
 const TILES: { key: keyof DashboardStats; label: string; tone: StatTileTone; icon: React.ReactNode }[] = [
-  { key: 'totalBoards', label: 'Total Boards', tone: 'blue', icon: <Folder className="text-blue-600" size={20} /> },
-  { key: 'totalMembers', label: 'Team Members', tone: 'green', icon: <Users className="text-green-600" size={20} /> },
-  { key: 'totalTasks', label: 'Total Tasks', tone: 'orange', icon: <Calendar className="text-orange-600" size={20} /> },
+  { key: 'totalBoards', label: 'Total Boards', tone: 'blue', icon: <Icon as={IconFolder} className="text-blue-600" size={20} /> },
+  { key: 'totalMembers', label: 'Team Members', tone: 'green', icon: <Icon as={IconUsers} className="text-green-600" size={20} /> },
+  { key: 'totalTasks', label: 'Total Tasks', tone: 'orange', icon: <Icon as={IconCalendar} className="text-orange-600" size={20} /> },
   {
     key: 'avgProgress',
     label: 'Avg Progress',

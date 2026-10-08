@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Folder, Plus } from 'lucide-react';
+import { IconFolder, IconPlus } from '@tabler/icons-react';
 import {
   BoardCard,
   BoardStats,
@@ -13,7 +13,7 @@ import { resolveColor } from '@/features/colors';
 import { AddMemberModal } from '@/features/users';
 import type { NewBoard } from '@/features/boards';
 import type { Board, User } from '@/models';
-import { EmptyState, LoadingScreen } from '@/shared/ui';
+import { EmptyState, LoadingScreen, Icon } from '@/shared/ui';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
 
@@ -79,7 +79,7 @@ const BoardDashboard: React.FC = () => {
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
         >
-          <Plus size={20} />
+          <Icon as={IconPlus} size={20} />
           Create Board
         </button>
         <UserAvatar />
@@ -110,7 +110,7 @@ const BoardDashboard: React.FC = () => {
 
         {dashboard.boards.length === 0 && (
           <EmptyState
-            icon={<Folder className="text-gray-400" size={24} />}
+            icon={<Icon as={IconFolder} className="text-gray-400" size={24} />}
             title="No boards yet"
             description="Create your first board to get started with project management"
             action={

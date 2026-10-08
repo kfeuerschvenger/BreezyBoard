@@ -6,7 +6,8 @@ import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { X } from 'lucide-react';
+import { IconX } from '@tabler/icons-react';
+import { Icon } from './Icon';
 import { IconButton } from './IconButton';
 
 export type DrawerSize = 'sm' | 'md' | 'lg';
@@ -107,7 +108,7 @@ export function Drawer({
                   accessible name is what axe reports as button-name, and
                   IconButton demands the label in its own type. */}
               <IconButton type="button" aria-label="Close" onClick={onClose}>
-                <X size={20} className="text-gray-500" aria-hidden="true" />
+                <Icon as={IconX} size={20} className="text-gray-500" aria-hidden="true" />
               </IconButton>
             </div>
 

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Camera } from 'lucide-react';
-import { Avatar } from '@/shared/ui';
+import { IconCamera } from '@tabler/icons-react';
+import { Avatar, Icon } from '@/shared/ui';
 
 export interface AvatarUploaderProps {
   /** The stored image, when there is one. */
@@ -36,7 +36,7 @@ export const AvatarUploader: React.FC<AvatarUploaderProps> = ({ avatarUrl, name,
       <Avatar name={name} src={avatarUrl} size="xl" decorative className="mx-auto mb-4" />
 
       <label className="absolute -bottom-0 -right-0 translate-x-1/4 translate-y-1/4 bg-white border-2 border-gray-200 rounded-full p-2 cursor-pointer hover:bg-gray-50 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-blue-500">
-        <Camera size={16} className="text-gray-600" aria-hidden="true" />
+        <Icon as={IconCamera} size={16} className="text-gray-600" aria-hidden="true" />
         <input type="file" accept="image/*" aria-label="Change avatar" onChange={onChange} className="sr-only" />
       </label>
     </div>

@@ -3,8 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Lock, Mail } from 'lucide-react';
-import { Field, Input, PasswordInput } from '@/shared/ui';
+import { IconLock, IconMail } from '@tabler/icons-react';
+import { Field, Input, PasswordInput, Icon } from '@/shared/ui';
 import type { LoginCredentials } from '@/models';
 
 /**
@@ -49,7 +49,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, error, onDirty, 
       {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
       <form onSubmit={handleSubmit(onSubmit)} onChange={onDirty} className="space-y-6" noValidate>
-        <Field label="Email address" error={errors.email?.message} icon={<Mail className="h-5 w-5 text-gray-400" />}>
+        <Field label="Email address" error={errors.email?.message} icon={<Icon as={IconMail} className="h-5 w-5 text-gray-400" />}>
           {props => <Input {...props} {...register('email')} placeholder="Enter your email" className="pl-10" />}
         </Field>
 
@@ -59,7 +59,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, error, onDirty, 
               {...props}
               {...register('password')}
               placeholder="Enter your password"
-              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
             />
           )}
         </Field>

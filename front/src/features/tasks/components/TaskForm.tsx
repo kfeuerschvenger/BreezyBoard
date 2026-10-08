@@ -1,6 +1,6 @@
 import React from 'react';
-import { User, Palette } from 'lucide-react';
-import { Button, Field, Input, SwatchPicker, Textarea } from '@/shared/ui';
+import { IconPalette, IconUser } from '@tabler/icons-react';
+import { Button, Field, Input, SwatchPicker, Textarea, Icon } from '@/shared/ui';
 import { UserPicker } from '@/features/users';
 import { Checklist } from './Checklist';
 import { PrioritySelect } from './PrioritySelect';
@@ -82,7 +82,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       )}
     </Field>
 
-    <Field label="Owner" required error={errors.owner} icon={<User size={16} className="text-gray-400" />}>
+    <Field label="Owner" required error={errors.owner} icon={<Icon as={IconUser} size={16} className="text-gray-400" />}>
       {props => (
         <UserPicker
           value={values.owner}
@@ -99,7 +99,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       name="color"
       legend={
         <>
-          <Palette size={16} className="inline mr-1" aria-hidden="true" />
+          <Icon as={IconPalette} size={16} className="inline mr-1" aria-hidden="true" />
           Color *
         </>
       }

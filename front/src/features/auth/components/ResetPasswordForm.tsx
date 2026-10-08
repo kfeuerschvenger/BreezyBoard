@@ -3,8 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
-import { Field, PasswordInput } from '@/shared/ui';
+import { IconLock } from '@tabler/icons-react';
+import { Field, PasswordInput, Icon } from '@/shared/ui';
 
 /**
  * The same strength rule as registration, which is also the rule the server
@@ -68,7 +68,7 @@ export const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSubmit, 
               {...register('newPassword')}
               autoComplete="new-password"
               placeholder="Create a strong password"
-              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
               toggleLabel="new password"
             />
           )}
@@ -81,7 +81,7 @@ export const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSubmit, 
               {...register('confirmPassword')}
               autoComplete="new-password"
               placeholder="Confirm your password"
-              icon={<Lock className="h-5 w-5 text-gray-400" />}
+              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
               toggleLabel="confirm new password"
             />
           )}

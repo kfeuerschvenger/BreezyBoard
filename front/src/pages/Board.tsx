@@ -7,8 +7,8 @@ import { byOrder } from '@/features/board';
 import { BoardActions } from '@/features/boards';
 import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
 import { motion } from 'framer-motion';
-import { Plus } from 'lucide-react';
-import { LoadingScreen } from '@/shared/ui';
+import { IconPlus } from '@tabler/icons-react';
+import { LoadingScreen, Icon } from '@/shared/ui';
 import NotFound from './NotFound';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
@@ -153,7 +153,7 @@ const Board = () => {
           className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
           disabled={columns.length === 0}
         >
-          <Plus size={20} />
+          <Icon as={IconPlus} size={20} />
           Add Task
         </button>
         {board && <BoardActions board={board} onDeleted={() => navigate('/')} />}

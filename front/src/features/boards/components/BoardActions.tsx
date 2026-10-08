@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { IconDots, IconPencil, IconTrash } from '@tabler/icons-react';
 import type { Board } from '@/models';
-import { Menu, MenuItem } from '@/shared/ui';
+import { Menu, MenuItem, Icon } from '@/shared/ui';
 import { useDeleteBoardWithUndo } from '../hooks/useDeleteBoardWithUndo';
 import { useUpdateBoard } from '../queries';
 import { DeleteBoardDialog } from './DeleteBoardDialog';
@@ -61,12 +61,12 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
             aria-label={`Options for ${board.title}`}
             className="flex cursor-pointer items-center justify-center rounded-lg p-3 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:p-2"
           >
-            <MoreHorizontal size={20} className="text-gray-600" aria-hidden="true" />
+            <Icon as={IconDots} size={20} className="text-gray-600" aria-hidden="true" />
           </button>
         )}
       >
         <MenuItem onSelect={() => setEditing(true)}>
-          <Pencil size={16} className="text-gray-400" aria-hidden="true" />
+          <Icon as={IconPencil} size={16} className="text-gray-400" aria-hidden="true" />
           <span>Edit board</span>
         </MenuItem>
 
@@ -77,7 +77,7 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
           }}
           className="text-red-600 hover:bg-red-50"
         >
-          <Trash2 size={16} className="text-red-500" aria-hidden="true" />
+          <Icon as={IconTrash} size={16} className="text-red-500" aria-hidden="true" />
           <span>Delete board</span>
         </MenuItem>
       </Menu>
