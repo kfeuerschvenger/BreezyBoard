@@ -61,7 +61,7 @@ export const ConfirmDialog = ({
         </div>
       }
     >
-      <div className="text-gray-700">{description}</div>
+      <div className="text-ink-body">{description}</div>
     </Modal>
   );
 };

@@ -29,6 +29,49 @@ const launch = () => fireEvent.click(screen.getByRole('button', { name: 'Launch'
 const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
 const focus = (element: HTMLElement) => act(() => element.focus());
 
+describe('ToastProvider surface', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('draws a dark ink pill with the toast shadow and its entrance', () => {
+    renderToast({ message: 'Hello' });
+    launch();
+
+    expect(screen.getByTestId('toast')).toHaveClass('bg-ink', 'rounded-3xl', 'shadow-toast', 'animate-bb-toast');
+  });
+
+  it('sits at the bottom centre of the screen', () => {
+    renderToast({ message: 'Hello' });
+
+    expect(screen.getByRole('status')).toHaveClass('fixed', 'inset-x-0', 'bottom-3', 'items-center');
+  });
+
+  it('draws a wind icon that assistive technology does not read', () => {
+    renderToast({ message: 'Hello' });
+    launch();
+
+    const icon = screen.getByTestId('toast').querySelector('svg');
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+    expect(icon).toHaveClass('text-on-ink-accent');
+  });
+
+  it('draws the action as a translucent pill and every control with the white focus ring', () => {
+    renderToast({ message: 'Deleted', action: { label: 'Undo', onAction: vi.fn() } });
+    launch();
+
+    const action = screen.getByRole('button', { name: 'Undo' });
+    expect(action).toHaveClass('rounded-pill', 'bg-white/14', 'hover:bg-white/26', 'focus-ring-on-ink');
+    expect(screen.getByRole('button', { name: 'Dismiss notification' })).toHaveClass('focus-ring-on-ink');
+  });
+
+  it('keeps its name as the message, so the icon adds nothing to what is announced', () => {
+    renderToast({ message: 'Board restored' });
+    launch();
+
+    expect(screen.getByRole('status')).toHaveTextContent(/^Board restored$/);
+  });
+});
+
 describe('ToastProvider', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

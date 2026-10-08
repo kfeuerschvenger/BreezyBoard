@@ -9,6 +9,8 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion, usePresence } from 'motion/react';
+import { enterTransition, exitTransition } from './motionTokens';
 
 /** What the trigger must spread onto its button so the menu can drive it. */
 export interface MenuTriggerProps {
@@ -225,27 +227,91 @@ export const Menu: React.FC<MenuProps> = ({ label, renderTrigger, align = 'end',
     <MenuContext.Provider value={{ close }}>
       {renderTrigger(triggerProps, { open })}
 
-      {open &&
-        createPortal(
-          // One key handler on the popup rather than one per item: the
-          // pattern treats the items as a single composite widget.
-          <div
-            id={menuId}
-            ref={panelRef}
-            role="menu"
-            aria-label={label}
-            aria-labelledby={label ? undefined : triggerId}
-            tabIndex={-1}
-            onKeyDown={onPanelKeyDown}
-            onClick={event => event.stopPropagation()}
-            style={{ position: 'fixed', top: position?.top ?? 0, left: position?.left ?? 0 }}
-            className={`z-50 min-w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-lg focus:outline-none ${className}`}
-          >
-            {children}
-          </div>,
-          document.body,
-        )}
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            // One key handler on the popup rather than one per item: the
+            // pattern treats the items as a single composite widget.
+            <MenuSurface
+              id={menuId}
+              panelRef={panelRef}
+              label={label}
+              triggerId={triggerId}
+              onKeyDown={onPanelKeyDown}
+              position={position}
+              align={align}
+              className={className}
+            >
+              {children}
+            </MenuSurface>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </MenuContext.Provider>
+  );
+};
+
+interface MenuSurfaceProps {
+  id: string;
+  panelRef: React.RefObject<HTMLDivElement | null>;
+  label: string | undefined;
+  triggerId: string;
+  onKeyDown: (event: React.KeyboardEvent) => void;
+  position: { top: number; left: number } | null;
+  align: 'start' | 'end';
+  className: string;
+  children: React.ReactNode;
+}
+
+/**
+ * The popup and its animation. It rises 4 pixels and fades in over 180
+ * milliseconds on the standard easing, from the edge it is lined up with, and
+ * fades out over 120 on the exit easing.
+ *
+ * While it leaves it is still in the document, because the exit is what keeps
+ * it mounted. `usePresence` says so, and the popup is then inert and hidden
+ * from assistive technology: a menu that has been closed must not stay
+ * reachable for the length of its own fade.
+ */
+const MenuSurface: React.FC<MenuSurfaceProps> = ({
+  id,
+  panelRef,
+  label,
+  triggerId,
+  onKeyDown,
+  position,
+  align,
+  className,
+  children,
+}) => {
+  const [isPresent] = usePresence();
+
+  return (
+    <motion.div
+      id={id}
+      ref={panelRef}
+      role="menu"
+      aria-label={label}
+      aria-labelledby={label ? undefined : triggerId}
+      aria-hidden={isPresent ? undefined : true}
+      inert={!isPresent}
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+      onClick={event => event.stopPropagation()}
+      initial={{ opacity: 0, y: -4, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1, transition: enterTransition(0.18) }}
+      exit={{ opacity: 0, transition: exitTransition(0.12) }}
+      style={{
+        position: 'fixed',
+        top: position?.top ?? 0,
+        left: position?.left ?? 0,
+        transformOrigin: align === 'end' ? 'top right' : 'top left',
+      }}
+      className={`z-50 min-w-44 rounded-control border border-line-10 bg-surface p-1.5 shadow-tile-hover focus:outline-none ${className}`}
+    >
+      {children}
+    </motion.div>
   );
 };
 
@@ -276,11 +342,11 @@ export const MenuItem: React.FC<MenuItemProps> = ({ children, onSelect, disabled
         menu?.close();
         onSelect();
       }}
-      className={`flex min-h-11 w-full items-center gap-3 px-4 py-2 text-left text-sm sm:min-h-9 ${
+      className={`focus-ring-inset flex min-h-11 w-full items-center gap-3 rounded-button-small px-3 py-2 text-left text-sm font-medium transition-colors duration-150 sm:min-h-9 ${
         disabled
-          ? 'cursor-not-allowed text-gray-500'
-          : 'cursor-pointer text-gray-700 hover:bg-gray-50 focus-visible:bg-gray-100'
-      } focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${className}`}
+          ? 'cursor-not-allowed text-ink-tertiary'
+          : 'cursor-pointer text-ink-secondary hover:bg-line-06 hover:text-ink focus-visible:bg-line-06 focus-visible:text-ink'
+      } ${className}`}
     >
       {children}
     </button>
