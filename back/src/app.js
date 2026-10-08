@@ -17,7 +17,11 @@ import workspaceRoutes from './routes/workspace.routes.js';
 
 const app = express();
 
-app.set('trust proxy', true);
+// A hop count, never `true`: `true` takes the leftmost X-Forwarded-For entry,
+// which is whatever the caller wrote, and every rate limiter keys on req.ip.
+// A number trusts only the proxies that really exist and reads the address
+// from the right of the header, where each proxy appends what it observed.
+app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
 // Structured request logging, mounted first so every request gets an id and
 // a bound child logger (req.log) before anything else runs, including

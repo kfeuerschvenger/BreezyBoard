@@ -69,6 +69,23 @@ const parseCount = (name, raw, fallback) => {
   return parsed;
 };
 
+// A whole number of zero or more. Zero is meaningful for a proxy hop count,
+// where it means no proxy is trusted, so parseCount's positive rule does not fit.
+const parseHopCount = (name, raw, fallback) => {
+  if (raw === undefined || raw.trim() === '') {
+    return fallback;
+  }
+
+  const parsed = Number(raw);
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    logger.warn(`[env] ${name} is not a whole number of zero or more. Using the default of ${fallback}.`);
+    return fallback;
+  }
+
+  return parsed;
+};
+
 /**
  * Settings that have a sensible local value but no safe default anywhere
  * else. Same rule as a secret: production refuses to start without them,
@@ -136,13 +153,22 @@ const env = {
   // because the previous behavior was a wildcard for the whole internet.
   CORS_ORIGINS: parseOrigins(process.env.CORS_ORIGINS),
 
+  // How many reverse proxies sit between the internet and this process, and
+  // therefore how many entries from the right of X-Forwarded-For are trusted
+  // to be written by infrastructure rather than by the caller. Every rate
+  // limiter is keyed on the address derived from it, so trusting more hops
+  // than exist lets a client choose its own key. Production runs behind the
+  // one nginx of the frontend image, so the default is 1; in development the
+  // browser talks to the API directly, so it is 0, which ignores the header.
+  TRUST_PROXY_HOPS: parseHopCount('TRUST_PROXY_HOPS', process.env.TRUST_PROXY_HOPS, isProduction ? 1 : 0),
+
   // The sliding session's two independent clocks. JWT_INACTIVITY_TTL_MS is
   // the exp window, rewritten on every renewal. JWT_ABSOLUTE_TTL_MS is the
   // hard cap measured from sessionStartedAt, which is never rewritten.
   JWT_INACTIVITY_TTL_MS: parseDurationMs('JWT_INACTIVITY_TTL_MS', process.env.JWT_INACTIVITY_TTL_MS, FIFTEEN_MINUTES_MS),
   JWT_ABSOLUTE_TTL_MS: parseDurationMs('JWT_ABSOLUTE_TTL_MS', process.env.JWT_ABSOLUTE_TTL_MS, FOUR_HOURS_MS),
 
-  // Accounts a single address may register in an hour. The default is the
+  // Accounts a single client IP address may register in an hour. The default is the
   // production value, so a deployment that sets nothing is strict; only
   // docker-compose.yml raises it, for the standing scripts. See
   // rateLimit.middleware.js for why this one is tunable and the login
@@ -181,7 +207,7 @@ const env = {
   ),
 
   // Password recovery requests (asking for a link and using one) a single
-  // address may make in fifteen minutes. The default is the production
+  // client IP address may make in fifteen minutes. The default is the production
   // value, and only docker-compose.yml raises it. See
   // rateLimit.middleware.js for why it counts successful requests too.
   PASSWORD_RECOVERY_LIMIT_PER_15_MIN: parseCount(

@@ -19,7 +19,7 @@ const req = async (method, path, token, body) => {
 };
 
 const stamp = Date.now();
-// Registration is rate limited to twenty accounts an hour per address, and
+// Registration is rate limited to twenty accounts an hour per client IP address, and
 // these scripts create real ones. Without this the limit surfaces as
 // "Cannot read properties of undefined", which sends whoever hit it looking
 // for a bug in the API instead of at the clock.
