@@ -179,6 +179,58 @@ for (const [surface, value] of Object.entries(tertiary)) {
   check(`tertiary text on ${surface} is at least 4.5:1 (${value}:1)`, value >= 4.5, true);
 }
 
+log('\n--- the reduced motion policy ---');
+
+// A person who asks the system for less motion gets animations and
+// transitions collapsed to an instant. The collapse must not break what
+// waits on an animation to finish: a dialog unmounts only after its exit
+// completes, so a dialog that opens and then never leaves the page under
+// this setting would be the failure to catch.
+const calm = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+const calmPage = await calm.newPage();
+await calmPage.goto(`${FRONT}/login`);
+await calmPage.waitForSelector('form');
+
+const collapsed = await calmPage.evaluate(() => {
+  const probe = document.createElement('div');
+  probe.style.transition = 'opacity 2s';
+  probe.style.animation = 'spin 3s linear infinite';
+  document.body.appendChild(probe);
+  const style = getComputedStyle(probe);
+  const out = {
+    transition: Number.parseFloat(style.transitionDuration) * (style.transitionDuration.endsWith('ms') ? 1 : 1000),
+    animation: Number.parseFloat(style.animationDuration) * (style.animationDuration.endsWith('ms') ? 1 : 1000),
+    iterations: style.animationIterationCount,
+  };
+  probe.remove();
+  return out;
+});
+check('a 2s transition collapses to under 1ms', collapsed.transition < 1, true);
+check('a 3s animation collapses to under 1ms', collapsed.animation < 1, true);
+check('an infinite animation plays once', collapsed.iterations, '1');
+
+await calmPage.getByRole('button', { name: /forgot password/i }).click();
+const dialog = calmPage.getByRole('dialog');
+await dialog.waitFor({ state: 'visible' });
+check('a dialog opens under reduced motion', await dialog.isVisible(), true);
+await calmPage.keyboard.press('Escape');
+await dialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
+check('the dialog unmounts after its exit under reduced motion', await dialog.count(), 0);
+
+await calm.close();
+
+const normal = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+const normalPage = await normal.newPage();
+await normalPage.goto(`${FRONT}/login`);
+await normalPage.waitForSelector('form');
+await normalPage.getByRole('button', { name: /forgot password/i }).click();
+const normalDialog = normalPage.getByRole('dialog');
+await normalDialog.waitFor({ state: 'visible' });
+await normalPage.keyboard.press('Escape');
+await normalDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
+check('the dialog unmounts after its exit with motion on', await normalDialog.count(), 0);
+await normal.close();
+
 await browser.close();
 
 const failed = results.filter(r => !r).length;

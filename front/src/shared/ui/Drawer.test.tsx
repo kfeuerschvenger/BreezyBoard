@@ -3,6 +3,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Drawer } from './Drawer';
 
+// The suite-wide stub strips every animation prop. This file asserts the
+// entrance axis, which is one of those props, so it runs the real library.
+vi.unmock('motion/react');
+
 /**
  * jsdom loads no stylesheet, so what a breakpoint class does is measured in
  * `e2e/verify/responsive.mjs` against a rendered page. What is held here is

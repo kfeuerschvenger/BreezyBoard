@@ -2,7 +2,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { IconLock, IconMail } from '@tabler/icons-react';
 import { Field, Input, PasswordInput, Icon } from '@/shared/ui';
 import type { LoginCredentials } from '@/models';

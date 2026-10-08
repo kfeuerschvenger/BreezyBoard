@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 export interface EmptyStateProps {
   /** Decorative. Shown in a circle above the title and hidden from assistive technology. */

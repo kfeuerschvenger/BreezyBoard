@@ -1,7 +1,7 @@
 import React, { useMemo, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import {
   IconAlertCircle,
   IconCircleCheck,

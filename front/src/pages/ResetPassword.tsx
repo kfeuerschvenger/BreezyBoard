@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { AuthLayout } from '@/app/layouts';
 import { ResetPasswordForm } from '@/features/auth';
 import { useAuth } from '@/hooks/useAuth';

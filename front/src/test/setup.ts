@@ -18,7 +18,7 @@ afterEach(() => {
   cleanup();
 });
 
-// framer-motion is used across the app (TaskDrawer, Board, Column, TaskCard,
+// motion is used across the app (TaskDrawer, Board, Column, TaskCard,
 // UserAvatar, and more) purely for enter/exit transitions. Under jsdom there
 // is no real layout or paint, so those transitions either no-op or keep an
 // "exiting" element mounted until a requestAnimationFrame-driven animation
@@ -55,7 +55,7 @@ const stripMotionProps = (props: AnyProps): AnyProps => {
   return rest;
 };
 
-vi.mock('framer-motion', () => {
+vi.mock('motion/react', () => {
   // The component for a given tag MUST be cached. Creating a new forwardRef on
   // every property access gives React a different element type on every render,
   // so it unmounts and remounts the whole subtree each time. In practice that
@@ -85,5 +85,8 @@ vi.mock('framer-motion', () => {
   const AnimatePresence = ({ children }: { children?: ReactNode }) =>
     React.createElement(React.Fragment, null, children);
 
-  return { motion, AnimatePresence };
+  // Reduced motion is a policy of the real provider; here nothing animates.
+  const MotionConfig = ({ children }: { children?: ReactNode }) => React.createElement(React.Fragment, null, children);
+
+  return { motion, AnimatePresence, MotionConfig };
 });

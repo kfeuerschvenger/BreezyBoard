@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { AuthLayout } from '@/app/layouts';
 import { RegisterForm } from '@/features/auth';
 
