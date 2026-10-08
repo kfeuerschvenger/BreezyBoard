@@ -31,7 +31,16 @@ export const updateBoard = async (req, res, next) => {
 export const deleteBoard = async (req, res, next) => {
   try {
     const board = await boardService.deleteBoard(req.params.id);
-    responseHandler(res, 200, { message: 'Board deleted successfully' });
+    responseHandler(res, 200, { message: 'Board deleted successfully', deletedAt: board.deletedAt });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const restoreBoard = async (req, res, next) => {
+  try {
+    const board = await boardService.restoreBoard(req.params.id);
+    responseHandler(res, 200, board);
   } catch (error) {
     next(error);
   }

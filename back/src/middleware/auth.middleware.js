@@ -218,30 +218,38 @@ const resolveRequestedBoardId = req => req.params.boardId || req.params.id || re
  * caller's role, and only calls next() when that role meets `minimumRole`.
  * Missing board -> 404. Insufficient role -> 403.
  *
+ * A soft-deleted board is a missing board, for everybody, which is what
+ * keeps every route behind this middleware from serving it. The restore
+ * route alone opts in with `includeDeleted`, and still resolves the role
+ * first, so a stranger learns nothing about a deleted board either.
+ *
  * @param {'member' | 'owner'} minimumRole
+ * @param {{ includeDeleted?: boolean }} [options]
  * @returns {import('express').RequestHandler}
  */
-export const requireBoardRole = minimumRole => async (req, _res, next) => {
-  try {
-    const boardId = resolveRequestedBoardId(req);
-    const board = await Board.findById(boardId);
+export const requireBoardRole =
+  (minimumRole, { includeDeleted = false } = {}) =>
+  async (req, _res, next) => {
+    try {
+      const boardId = resolveRequestedBoardId(req);
+      const board = await Board.findById(boardId);
 
-    if (!board) {
-      throw new ApiError(404, 'Board not found');
+      if (!board || (board.deletedAt && !includeDeleted)) {
+        throw new ApiError(404, 'Board not found');
+      }
+
+      const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
+
+      if (!meetsMinimumRole(role, minimumRole)) {
+        throw new ApiError(403, 'Not authorized to access this board');
+      }
+
+      req.board = board;
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
-
-    if (!meetsMinimumRole(role, minimumRole)) {
-      throw new ApiError(403, 'Not authorized to access this board');
-    }
-
-    req.board = board;
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+  };
 
 /**
  * Middleware factory for routes identified by a task id (`:id` or
@@ -270,7 +278,7 @@ export const requireTaskBoardRole = minimumRole => async (req, _res, next) => {
 
     const board = await Board.findById(task.boardId);
 
-    if (!board) {
+    if (!board || board.deletedAt) {
       throw new ApiError(404, 'Board not found');
     }
 

@@ -71,6 +71,8 @@ const parseCount = (name, raw, fallback) => {
 
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const env = {
   PORT: process.env.PORT || 5000,
@@ -100,6 +102,14 @@ const env = {
   // rateLimit.middleware.js for why this one is tunable and the login
   // limiter beside it is not.
   REGISTRATION_LIMIT_PER_HOUR: parseCount('REGISTRATION_LIMIT_PER_HOUR', process.env.REGISTRATION_LIMIT_PER_HOUR, 20),
+
+  // How long a deleted board stays restorable before the purge job removes
+  // it and its tasks for good, and how often that job looks. The interface
+  // offers undo for a few seconds only, so the window exists for an owner
+  // who reaches out afterwards or a mistake spotted over a weekend, and is
+  // short because the board holds data its owner asked to be rid of.
+  BOARD_RETENTION_MS: parseDurationMs('BOARD_RETENTION_MS', process.env.BOARD_RETENTION_MS, SEVEN_DAYS_MS),
+  BOARD_PURGE_INTERVAL_MS: parseDurationMs('BOARD_PURGE_INTERVAL_MS', process.env.BOARD_PURGE_INTERVAL_MS, ONE_HOUR_MS),
 };
 
 if (isProduction && env.CORS_ORIGINS.length === 0) {

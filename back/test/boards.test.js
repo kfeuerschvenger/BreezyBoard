@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import app from '../src/app.js';
 import Board from '../src/models/Board.js';
 import Task from '../src/models/Task.js';
@@ -194,7 +194,7 @@ describe('boards', () => {
     expect(untouched.columns[0].title).toBe('Backlog');
   });
 
-  test('delete as the creator also deletes that board tasks', async () => {
+  test('delete as the creator makes that board tasks unreachable', async () => {
     const board = await createBoard(owner.token, colors.boardColor._id);
 
     const { _id: taskId } = await createTask(owner.token, board._id, colors.taskColor._id, {
@@ -210,37 +210,5 @@ describe('boards', () => {
     const taskCheck = await request(app).get(`/api/tasks/${taskId}`).set('Authorization', `Bearer ${owner.token}`);
 
     expect(taskCheck.status).toBe(404);
-  });
-
-  test('delete leaves the board and its tasks intact when the cascade fails', async () => {
-    const board = await createBoard(owner.token, colors.boardColor._id);
-
-    const { _id: taskId } = await createTask(owner.token, board._id, colors.taskColor._id, {
-      title: 'Task that must survive',
-    });
-
-    // The cascade is the second write of the pair. Forcing it to fail is the
-    // only way to observe whether the first write is undone, and it is
-    // exactly the scenario the transaction exists for. Without the
-    // transaction the board is already deleted by this point and the task
-    // outlives it, pointing at a board no query can reach.
-    const deleteMany = vi.spyOn(Task, 'deleteMany').mockRejectedValueOnce(new Error('injected cascade failure'));
-
-    const failedDelete = await request(app)
-      .delete(`/api/boards/${board._id}`)
-      .set('Authorization', `Bearer ${owner.token}`);
-
-    expect(failedDelete.status).toBe(500);
-    expect(deleteMany).toHaveBeenCalled();
-
-    deleteMany.mockRestore();
-
-    const boardCheck = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${owner.token}`);
-
-    expect(boardCheck.status).toBe(200);
-
-    const taskCheck = await request(app).get(`/api/tasks/${taskId}`).set('Authorization', `Bearer ${owner.token}`);
-
-    expect(taskCheck.status).toBe(200);
   });
 });

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import app from './app.js';
 import connectDB from './config/db.js';
 import env from './config/env.js';
+import { startBoardPurgeJob } from './jobs/boardPurge.job.js';
 import logger from './utils/logger.js';
 
 const start = async () => {
@@ -11,8 +12,11 @@ const start = async () => {
     logger.info(`Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
   });
 
+  const stopBoardPurge = startBoardPurgeJob();
+
   const shutdown = signal => {
     logger.info(`Received ${signal}, shutting down gracefully`);
+    stopBoardPurge();
 
     server.close(async () => {
       try {
