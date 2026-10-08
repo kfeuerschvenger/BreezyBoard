@@ -454,6 +454,20 @@ const authed = [
     },
   },
   {
+    name: 'unknown address, signed in',
+    open: async () => {
+      await page.goto(`${FRONT}/no/such/page`);
+      await page.getByRole('heading', { level: 1, name: 'Page not found' }).waitFor();
+    },
+  },
+  {
+    name: 'board not found',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${'0'.repeat(24)}`);
+      await page.getByRole('heading', { level: 1, name: 'Board not found' }).waitFor();
+    },
+  },
+  {
     name: 'profile',
     open: async () => {
       await page.goto(`${FRONT}/profile`);
@@ -495,6 +509,13 @@ const anonymous = [
     open: async () => {
       await anonPage.goto(`${FRONT}/register`);
       await anonPage.waitForSelector('form');
+    },
+  },
+  {
+    name: 'unknown address, signed out',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/no/such/page`);
+      await anonPage.getByRole('heading', { level: 1, name: 'Page not found' }).waitFor();
     },
   },
   {

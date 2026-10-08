@@ -7,7 +7,7 @@ import { AppShell } from '@/app/layouts/AppShell';
 import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
-import { Board, Home, Login, Profile, Register } from '@/pages';
+import { Board, Home, Login, NotFound, Profile, Register } from '@/pages';
 import { ToastProvider } from '@/shared/ui';
 
 import './index.css';
@@ -59,7 +59,10 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Not behind ProtectedRoute: an unknown address is answered the same
+          way for everybody and never redirected, so nobody is bounced to
+          login for a page that does not exist. */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };

@@ -100,7 +100,9 @@ test.describe('editing and deleting a board from its page', () => {
 
     // Typing the address of a deleted board does not bring it back.
     await page.goto(boardUrl(boardId));
-    await expect(page.getByRole('alert')).toContainText('could not be loaded');
+    await expect(page.getByRole('heading', { level: 1, name: 'Board not found' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to my boards' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /try again/i })).toHaveCount(0);
   });
 
   test('after a keyboard delete, Undo has focus and the toast stays while it does', async ({ page, authedUser }) => {

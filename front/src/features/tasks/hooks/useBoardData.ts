@@ -3,6 +3,7 @@ import type { Board, Task } from '@/models';
 import { toColorLookup, useColors } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import { useBoard } from '@/features/boards';
+import { isAddressUnreachable } from '@/shared/lib/httpStatus';
 import { useBoardTasks, useTaskCacheWriter } from '../queries';
 
 /** A board column as the page renders it, with its colour already resolved. */
@@ -22,6 +23,12 @@ export interface UseBoardDataResult {
   /** The task palette, read once for the whole board. */
   taskColors: ColorLookup;
   isLoading: boolean;
+  /**
+   * The address does not lead to a board this person can see: it is missing,
+   * deleted, not theirs, or not an id at all. Retrying cannot change that, so
+   * it is kept apart from `error`, which is the failures where it can.
+   */
+  notFound: boolean;
   /** The one message worth showing instead of the board. */
   error: string | null;
 }
@@ -61,6 +68,8 @@ export function useBoardData(boardId?: string): UseBoardDataResult {
     [board]
   );
 
+  const notFound = isAddressUnreachable(boardQuery.error) || isAddressUnreachable(tasksQuery.error);
+
   return {
     board,
     columns,
@@ -70,6 +79,7 @@ export function useBoardData(boardId?: string): UseBoardDataResult {
     // An address with no board in it is not a load in progress, so the page
     // reports that rather than waiting on two queries that never ran.
     isLoading: Boolean(boardId) && (boardQuery.isPending || tasksQuery.isPending),
+    notFound,
     error: !boardId
       ? 'No board was specified in the address.'
       : boardQuery.isError || tasksQuery.isError

@@ -9,6 +9,7 @@ import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/fe
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { LoadingScreen } from '@/shared/ui';
+import NotFound from './NotFound';
 import PageHeader from '../components/PageHeader';
 import UserAvatar from '../components/UserAvatar';
 
@@ -18,7 +19,7 @@ const Board = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Partial<Task> | null>(null);
 
-  const { board, columns, tasks, taskColors, cache, isLoading, error } = useBoardData(boardId);
+  const { board, columns, tasks, taskColors, cache, isLoading, error, notFound } = useBoardData(boardId);
 
   const drag = useTaskDragAndDrop({
     tasks,
@@ -97,6 +98,18 @@ const Board = () => {
   };
 
   if (isLoading) return <LoadingScreen label="Loading this board" />;
+
+  // Ahead of the generic failure: a board that is missing, deleted or not the
+  // caller's answers the same on every attempt, so "Try again" would only
+  // repeat the answer.
+  if (notFound) {
+    return (
+      <NotFound
+        title="Board not found"
+        description="This board does not exist, was deleted, or you do not have access to it."
+      />
+    );
+  }
 
   if (error) {
     return (
