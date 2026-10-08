@@ -1,15 +1,32 @@
 import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 
+export type IconButtonSize = 'sm' | 'md' | 'lg';
+export type IconButtonShape = 'square' | 'round';
+
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   'aria-label': string;
+  /** 30, 36 or 44 pixels square. The large one is for a control that stands alone on a touch screen. */
+  size?: IconButtonSize;
+  shape?: IconButtonShape;
 }
 
-// Exact class string harvested from the icon button in src/components/PageHeader.tsx
-// (the back button), with the cursor utility split out so exactly one cursor class
-// is emitted depending on the disabled state.
+const SIZE_CLASSES: Record<IconButtonSize, string> = {
+  sm: 'size-7.5',
+  md: 'size-9',
+  lg: 'size-11',
+};
+
+const SHAPE_CLASSES: Record<IconButtonShape, string> = {
+  square: 'rounded-button-small',
+  round: 'rounded-pill',
+};
+
+// The glyph inherits the button's colour, so a caller never styles the icon
+// to make it muted: secondary text at rest, ink on hover.
 const BASE_CLASSES =
-  'p-2 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2';
+  'inline-flex shrink-0 items-center justify-center text-ink-secondary transition-colors duration-200 ' +
+  'enabled:hover:bg-line-06 enabled:hover:text-ink focus-ring';
 
 /**
  * IconButton
@@ -17,10 +34,17 @@ const BASE_CLASSES =
  * rendered without an accessible name.
  */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ disabled, className = '', ...rest }, ref) => {
-    const cursorClass = disabled ? 'cursor-not-allowed' : 'cursor-pointer';
+  ({ disabled, size = 'md', shape = 'square', className = '', ...rest }, ref) => {
+    const cursorClass = disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer';
 
-    return <button ref={ref} disabled={disabled} className={`${BASE_CLASSES} ${cursorClass} ${className}`} {...rest} />;
+    return (
+      <button
+        ref={ref}
+        disabled={disabled}
+        className={`${BASE_CLASSES} ${SIZE_CLASSES[size]} ${SHAPE_CLASSES[shape]} ${cursorClass} ${className}`}
+        {...rest}
+      />
+    );
   }
 );
 

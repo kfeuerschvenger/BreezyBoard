@@ -16,10 +16,11 @@ export interface FieldProps {
   children: (props: FieldControlProps) => ReactNode;
 }
 
-// Exact class strings harvested from src/components/FormInput.tsx.
-const LABEL_CLASSES = 'block text-sm font-medium text-gray-700 mb-2';
-const ERROR_CLASSES = 'mt-1 text-sm text-red-600';
-const HINT_CLASSES = 'mt-1 text-sm text-gray-500';
+// The label is secondary text at 600 and 13 pixels. The error text is the
+// danger step, 8.9:1 on white, and the hint is tertiary text, 5.41:1.
+const LABEL_CLASSES = 'mb-1.5 block text-[13px] font-semibold text-ink-secondary';
+const ERROR_CLASSES = 'mt-1.5 text-[13px] font-medium text-danger-strong';
+const HINT_CLASSES = 'mt-1.5 text-[13px] text-ink-tertiary';
 
 /**
  * Field
@@ -42,7 +43,11 @@ export function Field({ label, error, hint, required = false, icon, children }: 
         {required && <span aria-hidden="true"> *</span>}
       </label>
       <div className="relative">
-        {icon && <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">{icon}</div>}
+        {icon && (
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-tertiary">
+            {icon}
+          </div>
+        )}
         {children({ id, 'aria-invalid': Boolean(error), 'aria-describedby': describedBy })}
       </div>
       {hint && !error && (

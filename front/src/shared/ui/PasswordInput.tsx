@@ -2,6 +2,7 @@ import { forwardRef, useState } from 'react';
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { Icon } from './Icon';
+import { FIELD_BORDER, FIELD_BORDER_ERROR, FIELD_CLASSES } from './fieldStyles';
 
 export interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   hasError?: boolean;
@@ -14,10 +15,9 @@ export interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputEl
   toggleLabel?: string;
 }
 
-// Harvested from the existing password fields. The horizontal padding leaves
-// room for the icon on the left and the toggle on the right.
-const BASE_CLASSES =
-  'w-full pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors';
+// The field frame is shared with `Input`. The right padding leaves room for
+// the toggle and the left padding, set below, for the icon.
+const BASE_CLASSES = `${FIELD_CLASSES} h-12 rounded-field pr-12`;
 
 /**
  * A password field with the control that reveals it.
@@ -37,12 +37,15 @@ const BASE_CLASSES =
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   ({ hasError = false, icon, toggleLabel = 'password', className = '', ...rest }, ref) => {
     const [revealed, setRevealed] = useState(false);
-    const borderClass = hasError ? 'border-red-500' : 'border-gray-300';
+    const borderClass = hasError ? FIELD_BORDER_ERROR : FIELD_BORDER;
 
     return (
       <div className="relative">
         {icon && (
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" aria-hidden="true">
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-tertiary"
+            aria-hidden="true"
+          >
             {icon}
           </div>
         )}
@@ -58,9 +61,9 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           type="button"
           onClick={() => setRevealed(previous => !previous)}
           aria-label={`${revealed ? 'Hide' : 'Show'} ${toggleLabel}`}
-          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+          className="focus-ring-inset absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-button-small text-ink-tertiary transition-colors hover:text-ink"
         >
-          {revealed ? <Icon as={IconEyeOff} className="h-5 w-5" aria-hidden="true" /> : <Icon as={IconEye} className="h-5 w-5" aria-hidden="true" />}
+          <Icon as={revealed ? IconEyeOff : IconEye} className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
     );
