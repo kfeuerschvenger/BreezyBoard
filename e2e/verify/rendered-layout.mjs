@@ -117,7 +117,7 @@ check(
 
 log('\n--- the reset page password toggles sit on their own fields ---');
 
-await page.goto(`${FRONT}/reset-password?token=${'a'.repeat(64)}`);
+await page.goto(`${FRONT}/reset-password#token=${'a'.repeat(64)}`);
 await page.waitForSelector('form');
 
 const resetField = await box('input[name="newPassword"]');

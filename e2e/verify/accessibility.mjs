@@ -202,7 +202,7 @@ await scan('register');
 // can say that, so a made up one reaches the same page. Both password fields
 // are scanned with their reveal toggles, the part of PasswordInput that has
 // gone wrong before.
-await page.goto(`${FRONT}/reset-password?token=${'a'.repeat(64)}`);
+await page.goto(`${FRONT}/reset-password#token=${'a'.repeat(64)}`);
 await page.getByRole('heading', { level: 1, name: 'Choose a new password' }).waitFor();
 await scan('reset password');
 

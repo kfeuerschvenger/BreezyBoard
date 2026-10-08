@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AuthLayout } from '@/app/layouts';
 import { ResetPasswordForm } from '@/features/auth';
@@ -15,30 +15,28 @@ const LINK_CLASSES =
  * Where the emailed link lands. Public: the person arriving has no session,
  * and one who does is signed out the moment the reset succeeds.
  *
- * The token is read once, into state, and then taken out of the address bar
- * with a history replace. It is a credential: left in the URL it stays in the
- * browser history, in a bookmark made by reflex, and in the Referer of any
- * request the page makes. State survives the replace, so the form keeps
- * working; a reload does not, and lands on the same page a link with no
- * token gets.
+ * The emailed link carries the token in the fragment, `#token=...`, which a
+ * browser never sends to a server, so it stays out of access logs and proxies.
+ * It is read once, into state, and then taken out of the address bar with a
+ * history replace. It is a credential: left in the URL it stays in the browser
+ * history and in a bookmark made by reflex. State survives the replace, so the
+ * form keeps working; a reload does not, and lands on the same page a link with
+ * no token gets.
  */
 const ResetPassword = () => {
-  const location = useLocation();
   const navigate = useNavigate();
   const { clearSession } = useAuth();
 
-  const [token] = useState(() => new URLSearchParams(location.search).get('token'));
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token'));
   const [linkRefused, setLinkRefused] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useDocumentTitle('Reset password | BreezyBoard');
 
   useEffect(() => {
-    if (location.search) {
-      navigate({ pathname: location.pathname, search: '', hash: '' }, { replace: true });
+    if (window.location.hash || window.location.search) {
+      window.history.replaceState(window.history.state, '', window.location.pathname);
     }
-    // Once, on arrival. The effect reads the address the page was opened with.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const resetPassword = async (newPassword: string) => {
