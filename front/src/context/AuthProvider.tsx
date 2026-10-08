@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AuthService } from '@/services';
 import type { User } from '@/models';
+import { clearAuth } from '@/utils/auth.helper';
 import { AuthContext, type AuthContextType } from './AuthContext';
 import SessionManager from '@/features/session/SessionManager';
 
@@ -67,6 +68,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(true);
   };
 
+  const clearSession = () => {
+    clearAuth();
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+
   const logout = async () => {
     await AuthService.logout();
     setUser(null);
@@ -78,6 +85,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     register,
     logout,
+    clearSession,
     isAuthenticated,
     loading,
   };

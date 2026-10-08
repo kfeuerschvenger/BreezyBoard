@@ -7,7 +7,7 @@ import { AppShell } from '@/app/layouts/AppShell';
 import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
-import { Board, Home, Login, NotFound, Profile, Register } from '@/pages';
+import { Board, Home, Login, NotFound, Profile, Register, ResetPassword } from '@/pages';
 import { ToastProvider } from '@/shared/ui';
 
 import './index.css';
@@ -35,6 +35,9 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      {/* Public by necessity: the person arriving from the emailed link has
+          no session, and one who has is signed out when the reset succeeds. */}
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/"
         element={

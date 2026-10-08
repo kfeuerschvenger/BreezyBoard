@@ -14,6 +14,7 @@ const authState = (overrides: Partial<AuthContextType>): AuthContextType => ({
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  clearSession: vi.fn(),
   isAuthenticated: false,
   loading: false,
   ...overrides,

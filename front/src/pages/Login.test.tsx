@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Login from './Login';
@@ -14,14 +14,20 @@ vi.mock('@/hooks/useAuth', () => ({
   default: () => ({ login }),
 }));
 
+const forgotPassword = vi.fn();
+
+vi.mock('@/services', () => ({
+  AuthService: { forgotPassword: (email: string) => forgotPassword(email) },
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return { ...actual, useNavigate: () => navigate };
 });
 
-const renderLogin = () =>
+const renderLogin = (state?: { passwordReset?: boolean; forgotPassword?: boolean }) =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[{ pathname: '/login', state }]}>
       <Login />
     </MemoryRouter>
   );
@@ -33,6 +39,7 @@ const submit = () => screen.getByRole('button', { name: /Sign in/ });
 beforeEach(() => {
   login.mockReset().mockResolvedValue(undefined);
   navigate.mockReset();
+  forgotPassword.mockReset().mockResolvedValue(undefined);
 });
 
 describe('Login validation', () => {
@@ -138,20 +145,52 @@ describe('Login forgot password', () => {
     await user.click(screen.getByText('Forgot password?'));
   };
 
-  it('explains that the feature does not exist yet', async () => {
+  it('opens a dialog that asks for the email address', async () => {
     const user = userEvent.setup();
     await openForgot(user);
 
-    expect(await screen.findByText(/not implemented yet/)).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Forgot password' })).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByLabelText('Email address')).toBeInTheDocument();
+  });
+
+  it('requests the link for what was typed and confirms without saying whether an account exists', async () => {
+    const user = userEvent.setup();
+    await openForgot(user);
+
+    await user.type(within(await screen.findByRole('dialog')).getByLabelText('Email address'), 'ada@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send reset link' }));
+
+    await waitFor(() => expect(forgotPassword).toHaveBeenCalledWith('ada@example.com'));
+    expect(await screen.findByRole('status')).toHaveTextContent(/If an account exists for ada@example.com/);
   });
 
   it('can be dismissed again', async () => {
     const user = userEvent.setup();
     await openForgot(user);
-    await screen.findByText(/not implemented yet/);
+    await screen.findByRole('dialog');
 
-    await user.click(screen.getByRole('button', { name: 'OK' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() => expect(screen.queryByText(/not implemented yet/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('opens straight away when the page was reached asking for a new link', async () => {
+    renderLogin({ forgotPassword: true });
+
+    expect(await screen.findByRole('dialog', { name: 'Forgot password' })).toBeInTheDocument();
+  });
+});
+
+describe('Login after a password reset', () => {
+  it('says the password was changed', () => {
+    renderLogin({ passwordReset: true });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Your password has been changed. Sign in with your new password.');
+  });
+
+  it('says nothing about a reset on an ordinary visit', () => {
+    renderLogin();
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

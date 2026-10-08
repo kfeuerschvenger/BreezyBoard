@@ -1,17 +1,27 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthLayout } from '@/app/layouts';
 import { ForgotPasswordModal, LoginForm } from '@/features/auth';
+import { AuthService } from '@/services';
 import type { LoginCredentials } from '@/models';
+
+// What a page that sends someone here can ask of it, through the router's
+// location state: show the confirmation of a finished reset, or open the
+// dialog that asks for a new link.
+interface LoginLocationState {
+  passwordReset?: boolean;
+  forgotPassword?: boolean;
+}
 
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
   const [apiError, setApiError] = useState<string | null>(null);
-  const [forgotOpen, setForgotOpen] = useState(false);
+  const state = useLocation().state as LoginLocationState | null;
+  const [forgotOpen, setForgotOpen] = useState(Boolean(state?.forgotPassword));
 
   const signIn = async (credentials: LoginCredentials) => {
     setApiError(null);
@@ -37,6 +47,12 @@ const Login = () => {
           <p className="text-gray-600">Sign in to your account to continue</p>
         </div>
 
+        {state?.passwordReset && (
+          <div role="status" className="mb-4 p-3 bg-green-50 text-green-800 rounded-lg text-sm">
+            Your password has been changed. Sign in with your new password.
+          </div>
+        )}
+
         <LoginForm
           onSubmit={signIn}
           error={apiError}
@@ -53,7 +69,11 @@ const Login = () => {
           </p>
         </div>
 
-        <ForgotPasswordModal open={forgotOpen} onClose={() => setForgotOpen(false)} />
+        <ForgotPasswordModal
+          open={forgotOpen}
+          onClose={() => setForgotOpen(false)}
+          onSubmit={email => AuthService.forgotPassword(email)}
+        />
       </motion.div>
     </AuthLayout>
   );

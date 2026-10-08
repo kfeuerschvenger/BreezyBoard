@@ -505,6 +505,35 @@ const anonymous = [
     },
   },
   {
+    // The confirmation replaces the form inside the dialog, so it is a layout
+    // of its own: a sentence that wraps around an address of any length, and
+    // one button.
+    name: 'login, forgot password confirmation',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/login`);
+      await anonPage.waitForSelector('form');
+      await anonPage.getByRole('button', { name: /forgot password/i }).click();
+      const dialog = anonPage.getByRole('dialog', { name: 'Forgot password' });
+      await dialog.getByLabel('Email address').fill('a.very.long.address.nobody.owns@example.test');
+      await dialog.getByRole('button', { name: 'Send reset link' }).click();
+      await dialog.getByRole('status').waitFor();
+    },
+  },
+  {
+    name: 'reset password',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/reset-password?token=${'a'.repeat(64)}`);
+      await anonPage.getByRole('heading', { level: 1, name: 'Choose a new password' }).waitFor();
+    },
+  },
+  {
+    name: 'reset password, link cannot be used',
+    open: async () => {
+      await anonPage.goto(`${FRONT}/reset-password`);
+      await anonPage.getByRole('heading', { level: 1, name: 'This link cannot be used' }).waitFor();
+    },
+  },
+  {
     name: 'register',
     open: async () => {
       await anonPage.goto(`${FRONT}/register`);
