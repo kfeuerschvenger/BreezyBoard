@@ -6,3 +6,5 @@ export type { ForgotPasswordModalProps } from './components/ForgotPasswordModal'
 export { LoginForm } from './components/LoginForm';
 export type { LoginFormProps, LoginFormValues } from './components/LoginForm';
 export { default as RegisterForm } from './components/RegisterForm';
+export { ResetPasswordForm } from './components/ResetPasswordForm';
+export type { ResetPasswordFormProps, ResetPasswordValues } from './components/ResetPasswordForm';

@@ -115,6 +115,35 @@ check(
   describe(loginToggle, loginField)
 );
 
+log('\n--- the reset page password toggles sit on their own fields ---');
+
+await page.goto(`${FRONT}/reset-password?token=${'a'.repeat(64)}`);
+await page.waitForSelector('form');
+
+const resetField = await box('input[name="newPassword"]');
+const resetToggle = await box('button[aria-label="Show new password"]');
+check(
+  'the new password toggle is inside the new password field',
+  containedBy(resetToggle, resetField),
+  describe(resetToggle, resetField)
+);
+
+const resetConfirmField = await box('input[name="confirmPassword"]');
+const resetConfirmToggle = await box('button[aria-label="Show confirm new password"]');
+check(
+  'the confirm new password toggle is inside the confirm field',
+  containedBy(resetConfirmToggle, resetConfirmField),
+  describe(resetConfirmToggle, resetConfirmField)
+);
+
+check(
+  'the two reset toggles are not stacked on each other',
+  Boolean(resetToggle && resetConfirmToggle) && Math.abs(resetToggle.y - resetConfirmToggle.y) > 4,
+  resetToggle && resetConfirmToggle
+    ? `y=${Math.round(resetToggle.y)} and y=${Math.round(resetConfirmToggle.y)}`
+    : 'one of the two did not render'
+);
+
 await browser.close();
 
 const failed = results.filter(r => !r).length;

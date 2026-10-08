@@ -183,9 +183,34 @@ await page.getByRole('button', { name: /forgot password/i }).click();
 await page.waitForTimeout(400);
 await scan('login, forgot password open');
 
+// The confirmation replaces the form inside the same dialog, so it is a state
+// of its own: a live region and a control that has just received focus. The
+// address belongs to nobody, which is also the case the confirmation exists
+// for.
+await page.getByRole('dialog', { name: 'Forgot password' }).getByLabel('Email address').fill(`axe-nobody-${Date.now()}@example.test`);
+await page.getByRole('button', { name: 'Send reset link' }).click();
+await page.getByRole('dialog', { name: 'Forgot password' }).getByRole('status').waitFor();
+await page.waitForTimeout(400);
+await scan('login, forgot password confirmation');
+
 await page.goto(`${FRONT}/register`);
 await page.waitForSelector('form').catch(() => {});
 await scan('register');
+
+// The reset page opened from an emailed link, with a token in the address.
+// The form shows whether or not the token is any good, since only the server
+// can say that, so a made up one reaches the same page. Both password fields
+// are scanned with their reveal toggles, the part of PasswordInput that has
+// gone wrong before.
+await page.goto(`${FRONT}/reset-password?token=${'a'.repeat(64)}`);
+await page.getByRole('heading', { level: 1, name: 'Choose a new password' }).waitFor();
+await scan('reset password');
+
+// The same address with no token, or with one the server refused: the page
+// that replaces the form.
+await page.goto(`${FRONT}/reset-password`);
+await page.getByRole('heading', { level: 1, name: 'This link cannot be used' }).waitFor();
+await scan('reset password, link cannot be used');
 
 // An address that leads nowhere, before anyone has signed in. The page has to
 // stand on its own here: no account menu, no redirect to login.

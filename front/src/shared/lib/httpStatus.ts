@@ -5,6 +5,22 @@ export const httpStatusOf = (error: unknown): number | undefined =>
   isAxiosError(error) ? error.response?.status : undefined;
 
 /**
+ * The machine-readable `code` of a failed request's error body, or undefined
+ * when there is none. The API sends one in every error envelope, and a
+ * caller that must tell two failures of the same status apart reads it here
+ * rather than comparing message text.
+ */
+export const apiErrorCodeOf = (error: unknown): string | undefined => {
+  if (!isAxiosError(error)) {
+    return undefined;
+  }
+
+  const code = (error.response?.data as { code?: unknown } | undefined)?.code;
+
+  return typeof code === 'string' ? code : undefined;
+};
+
+/**
  * Whether a failed read means the address does not lead to anything the
  * caller can see, as opposed to the request having failed.
  *

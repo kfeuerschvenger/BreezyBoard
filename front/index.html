@@ -11,6 +11,10 @@
          sized with them, end above the keyboard instead of behind it. Browsers
          that do not support it ignore it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+    <!-- Matches the Referrer-Policy header nginx sends in production, so the
+         development server holds the same line: the password reset page is
+         opened with a credential in its address. -->
+    <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#333" />
     <meta name="og:description" property="og:description" content="BreezyBoard application" />

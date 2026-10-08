@@ -41,6 +41,7 @@ vi.mock('@/pages', () => ({
   Profile: () => <div>Profile page</div>,
   Register: () => <div>Register page</div>,
   NotFound: () => <div>Not found page</div>,
+  ResetPassword: () => <div>Reset password page</div>,
 }));
 
 const mockedUseAuth = vi.mocked(useAuth);
@@ -50,6 +51,7 @@ const authState = (overrides: Partial<AuthContextType>): AuthContextType => ({
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  clearSession: vi.fn(),
   isAuthenticated: false,
   loading: false,
   ...overrides,
@@ -114,5 +116,30 @@ describe('an unknown address', () => {
 
     expect(await screen.findByText('Not found page')).toBeInTheDocument();
     expect(screen.queryByText('Login page')).not.toBeInTheDocument();
+  });
+});
+
+describe('the password reset address', () => {
+  beforeEach(() => {
+    mockedUseAuth.mockReset();
+    route.path = '/reset-password';
+  });
+
+  it('is reachable without a session, because the person arriving from the emailed link has none', async () => {
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false }));
+
+    render(<App />);
+
+    expect(await screen.findByText('Reset password page')).toBeInTheDocument();
+    expect(screen.queryByText('Login page')).not.toBeInTheDocument();
+  });
+
+  it('is reachable with a session too, and does not send the visitor to their boards', async () => {
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
+
+    render(<App />);
+
+    expect(await screen.findByText('Reset password page')).toBeInTheDocument();
+    expect(screen.queryByText('Protected home content')).not.toBeInTheDocument();
   });
 });

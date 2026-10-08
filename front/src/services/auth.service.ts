@@ -21,6 +21,20 @@ export const AuthService = {
     return response.data.data;
   },
 
+  // Always resolves the same way for an address with an account and one
+  // without, so there is nothing here to branch on and a caller must not
+  // pretend there is: the confirmation it shows has to be neutral too.
+  async forgotPassword(email: string): Promise<void> {
+    await api.post('/auth/forgot-password', { email });
+  },
+
+  // The token is the one from the emailed link. A refused token rejects with
+  // the API's INVALID_RESET_TOKEN code whether it was unknown, expired or
+  // already used.
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await api.post('/auth/reset-password', { token, newPassword });
+  },
+
   // Replaces validateToken(). The backend wraps every response body as
   // { success, data }, /auth/me included, so this unwraps via
   // response.data.data like every other endpoint here.

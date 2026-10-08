@@ -13,6 +13,8 @@ docker compose up -d
 docker compose exec back npm run seed:all
 ```
 
+The stack includes Mailpit, the development mail catcher, on port 8025 (`E2E_MAIL_URL` overrides it). The Playwright suite reads the password reset email through its HTTP API, so that container must be up for `tests/password-reset.spec.ts`.
+
 Then, from `e2e/`:
 
 ```bash
@@ -119,7 +121,7 @@ It found P4-16, absolutely positioned `sr-only` text escaping a column's scrolle
 
 Every main surface, and the task drawer as a bottom sheet, measured at 320, 390, 768, 1024 and 1440 pixels.
 
-The surfaces are the login page with its forgot password dialog, the register page with the terms dialog, the dashboard with the create board dialog, the add members dialog and the account menu, the board with its move menu, the new task drawer and the edit task drawer, the profile page with its saved dialog, and the not found page for an unknown address (signed in and signed out) and for a board that does not exist. At every width the page must not scroll sideways, no control may be cut off by a box that does not scroll or sit outside the viewport, no two controls may overlap, every control must be at least 24 by 24 pixels, a page title must keep at least 120 pixels, and text clipped with an ellipsis must carry a title. Controls inside a scrolling region are measured where they are visible, a button placed inside the field it belongs to is the one allowed overlap, controls on different layers (a menu or a dialog over the page behind it) are not compared, and a link or button set inside a sentence is exempt from the size rule as WCAG 2.5.8 exempts it. The register page also asserts that the two name fields stack below 640 pixels and share a row from there up.
+The surfaces are the login page with its forgot password dialog (the form and the confirmation that replaces it), the password reset page (with a token and without one), the register page with the terms dialog, the dashboard with the create board dialog, the add members dialog and the account menu, the board with its move menu, the new task drawer and the edit task drawer, the profile page with its saved dialog, and the not found page for an unknown address (signed in and signed out) and for a board that does not exist. At every width the page must not scroll sideways, no control may be cut off by a box that does not scroll or sit outside the viewport, no two controls may overlap, every control must be at least 24 by 24 pixels, a page title must keep at least 120 pixels, and text clipped with an ellipsis must carry a title. Controls inside a scrolling region are measured where they are visible, a button placed inside the field it belongs to is the one allowed overlap, controls on different layers (a menu or a dialog over the page behind it) are not compared, and a link or button set inside a sentence is exempt from the size rule as WCAG 2.5.8 exempts it. The register page also asserts that the two name fields stack below 640 pixels and share a row from there up.
 
 A last section opens the dashboard and the board on an emulated touch screen and asserts that no control is transparent. A phone has no hover, so a control that only appears when the pointer is over its card does not exist there.
 
