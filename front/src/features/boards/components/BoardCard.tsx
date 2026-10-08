@@ -89,16 +89,25 @@ export const BoardCard: React.FC<BoardCardProps> = ({
             </h3>
           </div>
 
-          <div className="flex items-center gap-2">
-            <BoardCardMenu
-              boardTitle={title}
-              open={menuOpen}
-              isDeleting={isDeleting}
-              onToggle={onToggleMenu}
-              onAddMember={onAddMember}
-              onDelete={onDelete}
-            />
-          </div>
+          {/*
+            Both actions in the menu are owner only on the server, so for
+            anybody else the menu would hold nothing that can succeed and is
+            not rendered at all. The role is the server's: a workspace admin
+            arrives as an owner, and a board without a role is treated as
+            not owned rather than guessed at.
+          */}
+          {board.viewerRole === 'owner' && (
+            <div className="flex items-center gap-2">
+              <BoardCardMenu
+                boardTitle={title}
+                open={menuOpen}
+                isDeleting={isDeleting}
+                onToggle={onToggleMenu}
+                onAddMember={onAddMember}
+                onDelete={onDelete}
+              />
+            </div>
+          )}
         </div>
 
         <p className="text-sm text-gray-600 font-body mb-4 min-h-[3rem]">{board.description || 'No description'}</p>

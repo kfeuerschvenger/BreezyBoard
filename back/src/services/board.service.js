@@ -4,7 +4,7 @@ import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
 import Task from '../models/Task.js';
 import Workspace from '../models/Workspace.js';
-import { resolveWorkspaceRole } from '../middleware/auth.middleware.js';
+import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middleware.js';
 import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
 
@@ -241,6 +241,21 @@ export const purgeExpiredBoards = async ({ retentionMs, now = new Date(), onErro
 // alongside the boards so a client can discover `total` either way; only
 // whether `boards` itself is truncated depends on `limit` being present.
 /**
+ * The caller's role in every workspace they belong to, keyed by workspace id.
+ *
+ * Both the listing filter and the per board role in the list are derived from
+ * this one read, so they cannot disagree about which workspaces count.
+ *
+ * @param {string} userId
+ * @returns {Promise<Map<string, 'admin' | 'member'>>}
+ */
+export const workspaceRolesOf = async userId => {
+  const workspaces = await Workspace.find({ 'members.user': userId }).select('members');
+
+  return new Map(workspaces.map(workspace => [workspace._id.toString(), resolveWorkspaceRole(workspace, userId)]));
+};
+
+/**
  * The boards this user may read, as a Mongo filter.
  *
  * It mirrors `resolveBoardRole` clause for clause on purpose. A listing that
@@ -253,19 +268,20 @@ export const purgeExpiredBoards = async ({ retentionMs, now = new Date(), onErro
  * from the workspace grants nothing, in the listing exactly as in the check.
  *
  * @param {string} userId
+ * @param {Map<string, 'admin' | 'member'>} [roles] - the caller's workspace roles, when already loaded
  * @returns {Promise<object>} a filter for Board.find
  */
-export const visibleBoardFilter = async userId => {
-  const workspaces = await Workspace.find({ 'members.user': userId }).select('members');
+export const visibleBoardFilter = async (userId, roles) => {
+  const workspaceRoles = roles ?? (await workspaceRolesOf(userId));
 
   const memberOf = [];
   const adminOf = [];
 
-  for (const workspace of workspaces) {
-    memberOf.push(workspace._id);
+  for (const [workspaceId, role] of workspaceRoles) {
+    memberOf.push(workspaceId);
 
-    if (resolveWorkspaceRole(workspace, userId) === 'admin') {
-      adminOf.push(workspace._id);
+    if (role === 'admin') {
+      adminOf.push(workspaceId);
     }
   }
 
@@ -360,7 +376,8 @@ export const summariseBoardTasks = async boards => {
 };
 
 export const getUserBoards = async (userId, { limit, offset } = {}) => {
-  const filter = await visibleBoardFilter(userId);
+  const roles = await workspaceRolesOf(userId);
+  const filter = await visibleBoardFilter(userId, roles);
 
   const total = await Board.countDocuments(filter);
 
@@ -392,6 +409,15 @@ export const getUserBoards = async (userId, { limit, offset } = {}) => {
 
     return {
       ...board,
+      // The same resolver the single board read uses, so the list and the
+      // read agree on who administers what, a workspace admin included. It
+      // compares `createdBy` as an id and the list populates it into an
+      // object, so the id is handed over in its place.
+      viewerRole: resolveBoardRole(
+        { ...board, createdBy: board.createdBy?._id },
+        userId,
+        roles.get(board.workspaceId.toString())
+      ),
       taskCount: summary?.total ?? 0,
       memberCount: (board.members ?? []).length,
       progress: summary?.progress ?? 0,

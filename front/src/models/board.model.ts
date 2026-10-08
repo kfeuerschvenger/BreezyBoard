@@ -17,9 +17,9 @@ export interface Board {
   memberCount: number;
   progress: number;
   /**
-   * The caller's own role on this board, set by the server on a single board
-   * read only. The server decides it, so a workspace admin is an owner here
-   * exactly as the owner-only routes treat them.
+   * The caller's own role on this board, set by the server on a board read and
+   * on every entry of the board list. The server decides it, so a workspace
+   * admin is an owner here exactly as the owner-only routes treat them.
    */
   viewerRole?: 'owner' | 'member';
   createdAt?: string;
