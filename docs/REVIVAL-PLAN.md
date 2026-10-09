@@ -236,7 +236,7 @@ Observed while building the end-to-end suite rather than by reading the code. Th
 
 A human pressing and moving generates many more intermediate events than an automated pointer, so this is not a defect a user would hit often. It does mean the interaction has very little margin, and a slow device or a heavy board is exactly where that margin disappears. Adding a distance activation constraint was tried and made the automated case worse, so the fix is not obvious and should be done with the drag rewrite in Phase 4 rather than guessed at now.
 
-**Status: known issue, deferred.** It has not been reproduced by hand, and the measurements so far place the failures inside full runs of the end to end spec rather than in isolation, which points at state carried between tests or at contention. It is not scheduled in any phase and does not block one. Whoever picks it up starts from the measurements in section 12.6b, and from the "Move to" menu, which gives every move a path that does not depend on the drag sensor.
+**Status: closed in Phase 6b. The root cause is in the last paragraphs of this entry, and the paragraphs between are the investigation that preceded it.** The text below is kept because it records two ruled-out hypotheses and a measuring lesson. It has not been reproduced by hand, and the measurements so far place the failures inside full runs of the end to end spec rather than in isolation, which points at state carried between tests or at contention. It is not scheduled in any phase and does not block one. Whoever picks it up starts from the measurements in section 12.6b, and from the "Move to" menu, which gives every move a path that does not depend on the drag sensor.
 
 Measured during Phase 4b, because it was briefly mistaken for a regression: the core loop spec fails roughly one run in six, and the failure is always the same one, the sensor never announcing the pickup so the `role="status"` live region stays empty. The rate is identical with and without the workspace authorization layer, at 5 passes in 6 either way and with the same durations, so the extra query that layer adds per request is not what causes it.
 
@@ -251,6 +251,26 @@ The first was `whileTap={{ scale: 0.98 }}` on the card's outer `motion.div`, whi
 The second was `whileHover={{ scale: 1.02 }}`, on the theory that the spec measures the handle's bounding box before moving the pointer there, so it presses at coordinates taken before the card grew. Removing both animations measured 3 passes in 8. No improvement either, and if anything worse.
 
 So it is neither animation. What remains untested is whether this is a product defect at all or a defect in the spec's pointer choreography, and answering that needs a measurement method better than eight runs on a laptop that has been running Docker all afternoon. The honest state is: the mechanism is not understood, the fix is still not obvious, and guessing at it is what this entry has now cost twice.
+
+**Root cause, found in Phase 6b: the press never reached the drag handle, in two ways, and the sensor was never the problem.** An event log on the page (capture listeners on `pointerdown`, `pointermove`, `selectstart`) showed every failing run pressing on a `DIV` and starting a text selection, never on the handle button, so dnd-kit received no press and never announced a pickup. The two ways are independent. First, the drawer that creates the task is still leaving when the spec presses: its scrim, `fixed inset-0 z-40`, stays mounted until the panel's spring finishes (about 480 to 580 ms in the measurements) and intercepts the pointer for all of it. Second, the spec decided the card had stopped moving by reading the handle's box twice, 120 ms apart. The card's entrance spring starts late when the renderer stalls on its first frame (animation frames 100 to 125 ms long were logged right after the card mounts), so both readings saw the starting position, 20 px low, agreed, and the press landed on the card's header row after the card had risen. A slower renderer makes both races more likely, which is why the rate moved between sessions and rose when the backdrop blur and the wind layer were added.
+
+It is both a test defect and a product defect. The spec pressed before the page was settled, which a person does not do with a mouse, so that half is fixed in the spec: it waits for the dialog to be gone and for the card's own state to say it has stopped (opacity 1, transform cleared), instead of comparing two boxes. The product half is real if small: for the length of the exit, anything pressed on the board lands on the scrim, so the first click after a save is swallowed and a drag started in that window becomes a text selection. `Drawer` now sets `pointer-events: none` on its scrim and panel as soon as it is closed, and a component test holds it. `Modal` wraps its scrim in a full screen container with the same shape, but it leaves in 200 ms and was not measured, so it was not changed.
+
+Measured with the drag spec in isolation, retries off, one change at a time:
+
+| Change | Failures |
+|---|---|
+| None, the spec as it was | 8 of 12 |
+| Wind layer hidden | 3 of 12 |
+| Backdrop blur removed everywhere | 6 of 12 |
+| Card transform forced to none | 4 of 12 |
+| Spec waits for the dialog to be gone | 0 of 16 |
+| Scrim made inert from outside (CSS), spec unchanged | 5 of 16 |
+| Product fix alone (`Drawer` inert while leaving), spec unchanged | 3 of 16 |
+| Spec fix alone (dialog gone, card settled), product unchanged | 0 of 16 |
+| Both | 0 of 24 |
+
+Every row except the first, the spec fix alone and the last ran on a copy of the spec that logs the events, whose own baseline was 6 failures in 14 runs over two sets. Rates at 12 to 16 runs are noisy, which is why the wind, blur and transform rows could not be told apart from that baseline and why the earlier attempts concluded nothing. The scrim row leaves 5 failures because the stale box remains; the product row leaves 3 for the same reason. Neither half is enough alone for the product, and the spec's wait is enough alone for the spec, which is the sense in which the spec was at fault. A distance activation constraint was not measured again: it cannot help when the press does not land on the handle, and the earlier result that it made things worse is within the noise of a rate that swung between 1 in 6 and 2 in 3 across sessions.
 
 **P2-6. Drag-and-drop has no concurrency control.** File `front/src/pages/Board.tsx:92-183`.
 
@@ -390,7 +410,7 @@ Related: 10 or more source files import from `framer-motion`, which is not a dec
 
 Phases 0 through 6 are complete, phase 6b is in progress, and phases 7 and 8 have not started. Everything below this block still describes the plan as designed; this block records what has actually landed on the `fix/phase-1-foundations` branch.
 
-Three things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. `P2-6a`, the intermittent drag pickup, is a known issue deferred out of every phase, see section 5.3. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
+Two things are deliberately left open and are not oversights. Three of the line targets in section 12.6 are missed, and 12.6b records the reason for each rather than the number alone. And `FormInput` is gone but the wider half of `P4-3` is not: nothing below a browser catches a label whose content is an expression.
 
 | Phase | State | Evidence |
 |---|---|---|
@@ -418,7 +438,7 @@ Three things are deliberately left open and are not oversights. Three of the lin
 | 4, progress aggregation | Done | Board progress, task counts and the dashboard average all computed (P2-4) |
 | 4, drag concurrency | Done | In-flight move aborted by the next drag, failures refetch rather than restore (P2-6) |
 | 4, indexes | Done | One compound index on tasks, three on boards, all verified as IXSCAN against the real queries |
-| 4, overall | **Done** | P2-6a stays open, with two ruled-out hypotheses recorded |
+| 4, overall | **Done** | P2-6a was left open here and is closed in Phase 6b, see the row below and section 5.3 |
 | 5a, accessibility gate | Done | jsx-a11y plus layer rules, vitest-axe on every primitive, an axe ratchet over six live surfaces |
 | 5a, design tokens | Done | Inter actually bound, font-heading and font-body stop being no-ops (P4-1) |
 | 5c, create board modal | Done | On Modal, Field and React Hook Form. Labels 10 to 6, button-name cleared, region 10 to 6 |
@@ -496,6 +516,7 @@ Three things are deliberately left open and are not oversights. Three of the lin
 | 6b.3, the breeze field | Done | `User.breeze` is `still`, `calm`, `breezy` or `gusty`, default `breezy`, and a record written before the field existed reads as the default. It travels in the current user payload (`/auth/me` and the login and registration answers), and `PUT /users/:id` accepts it through the Zod schema and the service whitelist. Only its owner can write it |
 | 6b.3, app shell, sidebar, header and navigation panel | Done | Every signed in page sits in `AppShell`, a layout route: the three-gradient ground, a 240 pixel glass sidebar in a 252 pixel column, a 56 pixel header with a breadcrumb and the view's main action, and a content area that scrolls on its own. The document never scrolls, and the board route clips the content area so its columns scroll alone. The sidebar holds the logo and wordmark, Home, the boards as real links with a hue dot and an active state, a plus button that opens the create board dialog, and the account button with the privacy policy, the terms, the author's links and name under it. Below 1024 pixels it is an off-canvas panel opened from a header button, with a focus trap, Escape, scrim, focus return and closing on navigation. The axe gate's `landmark-one-main` budget fell to zero on every signed in surface and `region` to zero on all but the move menu's popup, see 12.6b |
 | 6b.3, the Breeze control and the wind | Done | `features/breeze` holds the setting. `BreezeProvider` reads the stored level from the signed in user and writes a choice optimistically through TanStack Query, and `useBreeze` gives `stored`, `level` and `reducedBySystem` to anything below the shell, which is how card sway will read Gusty in slice 6. `AppShell` draws the wind layer over the ground in the dark tone at that level, the logo glyph sways only while there is wind, and the sidebar's Breeze box is a four segment control with the speed hint. A `prefers-reduced-motion` preference holds `level` at still and never touches `stored`, and the box says so in its hint and in the group's name. `SegmentedControl` gained an `xs` size for it. `design-tokens.mjs` grew to 349 assertions |
+| 6b, P2-6a | Done | Root cause: the press never reached the handle, because the leaving drawer's scrim caught it and the spec read a stale box. `Drawer` is inert while leaving and the spec waits on the page settling. 0 of 24 failures in isolation, from 8 of 12. Native drag and drop evaluated and rejected, see 12.6b |
 | 7, documentation and CI | Not started | The contributing guide is out of scope |
 | 8, product growth | Planned | Labels and due dates, notes, column management, profile preferences, Google sign-in, Today's view |
 
@@ -632,6 +653,9 @@ It runs after Phase 6 so it styles the final layout rather than one about to be 
 | Ambient motion | The Breeze setting offers Still, Calm, Breezy and Gusty. Still stops every ambient animation, which WCAG 2.2.2 requires for motion that runs longer than five seconds. Breezy is the default, a reduced-motion preference forces Still, and the choice is stored on the user so it follows them across devices. |
 | Imagery | The reference has five image slots: the login postcard, the Home photo, the profile cover and two empty-state illustrations. Each renders its gradient fallback until real images exist. The Home photo comes from an image source chosen in Phase 8f. |
 | Voice | The wind vocabulary is adopted in interface copy: toasts, empty states, buttons. User data such as column names is never renamed. |
+| Board colour | A board's hue is the colour its owner chose, not a hash of its id. The board palette is the six hues of the design system, and the sidebar dot and the Home tile cover use it. Slice 5 implements it. |
+| Board width at 1440 | The reference's 292 pixel columns stay and the row scrolls horizontally when four do not fit beside the sidebar. P4-42 is closed as accepted behaviour. |
+| Drag and drop engine | dnd-kit stays. The reference's native HTML5 drag and drop has no keyboard model and no announcements. The gap, the column highlight and the landing animation are built on dnd-kit in slice 6, see 12.6b. |
 | Fonts and icons | Fonts are self-hosted, so the CSP no longer allows a third-party font origin. Tabler replaces Lucide. One animation package, `motion`, replaces the `framer-motion` and `motion` pair. |
 
 **Slices, in order.**
@@ -1745,7 +1769,27 @@ Phase 6b slice 3, the Breeze setting in the client. Two values are kept apart be
 
 **P4-41, closed, low: a key sent in the same instant as the pick up is lost, and two keyboard tests sent one.** `KeyboardSensor` starts listening for the arrows one task after the key that picks a card up, so an arrow sent in the same instant is dropped. Two tests pressed Space and an arrow back to back and had passed because the page was fast enough to run that task in between. With the shell on the page, they failed 10 times in 12 on their own with retries off. The wait is for the pick up announcement, which is what a person does, and both then passed 16 times in 16. The same hazard holds between two arrows: the sensor measures a key from where the previous one left the card, so an arrow sent before the previous one was announced is measured from a stale position. With the wind animating, the arrows test failed twice in a full run, and each arrow now waits for its announcement, after which both tests passed 20 times in 20. This is not P2-6a, which is a pointer drag, and the pointer sensor was not touched. The first theory, that the row scrolled because four columns no longer fit at 1440 and the sensor's smooth scroll swallowed the key, was tested and was wrong: the announcements lagged the same way at 1920, where nothing scrolls, and an instant scroll did not fix the tests.
 
-**P4-42, open, medium: at 1440 the default four column board scrolls sideways.** The sidebar takes 252 pixels and the page margins 40, which leaves 1140 for the 1376 that four columns need. The reference design's 292 pixel columns with 14 pixel gaps need 1210, so they overflow at 1440 too. It is a consequence of the layout the product owner chose, not a defect in the code, and it is recorded for slice 6, which sets the column width. The board-layout gate asserts the overflow at 1440 and the fit at 1920.
+**P4-42, closed as accepted behaviour, medium: at 1440 the default four column board scrolls sideways.** The sidebar takes 252 pixels and the page margins 40, which leaves 1140 for the 1376 that four columns need. The reference design's 292 pixel columns with 14 pixel gaps need 1210, so they overflow at 1440 too. It is a consequence of the layout the product owner chose, not a defect in the code, and it is recorded for slice 6, which sets the column width. The board-layout gate asserts the overflow at 1440 and the fit at 1920.
+
+The product owner decided it: the reference's 292 pixel column width stays and the row scrolls horizontally at 1440, as a kanban board normally does. Nothing is changed to make four columns fit, and the gate keeps asserting the overflow.
+
+**Product decision: a board's hue is the colour its owner chose, not a hash of its id.** The board palette becomes the six hues of the design system (sky, teal, green, sand, coral, lavender), the colour picker in the create board dialog offers those six, and the sidebar dot and the Home tile cover are drawn from the board's own colour. `SidebarBoards` still takes the dot's hue from `hueFromSeed(board._id)`, which was a stand-in; replacing it is part of slice 5 and a note sits at the line. `hueFromSeed` stays for avatars, which have no chosen colour.
+
+**P2-6a, closed: the pointer drag test was pressing before the page had settled, and the drawer's scrim was catching the press.** The mechanism and the measurements are in section 5.3. Two changes: `Drawer` is inert to the pointer from the moment it is closed, with a component test that fails without it, and the spec waits for the dialog to be gone and for the card's own transform to be cleared instead of comparing two bounding boxes. The spec then passed 24 of 24 in isolation with retries off, 16 of 16 with only the spec change, and the full suite passed 20 of 20. The reading of the earlier entries that this was contention or state carried between tests was close but not it: contention is what made the card's spring start late.
+
+**Drag and drop, native HTML5 against dnd-kit, evaluated at the product owner's request. Recommendation: keep dnd-kit.** The prototype uses native drag and drop. The evidence for staying:
+
+| Question | Native HTML5 | dnd-kit, as built |
+|---|---|---|
+| Pickup reliability | A throwaway page with the same choreography (press, wait 100 ms, move 12 px) fired `dragstart` 30 of 30 on a draggable card and 30 of 30 on a draggable button | Picked up every time the press landed on the handle: 24 of 24, 16 of 16 and the full suite. The failure was upstream of both |
+| Keyboard | None. The reference states there is no keyboard alternative | Full model on the keyboard sensor: pick up, move across columns and positions, drop, cancel, with announcements and focus returned (P4-17, P4-18), plus the Move to menu for WCAG 2.5.7 |
+| Screen reader | No announcements, and a drag has no accessible name or state | Live region with the board's own wording, tested by four Playwright specs |
+| Row auto-scroll | The browser scrolls near an edge by its own rules, which cannot be tuned or tested here | Configurable, and the phone spec asserts the row follows the card across four columns |
+| Drag preview | A static snapshot taken at `dragstart`, which is why the reference hides the card one tick later | `DragOverlay` is a live element that can be scaled, tilted and shadowed |
+| Touch | Not measured here. Native drag on mobile browsers is a long press with a system drag image and competes with scrolling the column row | A pointer sensor on the handle, with `touch-action` set on it. Not measured on a device either |
+| Playwright | Works with the real mouse, as the spike shows | Works with the real mouse |
+
+A hybrid buys nothing: the only thing native offers that dnd-kit lacks is the browser's own drag image, and it costs the keyboard model and the announcements, which are the reason the interaction passes the accessibility gate. The three visual parts of the reference are all reachable with dnd-kit, for slice 6. The 58 pixel dashed gap is a placeholder rendered by `Column` at an index held in the drag hook's state, computed on `onDragOver` from the card under the pointer and which half of it the dragged card's centre is in, with the dragged card hidden in its list and the keyboard path placing the gap from the same snapshot it already uses. The column highlight is `isOver` from the `useDroppable` the column already has, extended to also be true while the card under the pointer belongs to that column. The landing animation is two parts: `dropAnimation` on `DragOverlay` for the overlay settling, and the `bbLand` class on the moved card for the settle, keyed on a `landedId` the mover sets on drop and cleared when the animation ends, under the global reduced-motion policy.
 
 ### 12.7 Sequencing
 

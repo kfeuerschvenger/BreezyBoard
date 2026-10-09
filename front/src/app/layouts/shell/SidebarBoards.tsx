@@ -69,6 +69,9 @@ export const SidebarBoards = ({ onCreate, onNavigate }: SidebarBoardsProps) => {
                   }`
                 }
               >
+                {/* TODO(phase 6b, slice 5): the dot takes the hue the board's owner chose,
+                    one of the six design system hues. A hash of the id stands in until
+                    the board palette is those six hues, see docs/REVIVAL-PLAN.md 12.6b. */}
                 <span
                   aria-hidden="true"
                   className={`size-3 shrink-0 rotate-12 rounded-dot ${MID_BACKGROUND[hueFromSeed(board._id)]}`}
