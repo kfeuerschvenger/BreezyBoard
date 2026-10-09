@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BREEZE_LEVELS } from '../models/User.js';
 import { objectIdSchema } from './common.validation.js';
 
 export const idParamSchema = z
@@ -9,7 +10,7 @@ export const idParamSchema = z
 
 // Mirrors the manual whitelist already enforced in user.service.js
 // updateUser (firstName, lastName, email, location, role, department,
-// avatar). Kept in sync deliberately: the service whitelist stays in place
+// avatar, breeze). Kept in sync deliberately: the service whitelist stays in place
 // as a harmless second safety net.
 export const updateUserSchema = z
   .object({
@@ -20,5 +21,6 @@ export const updateUserSchema = z
     role: z.string().trim().optional(),
     department: z.string().trim().optional(),
     avatar: z.string().optional(),
+    breeze: z.enum(BREEZE_LEVELS).optional(),
   })
   .strict();

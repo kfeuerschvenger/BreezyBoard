@@ -86,7 +86,7 @@ export const updateUser = async (id, updateData, actor = null) => {
     throw new ApiError(403, 'Forbidden: you can only update your own profile');
   }
 
-  const allowedFields = ['firstName', 'lastName', 'email', 'location', 'role', 'department', 'avatar'];
+  const allowedFields = ['firstName', 'lastName', 'email', 'location', 'role', 'department', 'avatar', 'breeze'];
   const payload = {};
 
   for (const key of allowedFields) {

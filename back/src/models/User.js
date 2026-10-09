@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 
+/** The ambient motion levels, from none to the most. */
+export const BREEZE_LEVELS = ['still', 'calm', 'breezy', 'gusty'];
+
 // Helper function to capitalize the first letter of a string
 const capitalize = str => {
   if (!str || typeof str !== 'string') return '';
@@ -47,6 +50,14 @@ const userSchema = new mongoose.Schema(
     location: {
       type: String,
       default: '',
+    },
+    // How much ambient motion the interface plays. It is stored on the person
+    // rather than in the browser so the choice follows them across devices.
+    // A record written before the field existed reads as the default.
+    breeze: {
+      type: String,
+      enum: BREEZE_LEVELS,
+      default: 'breezy',
     },
     // Bumped on logout and on password change so a token minted before the
     // bump fails the middleware's tokenVersion check even though its
