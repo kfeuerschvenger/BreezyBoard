@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Drawer } from './Drawer';
 
@@ -69,6 +69,32 @@ describe('Drawer', () => {
     stubSidePanel(true);
     renderDrawer();
     expect(screen.getByRole('dialog').style.transform).toContain('translateX(100%)');
+  });
+
+  it('stops catching the pointer the moment it is closed, while it is still on screen leaving', async () => {
+    const children = <p>Body content</p>;
+    const { rerender } = render(
+      <Drawer open onClose={vi.fn()} title="Edit">
+        {children}
+      </Drawer>
+    );
+    const panel = screen.getByRole('dialog');
+    const scrim = panel.previousElementSibling as HTMLElement;
+    expect(scrim.style.pointerEvents).not.toBe('none');
+
+    rerender(
+      <Drawer open={false} onClose={vi.fn()} title="Edit">
+        {children}
+      </Drawer>
+    );
+
+    // The panel leaves on a spring that takes most of a second, and the scrim
+    // covers the whole screen for as long as it is mounted. Anything pressed on
+    // the board in that time lands on the scrim instead and starts a text
+    // selection, so a card cannot be picked up straight after a save.
+    await waitFor(() => expect(scrim.style.pointerEvents).toBe('none'));
+    expect(scrim).toBeInTheDocument();
+    expect(panel.style.pointerEvents).toBe('none');
   });
 
   it('keeps the dialog semantics: a name, Escape to close and focus inside', async () => {
