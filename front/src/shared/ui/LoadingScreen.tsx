@@ -1,9 +1,11 @@
 import React from 'react';
+import { IconWind } from '@tabler/icons-react';
+import { Icon } from './Icon';
 
 export interface LoadingScreenProps {
   /**
    * What is being waited for, announced rather than only drawn.
-   * Shown as text below the spinner when `showLabel` is set.
+   * Shown as text below the mark when `showLabel` is set.
    */
   label?: string;
   showLabel?: boolean;
@@ -12,20 +14,26 @@ export interface LoadingScreenProps {
 /**
  * A page that has nothing to show yet.
  *
- * The spinner carries `role="status"` and a name. Without them it is a
- * rotating border and nothing else: the page reads as empty to anyone not
- * looking at it, which is the gap `Board.test.tsx` had written into a comment
- * rather than into the markup.
+ * The wait is drawn as the brand's own mark, the wind glyph on the logo
+ * gradient swaying on the spec's `bbSway`, instead of a rotating border that
+ * looks like every other application's. The sway is the only motion, and it
+ * is collapsed by the reduced motion rule, which leaves a still mark.
+ *
+ * The mark carries `role="status"` and a name. Without them it is a drawing
+ * and nothing else: the page reads as empty to anyone not looking at it.
  */
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ label = 'Loading', showLabel = false }) => (
-  <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+  <div className="flex min-h-screen items-center justify-center bg-ground p-6">
     <div className="text-center">
       <div
         role="status"
         aria-label={label}
-        className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"
-      />
-      {showLabel && <p className="text-gray-600 mt-4">{label}</p>}
+        style={{ background: 'var(--gradient-mark)' }}
+        className="mx-auto flex size-14 items-center justify-center rounded-card text-white shadow-button"
+      >
+        <Icon as={IconWind} size={28} className="animate-bb-sway" aria-hidden="true" />
+      </div>
+      {showLabel && <p className="mt-4 text-ink-secondary">{label}</p>}
     </div>
   </div>
 );

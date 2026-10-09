@@ -642,6 +642,151 @@ check('a cover whose image is missing falls back to its gradient', await page.lo
 check('a named cover is an image with that name', await page.locator('#probe-host [role="img"][aria-label="A named cover"]').count(), 1);
 await unmountPrimitives(page);
 
+const HUE_NAMES = ['sky', 'teal', 'green', 'sand', 'coral', 'lavender'];
+
+// Avatar: the fill is the hue's mid step and the initials are ink. This is
+// where the contrast of that pair is measured, for every hue, on what the
+// browser painted.
+await mountPrimitives(page, (ui, h) =>
+  h(
+    'div',
+    null,
+    ['sky', 'teal', 'green', 'sand', 'coral', 'lavender'].map(hue =>
+      h(ui.Avatar, { key: hue, name: `Av ${hue}`, hue, size: 'sm' })
+    ),
+    h(ui.Avatar, { name: 'Ada Lovelace', size: 'md', ring: 'surface' }),
+    h(ui.Avatar, { name: 'Ada Lovelace', size: 'lg', ring: 'ground' }),
+    h(ui.Avatar, { name: 'Ada Lovelace', size: 'xl' })
+  )
+);
+for (const hue of HUE_NAMES) {
+  const avatar = page.locator(`#probe-host [aria-label="Av ${hue}"]`);
+  const painted = await styleOf(avatar, ['backgroundColor', 'color']);
+  const initials = await styleOf(avatar.locator('span'), ['fontSize', 'fontWeight']);
+  check(
+    `the ${hue} avatar is filled with the mid step`,
+    await paintOf(page, painted.backgroundColor),
+    await paintOf(page, await tokenValue(page, `--color-${hue}-mid`))
+  );
+  check(`the ${hue} avatar initials are ink`, await paintOf(page, painted.color), await paintOf(page, await tokenValue(page, '--color-ink')));
+  check(`the ${hue} avatar initials are 10 pixels and bold`, `${initials.fontSize} ${initials.fontWeight}`, '10px 700');
+  await reportPairs(page, [[`avatar initials on the ${hue} mid fill`, painted.color, painted.backgroundColor, 4.5]]);
+}
+const avatarSizes = [];
+for (const name of ['Av sky', 'Ada Lovelace']) {
+  for (const box of await page.locator(`#probe-host [aria-label="${name}"]`).evaluateAll(els => els.map(el => `${el.offsetWidth}`))) {
+    avatarSizes.push(box);
+  }
+}
+check('the avatar sizes are 24, 32, 48 and 96', avatarSizes.join(' '), '24 32 48 96');
+const surfaceRing = await page.locator('#probe-host [aria-label="Ada Lovelace"]').nth(0).evaluate(el => getComputedStyle(el).boxShadow);
+const groundRing = await page.locator('#probe-host [aria-label="Ada Lovelace"]').nth(1).evaluate(el => getComputedStyle(el).boxShadow);
+check('the surface ring is a 2 pixel white ring', surfaceRing.includes('rgb(255, 255, 255) 0px 0px 0px 2px'), true);
+check('the ground ring is a 2.5 pixel ring', groundRing.includes('0px 0px 0px 2.5px'), true);
+const twin = await page.locator('#probe-host [aria-label="Ada Lovelace"]').evaluateAll(els => els.map(el => getComputedStyle(el).backgroundColor));
+check('the same person is the same colour wherever they appear', twin[0] === twin[1] && twin[1] === twin[2], true);
+await unmountPrimitives(page);
+
+// Swatch picker
+await mountPrimitives(page, (ui, h, React) => {
+  const Harness = () => {
+    const [value, setValue] = React.useState('sky');
+    return h(ui.SwatchPicker, {
+      name: 'probe-colour',
+      legend: 'Probe colour',
+      value,
+      onChange: setValue,
+      options: [
+        { id: 'sky', label: 'Sky', color: 'oklch(0.72 0.12 232)', hue: 'sky' },
+        { id: 'coral', label: 'Coral', color: 'oklch(0.72 0.12 38)', hue: 'coral' },
+        { id: 'plain', label: 'Slate', color: '#475569' },
+      ],
+    });
+  };
+  return h(Harness);
+});
+const swatch = name => page.locator(`#probe-host label:has(input[value="${name}"])`);
+const sky = await styleOf(swatch('sky'), ['width', 'height', 'borderTopWidth', 'borderTopColor', 'boxShadow', 'borderTopLeftRadius']);
+const coral = await styleOf(swatch('coral'), ['borderTopColor', 'boxShadow']);
+const plain = await styleOf(swatch('plain'), ['borderTopColor']);
+check('a swatch is a 32 pixel circle', `${sky.width} ${sky.height} ${Number.parseFloat(sky.borderTopLeftRadius) >= 16}`, '32px 32px true');
+check('a hue swatch is outlined in its edge step', await paintOf(page, sky.borderTopColor), await paintOf(page, await tokenValue(page, '--color-sky-edge')));
+check('another hue swatch is outlined in its own edge step', await paintOf(page, coral.borderTopColor), await paintOf(page, await tokenValue(page, '--color-coral-edge')));
+check('a swatch with no hue is outlined in the control border colour', await paintOf(page, plain.borderTopColor), await paintOf(page, await tokenValue(page, '--color-line-control')));
+check('the chosen swatch carries the white and ink double ring', sky.boxShadow.includes('0px 0px 0px 4px') && sky.boxShadow.includes('rgb(15, 27, 45)'), true);
+check('a swatch that is not chosen carries no ring', !coral.boxShadow.includes('0px 0px 0px 4px'), true);
+await swatch('coral').hover();
+await page.waitForTimeout(350);
+check('a hovered swatch grows by 15 percent', (await styleOf(swatch('coral'), ['scale'])).scale, '1.15');
+await page.mouse.move(2, 2);
+await page.locator('#probe-host input[value="sky"]').focus();
+await page.keyboard.press('Shift+Tab');
+await page.keyboard.press('Tab');
+const swatchRing = await styleOf(swatch('sky'), ['outlineStyle', 'outlineWidth', 'outlineOffset']);
+check('the swatch whose radio has the keyboard draws the focus ring', `${swatchRing.outlineStyle} ${swatchRing.outlineWidth} ${swatchRing.outlineOffset}`, 'solid 2px 2px');
+await page.keyboard.press('ArrowRight');
+check('the right arrow chooses the next swatch', await page.locator('#probe-host input:checked').evaluate(radio => radio.value), 'coral');
+for (const hue of HUE_NAMES) {
+  await reportPairs(page, [
+    [`the ${hue} swatch outline on white`, `--color-${hue}-edge`, '--color-surface', 3],
+    [`the ${hue} swatch outline on the ground`, `--color-${hue}-edge`, '--color-ground', 3],
+  ]);
+}
+await unmountPrimitives(page);
+
+// Empty state, stat tile and loading screen
+await mountPrimitives(page, (ui, h) =>
+  h(
+    'div',
+    null,
+    h(ui.EmptyState, { icon: h('span', null, 'e'), title: 'Still air', description: 'Nothing here.', tone: 'coral' }),
+    h(ui.StatTile, { icon: h('span', null, 's'), tone: 'teal', value: 42, label: 'Probe tiles' })
+  )
+);
+await page.waitForTimeout(700);
+const emptyCircle = await probe(page, 'h3 ~ p', ['color']);
+const circle = await page.locator('#probe-host h3').locator('xpath=preceding-sibling::*[1]').evaluate(el => {
+  const style = getComputedStyle(el);
+  return { width: style.width, radius: style.borderTopLeftRadius, background: style.backgroundColor, color: style.color };
+});
+check('the empty state circle is 64 pixels and round', `${circle.width} ${circle.radius}`.startsWith('64px'), true);
+check('the empty state circle is the tint of its tone', await paintOf(page, circle.background), await paintOf(page, await tokenValue(page, '--color-coral-tint')));
+check('an icon with no colour takes the deep step of the tone', await paintOf(page, circle.color), await paintOf(page, await tokenValue(page, '--color-coral-deep')));
+const emptyTitle = await probe(page, 'h3', ['fontFamily', 'fontSize', 'fontWeight']);
+check('the empty state title is set in the display face', leads(emptyTitle.fontFamily, 'Bricolage Grotesque'), true);
+check('the empty state title is 26 pixels and bold', `${emptyTitle.fontSize} ${emptyTitle.fontWeight}`, '26px 700');
+await reportPairs(page, [
+  ['empty state title on white', '--color-ink', '--color-surface', 4.5],
+  ['empty state description on white', emptyCircle.color, '--color-surface', 4.5],
+  ['an empty state icon on its coral tint', '--color-coral-deep', '--color-coral-tint', 3],
+]);
+const tile = await page.locator('#probe-host').getByText('Probe tiles').locator('xpath=ancestor::div[contains(@class,"rounded-tile")]').evaluate(el => {
+  const style = getComputedStyle(el);
+  return { radius: style.borderTopLeftRadius, background: style.backgroundColor, shadow: style.boxShadow, animation: style.animationName };
+});
+check('a stat tile has the tile radius and is white', `${tile.radius} ${await paintOf(page, tile.background)}`, '22px 255,255,255');
+check('a stat tile casts the tile shadow', tile.shadow.includes('0px 14px 34px -24px'), true);
+check('a stat tile enters on bbUp', tile.animation, 'bbUp');
+const figure = await probeText(page, '42', ['fontFamily', 'fontSize', 'fontWeight']);
+check('the stat figure is 28 pixels in the display face', `${figure.fontSize} ${leads(figure.fontFamily, 'Bricolage Grotesque')}`, '28px true');
+await unmountPrimitives(page);
+
+await mountPrimitives(page, (ui, h) => h(ui.LoadingScreen, { label: 'Probe loading', showLabel: true }));
+const mark = page.locator('#probe-host [role="status"]');
+const markStyle = await styleOf(mark, ['width', 'height', 'backgroundImage', 'borderTopLeftRadius']);
+check('the loading mark is a 56 pixel tile', `${markStyle.width} ${markStyle.height} ${markStyle.borderTopLeftRadius}`, '56px 56px 16px');
+check('the loading mark is a gradient and not a flat fill', markStyle.backgroundImage.startsWith('linear-gradient'), true);
+const glyph = await styleOf(mark.locator('svg'), ['animationName', 'animationIterationCount']);
+check('the loading glyph sways', `${glyph.animationName} ${glyph.animationIterationCount}`, 'bbSway infinite');
+check('nothing on the loading screen spins', await page.locator('#probe-host *').evaluateAll(els => els.every(el => !getComputedStyle(el).animationName.includes('bbSpin') && !getComputedStyle(el).animationName.includes('spin'))), true);
+// Both ends of the gradient token, read from the token itself so the check
+// follows the stops if they ever move.
+const markStops = (await tokenValue(page, '--gradient-mark')).match(/oklch\([^)]*\)/g);
+check('the loading mark gradient has two stops', markStops?.length, 2);
+await reportPairs(page, markStops.map((stop, index) => [`the white wind glyph on stop ${index + 1} of the loading mark`, '#ffffff', stop, 3]));
+await reportPairs(page, [['the loading label on the ground', '--color-ink-secondary', '--color-ground', 4.5]]);
+await unmountPrimitives(page);
+
 log('\n--- the menu, the confirm dialog and the toast, signed in ---');
 
 // A real account, so the surfaces that only exist behind the sign in can be

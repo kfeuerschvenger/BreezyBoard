@@ -288,10 +288,10 @@ describe('StatTile', () => {
   it('reads as the figure and the word for what it counts, in every tone', async () => {
     const { container } = render(
       <div>
-        <StatTile icon={<span>folder</span>} tone="blue" value={7} label="Total Boards" />
+        <StatTile icon={<span>folder</span>} tone="sky" value={7} label="Total Boards" />
         <StatTile icon={<span>people</span>} tone="green" value={12} label="Team Members" />
-        <StatTile icon={<span>calendar</span>} tone="orange" value={34} label="Total Tasks" />
-        <StatTile icon={<span>ring</span>} tone="purple" value="58%" label="Avg Progress" />
+        <StatTile icon={<span>calendar</span>} tone="sand" value={34} label="Total Tasks" />
+        <StatTile icon={<span>ring</span>} tone="lavender" value="58%" label="Avg Progress" />
       </div>
     );
 
@@ -304,7 +304,7 @@ describe('StatTile', () => {
   // The icon repeats what the label says. Left exposed it is announced a
   // second time, under whatever name assistive technology can guess.
   it('hides its icon from assistive technology', () => {
-    render(<StatTile icon={<span>folder</span>} tone="blue" value={7} label="Total Boards" />);
+    render(<StatTile icon={<span>folder</span>} tone="sky" value={7} label="Total Boards" />);
 
     expect(screen.getByText('folder').parentElement).toHaveAttribute('aria-hidden', 'true');
   });
@@ -313,9 +313,9 @@ describe('StatTile', () => {
   // which is the P4-6 failure: a composed class is not in the stylesheet at
   // all, and the tile renders unstyled while every assertion above passes.
   it('applies the whole background class its tone names', () => {
-    render(<StatTile icon={<span>folder</span>} tone="orange" value={34} label="Total Tasks" />);
+    render(<StatTile icon={<span>folder</span>} tone="sand" value={34} label="Total Tasks" />);
 
-    expect(screen.getByText('folder').parentElement).toHaveClass('bg-orange-100');
+    expect(screen.getByText('folder').parentElement).toHaveClass('bg-sand-tint', 'text-sand-deep');
   });
 });
 
