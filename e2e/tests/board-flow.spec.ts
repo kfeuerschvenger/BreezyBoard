@@ -372,7 +372,10 @@ test.describe('board core loop', () => {
       // person cannot press that fast, and waiting for the announcement is what
       // they would do.
       await expect(dndAnnouncement(page)).toHaveText('Picked up A1. Backlog, position 1 of 2.');
+      // Each arrow is measured from where the previous one left the card, which
+      // is known once it has been announced.
       await page.keyboard.press('ArrowRight');
+      await expect(dndAnnouncement(page)).toHaveText('Up Next, position 1 of 2.');
       await page.keyboard.press('ArrowDown');
       await expect(dndAnnouncement(page)).toHaveText('Up Next, position 2 of 2.');
       await page.keyboard.press('ArrowDown');
@@ -402,7 +405,9 @@ test.describe('board core loop', () => {
       // See the test above: the arrows are heard from one task after the pick up.
       await expect(dndAnnouncement(page)).toHaveText('Picked up A2. Backlog, position 2 of 3.');
       await page.keyboard.press('ArrowRight');
+      await expect(dndAnnouncement(page)).toHaveText(/^Up Next, position \d of 2\.$/);
       await page.keyboard.press('ArrowRight');
+      await expect(dndAnnouncement(page)).toHaveText('In Progress, position 1 of 1.');
       await page.keyboard.press('Escape');
 
       await expect(dndAnnouncement(page)).toHaveText('Move cancelled. A2 is back in Backlog, position 2 of 3.');
