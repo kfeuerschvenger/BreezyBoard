@@ -587,7 +587,7 @@ const anonymous = [
     open: async () => {
       await anonPage.goto(`${FRONT}/register`);
       await anonPage.waitForSelector('form');
-      await anonPage.getByRole('button', { name: 'Terms', exact: true }).click();
+      await anonPage.getByRole('button', { name: 'Terms of Service', exact: true }).click();
       await anonPage.getByRole('dialog').waitFor();
       await anonPage.getByRole('dialog').getByText(/\S{4,}/).first().waitFor();
     },

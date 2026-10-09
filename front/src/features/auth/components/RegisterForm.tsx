@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { IconArrowRight } from '@tabler/icons-react';
 import { Button, Field, Icon, Input, PasswordInput } from '@/shared/ui';
 import type { RegisterCredentials } from '@/models';
+import { useLegalDocuments } from '@/hooks/useLegalDocuments';
 import { useShake } from '../useShake';
 import { AuthBanner } from './AuthBanner';
 
@@ -34,6 +35,9 @@ const registerSchema = z
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
+const INLINE_LINK_CLASSES =
+  'focus-ring cursor-pointer rounded-chip font-semibold text-link underline underline-offset-2 transition-colors hover:text-ink';
+
 export interface RegisterFormProps {
   /** Rejects when the account could not be created. */
   onSubmit: (credentials: RegisterCredentials) => Promise<void>;
@@ -48,10 +52,15 @@ export interface RegisterFormProps {
  * the terms are accepted, so a refused submit is always the server's and
  * shakes the form through the banner's error.
  *
- * The terms are accepted here and read through the legal links the auth screen
- * carries under the form, which open the same dialogs as the sidebar's.
+ * The terms are accepted here and read through the two links inside the consent
+ * sentence, which open the same dialogs as the sidebar's. The links sit beside
+ * the checkbox's label rather than inside it: a button is labelable content, and
+ * one nested in a label is invalid. The checkbox is named from the whole
+ * sentence through `aria-labelledby`, and only the opening words are its label,
+ * so pressing a link opens a dialog and never toggles the box.
  */
 export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, error, onDirty }) => {
+  const { show, dialogs } = useLegalDocuments();
   const {
     register,
     handleSubmit,
@@ -119,10 +128,25 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, error, onD
 
       <div>
         <div className="flex items-center gap-2.5">
-          <input id="terms" type="checkbox" className="focus-ring size-4.5 cursor-pointer accent-accent" {...register('terms')} />
-          <label htmlFor="terms" className="block cursor-pointer py-2 text-sm text-ink-secondary">
-            I agree to the Terms of Service and the Privacy Policy
-          </label>
+          <input
+            id="terms"
+            type="checkbox"
+            aria-labelledby="terms-sentence"
+            className="focus-ring size-4.5 shrink-0 cursor-pointer accent-accent"
+            {...register('terms')}
+          />
+          <p id="terms-sentence" className="text-sm text-ink-secondary">
+            <label htmlFor="terms" className="cursor-pointer py-2">
+              I agree to the
+            </label>{' '}
+            <button type="button" onClick={() => show('terms')} className={INLINE_LINK_CLASSES}>
+              Terms of Service
+            </button>{' '}
+            and the{' '}
+            <button type="button" onClick={() => show('privacy')} className={INLINE_LINK_CLASSES}>
+              Privacy Policy
+            </button>
+          </p>
         </div>
         {errors.terms?.message && (
           <p role="alert" className="mt-1.5 text-[13px] font-medium text-danger-strong">
@@ -143,6 +167,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, error, onD
           </>
         )}
       </Button>
+
+      {dialogs}
     </form>
   );
 };
