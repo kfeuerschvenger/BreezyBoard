@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { IconMail } from '@tabler/icons-react';
-import { Button, Field, Input, Modal, Icon } from '@/shared/ui';
+import { Button, Field, Input, Modal } from '@/shared/ui';
 import { httpStatusOf } from '@/shared/lib/httpStatus';
+import { AuthBanner } from './AuthBanner';
 
 const forgotPasswordSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Email is invalid'),
@@ -82,8 +82,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ open, 
     <Modal open={open} onClose={onClose} title="Forgot password" size="sm">
       {sentTo ? (
         <div className="space-y-6">
-          <p role="status" className="text-gray-600">
-            If an account exists for <strong className="break-all text-gray-900">{sentTo}</strong>, we have sent a link to
+          <p role="status" className="text-ink-secondary">
+            If an account exists for <strong className="break-all text-ink">{sentTo}</strong>, we have sent a link to
             reset its password. The link works once and expires soon.
           </p>
           <div className="flex justify-end">
@@ -94,23 +94,20 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ open, 
         </div>
       ) : (
         <form onSubmit={handleSubmit(submit)} className="space-y-6" noValidate>
-          <p className="text-gray-600">Enter the email address of your account and we will send you a link to choose a new password.</p>
+          <p className="text-ink-secondary">
+            Enter the email address of your account and we will send you a link to choose a new password.
+          </p>
 
-          {failure && (
-            <div role="alert" className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-              {failure}
-            </div>
-          )}
+          {failure && <AuthBanner>{failure}</AuthBanner>}
 
-          <Field label="Email address" error={errors.email?.message} icon={<Icon as={IconMail} className="h-5 w-5 text-gray-400" />}>
+          <Field label="Email address" error={errors.email?.message}>
             {props => (
               <Input
                 {...props}
                 {...register('email')}
                 type="email"
                 autoComplete="email"
-                placeholder="Enter your email"
-                className="pl-10"
+                placeholder="you@company.com"
               />
             )}
           </Field>

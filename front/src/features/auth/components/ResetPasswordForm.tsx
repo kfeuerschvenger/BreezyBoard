@@ -2,9 +2,10 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { motion } from 'motion/react';
-import { IconLock } from '@tabler/icons-react';
-import { Field, PasswordInput, Icon } from '@/shared/ui';
+import { IconArrowRight } from '@tabler/icons-react';
+import { Button, Field, Icon, PasswordInput } from '@/shared/ui';
+import { useShake } from '../useShake';
+import { AuthBanner } from './AuthBanner';
 
 /**
  * The same strength rule as registration, which is also the rule the server
@@ -31,7 +32,7 @@ export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 export interface ResetPasswordFormProps {
   /** Receives the new password. Rejects when the reset is refused. */
   onSubmit: (newPassword: string) => Promise<void>;
-  /** Shown above the fields, for a failure the form itself cannot predict. */
+  /** Shown in the banner, for a failure the form itself cannot predict. */
   error: string | null;
   /** Called on the first keystroke after a failure, to clear it. */
   onDirty: () => void;
@@ -47,57 +48,57 @@ export const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSubmit, 
     mode: 'onSubmit',
     defaultValues: { newPassword: '', confirmPassword: '' },
   });
+  const { ref, shake } = useShake<HTMLFormElement>(error, isSubmitting);
 
   return (
-    <>
-      {error && (
-        <div role="alert" className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
+    <form
+      ref={ref}
+      onSubmit={handleSubmit(({ newPassword }) => onSubmit(newPassword), shake)}
+      onChange={onDirty}
+      className="flex flex-col gap-4.5"
+      noValidate
+    >
+      <Field
+        label="New password"
+        error={errors.newPassword?.message}
+        hint="At least 8 characters, with a lowercase letter, an uppercase letter and a number."
+      >
+        {props => (
+          <PasswordInput
+            {...props}
+            {...register('newPassword')}
+            autoComplete="new-password"
+            placeholder="Create a strong password"
+            toggleLabel="new password"
+          />
+        )}
+      </Field>
 
-      <form onSubmit={handleSubmit(({ newPassword }) => onSubmit(newPassword))} onChange={onDirty} className="space-y-6" noValidate>
-        <Field
-          label="New password"
-          error={errors.newPassword?.message}
-          hint="At least 8 characters, with a lowercase letter, an uppercase letter and a number."
-        >
-          {props => (
-            <PasswordInput
-              {...props}
-              {...register('newPassword')}
-              autoComplete="new-password"
-              placeholder="Create a strong password"
-              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
-              toggleLabel="new password"
-            />
-          )}
-        </Field>
+      <Field label="Confirm new password" error={errors.confirmPassword?.message}>
+        {props => (
+          <PasswordInput
+            {...props}
+            {...register('confirmPassword')}
+            autoComplete="new-password"
+            placeholder="Confirm your password"
+            toggleLabel="confirm new password"
+          />
+        )}
+      </Field>
 
-        <Field label="Confirm new password" error={errors.confirmPassword?.message}>
-          {props => (
-            <PasswordInput
-              {...props}
-              {...register('confirmPassword')}
-              autoComplete="new-password"
-              placeholder="Confirm your password"
-              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
-              toggleLabel="confirm new password"
-            />
-          )}
-        </Field>
+      {error && <AuthBanner>{error}</AuthBanner>}
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isSubmitting ? 'Saving...' : 'Set new password'}
-        </motion.button>
-      </form>
-    </>
+      <Button type="submit" size="lg" isLoading={isSubmitting} className="w-full">
+        {isSubmitting ? (
+          'Saving...'
+        ) : (
+          <>
+            Set new password
+            <Icon as={IconArrowRight} size={18} />
+          </>
+        )}
+      </Button>
+    </form>
   );
 };
 

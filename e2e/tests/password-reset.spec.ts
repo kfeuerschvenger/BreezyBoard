@@ -39,7 +39,7 @@ function linkIn(text: string): string {
 /** Asks for a reset link through the real dialog on the sign in page. */
 async function requestResetThroughTheUi(page: Page, email: string): Promise<void> {
   await page.goto('/login');
-  await page.getByRole('button', { name: 'Forgot password?' }).click();
+  await page.getByRole('button', { name: 'Forgot it?' }).click();
   const dialog = page.getByRole('dialog', { name: 'Forgot password' });
   await dialog.getByLabel('Email address').fill(email);
   await dialog.getByRole('button', { name: 'Send reset link' }).click();

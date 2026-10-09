@@ -33,7 +33,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ open, onClose, title, filePath 
           <a
             href={encodeURI(filePath)}
             download
-            className="inline-flex items-center px-2 py-3 text-sm text-gray-600 hover:text-gray-800 underline cursor-pointer md:py-2"
+            className="focus-ring inline-flex cursor-pointer items-center rounded-chip px-2 py-3 text-sm text-ink-secondary underline transition-colors hover:text-ink md:py-2"
           >
             Download
           </a>
@@ -43,12 +43,12 @@ const LegalModal: React.FC<LegalModalProps> = ({ open, onClose, title, filePath 
         </div>
       }
     >
-      {loading && <p className="text-sm text-gray-600">Loading...</p>}
+      {loading && <p className="text-sm text-ink-secondary">Loading...</p>}
 
       {error && (
-        <div role="alert" className="text-sm text-red-600">
+        <div role="alert" className="text-sm text-danger-strong">
           Failed to load document.{' '}
-          <button type="button" onClick={refetch} className="underline ml-2 cursor-pointer">
+          <button type="button" onClick={refetch} className="focus-ring ml-2 cursor-pointer rounded-chip underline">
             Try again
           </button>
         </div>
@@ -56,7 +56,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ open, onClose, title, filePath 
 
       {/* whitespace-pre-wrap preserves the line breaks of the source .txt */}
       {!loading && !error && data && (
-        <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{data}</div>
+        <div className="text-sm whitespace-pre-wrap leading-relaxed text-ink-body">{data}</div>
       )}
     </Modal>
   );

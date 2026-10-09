@@ -334,7 +334,7 @@ check('a focused input draws the halo', focusedField.shadow.includes('0px 0px 0p
 
 log('\n--- buttons and the focus ring, on a rendered dialog ---');
 
-await page.getByRole('button', { name: /forgot password/i }).click();
+await page.getByRole('button', { name: 'Forgot it?' }).click();
 const probeDialog = page.getByRole('dialog');
 await probeDialog.waitFor({ state: 'visible' });
 await page.waitForTimeout(500);
@@ -1253,6 +1253,133 @@ check(
 );
 await page.getByRole('button', { name: 'Dismiss notification' }).click();
 
+log('\n--- the auth screen, signed out ---');
+
+// The branding column sits on a gradient, so its text cannot be measured from
+// two tokens: the background behind each line is whatever the gradient paints
+// there. The column is screenshotted with every glyph made transparent and the
+// text colour is compared with the lightest pixel behind each text box, which
+// is the worst case for light text. Reduced motion keeps the wind layer out of
+// the picture: its streaks are moving, translucent white and measured as
+// decoration, not as background.
+const authCalm = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+const authPage = await authCalm.newPage();
+await authPage.goto(`${FRONT}/login`);
+await authPage.waitForSelector('form');
+
+check('the login page has exactly one h1 at 1440', await authPage.locator('h1').count(), 1);
+check('the h1 is the form column title, inside main', await authPage.locator('main h1').count(), 1);
+check('the branding headline is a paragraph', await authPage.locator('aside p').first().evaluate(el => el.tagName), 'P');
+
+const panel = await authPage.locator('aside').evaluate(el => {
+  const style = getComputedStyle(el);
+  const box = el.getBoundingClientRect();
+  const form = document.querySelector('main').getBoundingClientRect();
+  return {
+    display: style.display,
+    margin: style.marginLeft,
+    radius: style.borderTopLeftRadius,
+    image: style.backgroundImage.startsWith('radial-gradient') ? 'gradient' : style.backgroundImage,
+    left: box.left < form.left,
+    headlineSize: parseFloat(getComputedStyle(el.querySelector('p')).fontSize),
+    headlineFamily: getComputedStyle(el.querySelector('p')).fontFamily.split(',')[0].replace(/["']/g, ''),
+  };
+});
+check('the branding column is on screen beside the form', `${panel.display} ${panel.left}`, 'flex true');
+check('the panel is inset by 14px with a 30px radius', `${panel.margin} ${panel.radius}`, '14px 30px');
+check('the panel paints the brand gradient', panel.image, 'gradient');
+check('the headline is set in the display face at 66px', `${panel.headlineFamily} ${panel.headlineSize}`, 'Bricolage Grotesque Variable 66');
+
+const stillLife = await authPage.locator('aside [aria-hidden="true"].h-80').evaluate(el => {
+  const cards = [...el.querySelectorAll('[class*="animate-bb-float"]')];
+  return {
+    names: cards.map(card => getComputedStyle(card).animationName).join(' '),
+    shadows: cards.every(card => getComputedStyle(card).boxShadow !== 'none'),
+    postcard: getComputedStyle(el.firstElementChild).rotate !== 'none',
+  };
+});
+check('the two floating cards run bbFloat', stillLife.names, 'bbFloat bbFloat');
+check('the floating cards and the postcard are lifted and tilted', `${stillLife.shadows} ${stillLife.postcard}`, 'true true');
+
+// Reduced motion collapses the float to a single play, so the cards rest.
+check(
+  'under reduced motion the floating cards do not keep moving',
+  await authPage.evaluate(() => document.querySelector('aside').getAnimations({ subtree: true }).filter(a => a.effect.getTiming().iterations === Infinity).length),
+  0
+);
+
+await authPage.addStyleTag({ content: 'aside * { color: transparent !important; -webkit-text-fill-color: transparent !important; border-color: transparent !important; background-image: none !important; }' });
+const textTargets = [
+  ['the paragraph', 'aside p:nth-of-type(2)', 'white', 4.5],
+  ['the meta line', 'aside > div:last-child > div > span:last-child', 'white', 4.5],
+  ['the badge', 'aside > div:last-child > div > span:first-child', 'white', 4.5],
+  ['the wordmark', 'aside span.font-heading', 'white', 4.5],
+  ['the headline', 'aside p:nth-of-type(1)', 'white', 3],
+  // The warm gradient word: its darker, coral end is the worst case.
+  ['the headline word, at its coral end', 'aside p:nth-of-type(1) span', 'oklch(0.78 0.14 38)', 3],
+];
+for (const [label, selector, rgb, minimum] of textTargets) {
+  const clip = await authPage.locator(selector).first().boundingBox();
+  const png = (await authPage.screenshot({ clip })).toString('base64');
+  const worst = await authPage.evaluate(
+    async ([data, color]) => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+      const channel = c => ((c / 255) <= 0.04045 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4);
+      const lum = (r, g, b) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+      const probe = new OffscreenCanvas(1, 1).getContext('2d');
+      probe.fillStyle = color;
+      probe.fillRect(0, 0, 1, 1);
+      const text = lum(...probe.getImageData(0, 0, 1, 1).data);
+      let lightest = 0;
+      for (let i = 0; i < pixels.length; i += 4) lightest = Math.max(lightest, lum(pixels[i], pixels[i + 1], pixels[i + 2]));
+      return Math.round(((text + 0.05) / (lightest + 0.05)) * 100) / 100;
+    },
+    [png, rgb]
+  );
+  check(`${label} on the brand panel is at least ${minimum}:1 (${worst}:1)`, worst >= minimum, true);
+}
+await authCalm.close();
+
+await reportPairs(page, [
+  ['the error banner text on its tint', '--color-danger-strong', '--color-danger-bg', 4.5],
+  ['the reset confirmation text on its tint', '--color-success-strong', '--color-success-bg', 4.5],
+  ['the forgot link on the ground', '--color-link', '--color-ground', 4.5],
+  ['the postcard caption on white', '--color-ink-secondary', '--color-surface', 4.5],
+  ['the note text on the sand note', '--color-ink-body', '--color-note-sand', 4.5],
+]);
+
+const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const phonePage = await phone.newPage();
+await phonePage.goto(`${FRONT}/login`);
+await phonePage.waitForSelector('form');
+check('on a phone the branding column is not rendered at all', await phonePage.locator('aside').isVisible(), false);
+check('on a phone the page still has exactly one visible h1', await phonePage.locator('h1:visible').count(), 1);
+check('on a phone a small wordmark stands in for the column', await phonePage.locator('main').getByText('breezy', { exact: false }).first().isVisible(), true);
+
+// A refused submit shakes the form: the animation is running on it.
+await phonePage.getByRole('button', { name: /^Sign in/ }).click();
+await phonePage.getByText('Email is required').waitFor();
+check('a refused submit plays the shake on the form', await phonePage.locator('form').evaluate(form => getComputedStyle(form).animationName), 'bbShake');
+await phonePage.locator('form').evaluate(form => Promise.all(form.getAnimations().map(a => a.finished)));
+check('the shake class comes off when it ends', await phonePage.locator('form').evaluate(form => form.classList.contains('animate-bb-shake')), false);
+await phone.close();
+
+const authRoute = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const authRoutePage = await authRoute.newPage();
+await authRoutePage.goto(`${FRONT}/login`);
+await authRoutePage.waitForSelector('form');
+const panelHandle = await authRoutePage.locator('aside').elementHandle();
+await authRoutePage.getByRole('link', { name: 'Create an account' }).click();
+await authRoutePage.getByRole('heading', { level: 1, name: 'Catch your first breeze' }).waitFor();
+check('switching to sign up changes the address', new URL(authRoutePage.url()).pathname, '/register');
+check('switching modes keeps the same branding column in the page', await panelHandle.evaluate(el => el.isConnected), true);
+check('switching moves focus to the new title', await authRoutePage.evaluate(() => document.activeElement?.tagName), 'H1');
+await authRoute.close();
+
 log('\n--- the reduced motion policy ---');
 
 // A person who asks the system for less motion gets animations and
@@ -1268,7 +1395,7 @@ const sampleOpening = pg =>
   pg.evaluate(
     () =>
       new Promise(resolve => {
-        const trigger = [...document.querySelectorAll('button')].find(b => /forgot password/i.test(b.textContent));
+        const trigger = [...document.querySelectorAll('button')].find(b => /forgot it/i.test(b.textContent));
         trigger.click();
         requestAnimationFrame(() =>
           requestAnimationFrame(() =>

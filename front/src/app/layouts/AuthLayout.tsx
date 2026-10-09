@@ -1,52 +1,38 @@
 import React from 'react';
-import type { ReactNode } from 'react';
-import { motion } from 'motion/react';
-import { AuthIllustration } from './AuthIllustration';
-
-export interface AuthLayoutProps {
-  /** The form, or anything else that belongs in the right hand column. */
-  children: ReactNode;
-  title?: string;
-  subtitle?: string;
-  /** False drops the branding column entirely, rather than only hiding it. */
-  showIllustration?: boolean;
-}
+import { Outlet } from 'react-router-dom';
+import { AuthBrandPanel } from './AuthBrandPanel';
+import { LogoGlyph, Wordmark } from './shell/BrandMark';
 
 /**
- * The two column frame the sign in and sign up pages sit in.
+ * The frame of every page a visitor with no session sees: sign in, sign up and
+ * the two password reset pages.
  *
- * Branding on the left, hidden below the large breakpoint, and the form on
- * the right. Presentational: anything a form needs, including where the
- * focus lands, belongs in that form.
+ * It is a layout route, so the branding column is mounted once and stays put
+ * while the page beside it changes. Switching between sign in and sign up
+ * replaces the form and leaves the postcard, the floating cards and the wind
+ * running, which is what makes the two modes read as one screen.
+ *
+ * Branding on the left, hidden below the large breakpoint, and the page on the
+ * right under a small wordmark that only a narrow screen shows. This frame owns
+ * the `main` landmark and nothing else: the page's heading, its form and where
+ * focus lands belong to the page.
  */
-export const AuthLayout: React.FC<AuthLayoutProps> = ({
-  children,
-  title = 'BreezyBoard',
-  subtitle = 'Streamline your workflow with powerful project management tools',
-  showIllustration = true,
-}) => (
-  <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
-    <div className="w-full max-w-6xl mx-auto grid lg:grid-cols-2 gap-8 items-center">
-      {showIllustration && (
-        <motion.aside
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6 }}
-          className="hidden lg:block"
-        >
-          <AuthIllustration title={title} subtitle={subtitle} />
-        </motion.aside>
-      )}
+export const AuthLayout: React.FC = () => (
+  <div className="grid min-h-screen bg-ground lg:grid-cols-2">
+    <AuthBrandPanel />
 
-      <motion.main
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="w-full"
-      >
-        <div className="bg-white rounded-2xl shadow-xl p-8 lg:p-12">{children}</div>
-      </motion.main>
-    </div>
+    <main className="flex items-center justify-center px-6 py-10">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-8 flex items-center gap-2.5 lg:hidden">
+          <span className="flex size-9 items-center justify-center rounded-control bg-[image:var(--gradient-logo)] text-white shadow-logo">
+            <LogoGlyph size={21} />
+          </span>
+          <Wordmark className="text-[21px] text-ink" />
+        </div>
+
+        <Outlet />
+      </div>
+    </main>
   </div>
 );
 

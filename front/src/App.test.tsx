@@ -50,9 +50,8 @@ vi.mock('@/app/layouts/AppShell', async () => {
 vi.mock('@/pages', () => ({
   Home: () => <div>Protected home content</div>,
   Board: () => <div>Board page</div>,
-  Login: () => <div>Login page</div>,
+  Auth: ({ mode }: { mode: string }) => <div>{mode === 'signin' ? 'Login page' : 'Register page'}</div>,
   Profile: () => <div>Profile page</div>,
-  Register: () => <div>Register page</div>,
   NotFound: () => <div>Not found page</div>,
   ResetPassword: () => <div>Reset password page</div>,
 }));
