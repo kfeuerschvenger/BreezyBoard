@@ -61,16 +61,18 @@ test.describe('board core loop', () => {
     await test.step('drag the task into another column', async () => {
       const handle = page.locator('[role="article"]').first().locator('[aria-label="Drag handle"]');
       await expect(handle).toBeVisible();
-      // The card animates in (opacity and y), so a box measured immediately after
-      // creation is stale and the press lands off target, which reads as a text
-      // selection instead of a drag.
+      // The card rises into place on a spring (opacity and y), and the drawer
+      // that created it is still leaving. A press while either is in flight lands
+      // off the handle, which reads as a text selection instead of a drag.
+      //
+      // Two readings of the handle's box a moment apart cannot tell when the card
+      // has stopped: the animation starts late when the renderer stalls on the
+      // card's first frame, so both readings see the starting position and agree.
+      // The card's own state can: the spring ends with its transform cleared.
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      const card = page.locator('[role="article"]').first();
       await expect
-        .poll(async () => {
-          const first = await handle.boundingBox();
-          await page.waitForTimeout(120);
-          const second = await handle.boundingBox();
-          return first && second && first.x === second.x && first.y === second.y;
-        })
+        .poll(() => card.evaluate(element => getComputedStyle(element).opacity === '1' && getComputedStyle(element).transform === 'none'))
         .toBe(true);
 
       const from = await handle.boundingBox();

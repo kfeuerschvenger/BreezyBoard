@@ -81,7 +81,7 @@ export function Drawer({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, pointerEvents: 'none' }}
             onClick={closeOnBackdrop ? onClose : undefined}
             className="fixed inset-0 z-40 bg-scrim backdrop-blur-[6px]"
           />
@@ -90,7 +90,7 @@ export function Drawer({
             ref={panelRef}
             initial={offscreen}
             animate={onscreen}
-            exit={offscreen}
+            exit={{ ...offscreen, pointerEvents: 'none' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             role="dialog"
             aria-modal="true"
