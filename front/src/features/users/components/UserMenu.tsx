@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconChevronDown, IconLogout, IconUser } from '@tabler/icons-react';
+import { IconChevronUp, IconLogout, IconUser } from '@tabler/icons-react';
 import { Avatar, Menu, MenuItem, Icon } from '@/shared/ui';
 import type { User } from '@/models';
 
@@ -14,44 +14,51 @@ const fullNameOf = (user: User) => `${user.firstName ?? ''} ${user.lastName ?? '
 /**
  * The signed in person, and what they can do about it.
  *
+ * It is drawn as the account button at the foot of the sidebar: the avatar,
+ * the name and a chevron on a translucent row the width of the sidebar. The
+ * menu opens upward from it, because there is no room below the foot of the
+ * screen.
+ *
  * The trigger carries an explicit name rather than taking one from its
- * contents, and that is a fix rather than a preference. Its contents are an
- * avatar and a name that is `hidden md:block`, so below the medium
- * breakpoint the name is out of the accessibility tree entirely. With an
- * avatar image in place the previous version also hid the avatar, which left
- * the control with no accessible name at all on a phone. Measured at 390
- * pixels, where the button read as the two initials and nothing else.
+ * contents. Its contents are an avatar, which is decorative, and a name that
+ * is cut short with an ellipsis, and a name taken from them would read as two
+ * initials where an avatar image stands in for them. The explicit one also
+ * says what the button does, which the person's name alone does not.
  */
 export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout }) => {
   const fullName = fullNameOf(user);
 
   return (
     <Menu
+      align="start"
       className="w-64 py-2"
       renderTrigger={(props, { open }) => (
         <button
           {...props}
           aria-label={`Account menu for ${fullName}`}
-          className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer"
+          className="focus-ring flex min-h-12 w-full cursor-pointer items-center gap-2.5 rounded-card border border-line-05 bg-surface/70 px-2.5 text-left transition-colors duration-200 hover:bg-surface"
         >
-          <Avatar name={fullName} src={user.avatar} size="md" decorative />
-          <span className="hidden md:block text-sm font-medium text-gray-700">{fullName}</span>
-          <Icon as={IconChevronDown}
+          <Avatar name={fullName} src={user.avatar} seed={user._id} size="md" decorative />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink" title={fullName}>
+            {fullName}
+          </span>
+          <Icon
+            as={IconChevronUp}
             size={16}
             aria-hidden="true"
-            className={`text-gray-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+            className={`shrink-0 text-ink-secondary transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           />
         </button>
       )}
     >
-      <div className="px-4 py-3 border-b border-gray-100">
+      <div className="border-b border-line-08 px-4 py-3">
         <div className="flex items-center gap-3">
-          <Avatar name={fullName} src={user.avatar} size="lg" decorative />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate" title={fullName}>
+          <Avatar name={fullName} src={user.avatar} seed={user._id} size="lg" decorative />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-ink" title={fullName}>
               {fullName}
             </p>
-            <p className="text-xs text-gray-500 truncate" title={user.email ?? undefined}>
+            <p className="truncate text-xs text-ink-secondary" title={user.email ?? undefined}>
               {user.email ?? ''}
             </p>
           </div>
@@ -60,12 +67,12 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user, onProfile, onLogout })
 
       <div className="py-1">
         <MenuItem onSelect={onProfile}>
-          <Icon as={IconUser} size={16} className="text-gray-400" aria-hidden="true" />
+          <Icon as={IconUser} size={16} className="text-ink-tertiary" aria-hidden="true" />
           <span>Profile</span>
         </MenuItem>
 
-        <MenuItem onSelect={onLogout} className="text-red-600 hover:bg-red-50">
-          <Icon as={IconLogout} size={16} className="text-red-500" aria-hidden="true" />
+        <MenuItem onSelect={onLogout} className="text-danger hover:bg-danger-bg">
+          <Icon as={IconLogout} size={16} className="text-danger" aria-hidden="true" />
           <span>Log out</span>
         </MenuItem>
       </div>

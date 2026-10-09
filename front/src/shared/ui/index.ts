@@ -64,7 +64,7 @@ export type { ProgressBarProps, ProgressSize, ProgressVariant } from './Progress
 export { Cover } from './Cover';
 export type { CoverProps } from './Cover';
 
-export { HUES, HUE_ANGLE, coverGradient, hueFromSeed } from './hue';
+export { HUES, HUE_ANGLE, MID_BACKGROUND, coverGradient, hueFromSeed } from './hue';
 export type { Hue } from './hue';
 
 export { WindLayer } from './WindLayer';

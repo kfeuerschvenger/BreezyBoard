@@ -3,11 +3,9 @@ import { toColorLookup } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import { useColors } from '@/features/colors';
 import type { Board, DashboardStats, User } from '@/models';
-import { useAddBoardMembers, useBoards, useCreateBoard, useDashboardStats } from '../queries';
+import { useAddBoardMembers, useBoards, useDashboardStats } from '../queries';
 import { useDeleteBoardWithUndo } from './useDeleteBoardWithUndo';
 import type { BoardToDelete } from './useDeleteBoardWithUndo';
-
-export type NewBoard = Pick<Board, 'title' | 'description' | 'color' | 'template'>;
 
 export interface UseBoardDashboardResult {
   boards: Board[];
@@ -18,7 +16,6 @@ export interface UseBoardDashboardResult {
   error: string | null;
   isDeleting: (boardId: string) => boolean;
   /** Each write answers whether it landed, so the caller knows to close its form. */
-  createBoard: (board: NewBoard) => Promise<boolean>;
   deleteBoard: (board: BoardToDelete) => Promise<boolean>;
   addMembers: (boardId: string, members: User[]) => Promise<boolean>;
 }
@@ -35,10 +32,12 @@ const NO_STATS: DashboardStats = {
 /**
  * Everything the dashboard reads and everything it writes.
  *
- * The three writes share a shape worth keeping in one place: report the
+ * The two writes share a shape worth keeping in one place: report the
  * failure, say whether it landed, and let the cache decide what the lists
- * look like afterwards. None of them touches a list directly, because each
- * mutation already invalidates the two keys it affects.
+ * look like afterwards. Neither touches a list directly, because each
+ * mutation already invalidates the two keys it affects. Creating a board is
+ * not here: the dialog that does it is the shell's, opened from the sidebar
+ * as well as from this page.
  */
 export function useBoardDashboard(): UseBoardDashboardResult {
   // Only failures the page causes itself. A failed read is reported by the
@@ -54,7 +53,6 @@ export function useBoardDashboard(): UseBoardDashboardResult {
   const { data: palette } = useColors('board');
   const colorLookup = useMemo(() => toColorLookup(palette ?? []), [palette]);
 
-  const createBoardMutation = useCreateBoard();
   const boardDeletion = useDeleteBoardWithUndo();
   const addMembersMutation = useAddBoardMembers();
 
@@ -83,9 +81,6 @@ export function useBoardDashboard(): UseBoardDashboardResult {
     // mirror was the defect recorded as P4-8: nothing ever wrote a board id
     // into it, so the in-flight state could not be reached at all.
     isDeleting: (boardId: string) => boardDeletion.pendingId === boardId,
-
-    createBoard: board =>
-      run(() => createBoardMutation.mutateAsync(board), 'Failed to create board. Please try again.', 'Error creating board:'),
 
     deleteBoard: board =>
       run(() => boardDeletion.deleteBoard(board), 'Failed to delete board. Please try again.', 'Error deleting board:'),

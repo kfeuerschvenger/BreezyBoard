@@ -1,0 +1,52 @@
+import { IconX } from '@tabler/icons-react';
+import { Icon, IconButton } from '@/shared/ui';
+import { BrandMark } from './BrandMark';
+import { SidebarBoards } from './SidebarBoards';
+import { SidebarFoot } from './SidebarFoot';
+import { SidebarNav } from './SidebarNav';
+
+export interface SidebarProps {
+  onCreateBoard: () => void;
+  /** Runs when a destination is chosen. */
+  onNavigate?: () => void;
+  /** Closes the panel the sidebar is where it is one. The button for it exists only there. */
+  onClose?: () => void;
+  className?: string;
+}
+
+/**
+ * The glass panel down the left of the application: the logo, the places, the
+ * boards and the account.
+ *
+ * It is a complementary landmark, so that the logo, the account and the
+ * links at its foot are inside one: content outside every landmark is
+ * unreachable by the landmark navigation of a screen reader.
+ *
+ * It is a column with a scrolling middle. The boards take whatever height is
+ * left between the fixed parts above and below them, so the account button is
+ * always at the foot of the screen and never pushed off it.
+ */
+export const Sidebar = ({ onCreateBoard, onNavigate, onClose, className = '' }: SidebarProps) => (
+  <aside
+    aria-label="Sidebar"
+    className={`min-h-0 flex-col gap-[18px] rounded-panel border border-glass-border bg-glass px-3 pb-3 pt-[18px] shadow-sidebar backdrop-blur-[20px] backdrop-saturate-150 ${className}`}
+  >
+    <div className="flex items-center justify-between gap-2">
+      <BrandMark onNavigate={onNavigate} />
+      <IconButton
+        type="button"
+        size="lg"
+        aria-label="Close navigation"
+        onClick={onClose}
+        className="shrink-0 lg:hidden"
+      >
+        <Icon as={IconX} size={20} />
+      </IconButton>
+    </div>
+    <SidebarNav onNavigate={onNavigate} />
+    <SidebarBoards onCreate={onCreateBoard} onNavigate={onNavigate} />
+    <SidebarFoot />
+  </aside>
+);
+
+export default Sidebar;

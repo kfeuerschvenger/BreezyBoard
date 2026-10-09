@@ -172,4 +172,14 @@ describe('LoadingScreen', () => {
 
     expect(container.firstElementChild).toHaveClass('bg-ground');
   });
+
+  // Inside the application shell a window-tall box would make the content
+  // area scroll for nothing, and a ground of its own would hide the gradient.
+  it('can fill the box it is placed in instead of the window, with no ground of its own', () => {
+    const { container } = render(<LoadingScreen fill="parent" />);
+
+    expect(container.firstElementChild).toHaveClass('flex-1');
+    expect(container.firstElementChild).not.toHaveClass('min-h-screen');
+    expect(container.firstElementChild).not.toHaveClass('bg-ground');
+  });
 });

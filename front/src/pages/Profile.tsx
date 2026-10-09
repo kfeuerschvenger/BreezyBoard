@@ -24,7 +24,7 @@ const ProfilePage: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="mx-auto w-full max-w-4xl">
       <PageHeader
         title="Profile Settings"
         subtitle="Manage your account information and preferences"
@@ -45,7 +45,7 @@ const ProfilePage: React.FC = () => {
         )}
       </PageHeader>
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="pt-2">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <ProfileSummary values={watch()} isUploadingAvatar={profile.isUploadingAvatar} onAvatarSelected={uploadAvatar} />
 

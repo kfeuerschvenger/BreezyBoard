@@ -897,6 +897,122 @@ await page.getByRole('button', { name: /^create board$/i }).last().click();
 await page.getByText(gateBoard).first().waitFor();
 await page.waitForTimeout(600);
 
+log('\n--- the application shell, signed in at 1440 ---');
+
+// The frame is measured from the rendered page: its size and position are
+// layout facts and its surfaces are computed styles, and neither exists below
+// a real browser. The boards list has the one board created above.
+const shellRoot = page.locator('#app-sidebar').locator('xpath=..');
+const rootStyle = await styleOf(shellRoot, ['height', 'overflow', 'backgroundImage', 'backgroundColor', 'display']);
+check('the shell is exactly as tall as the screen', rootStyle.height, '900px');
+check('the shell clips so the document never scrolls', rootStyle.overflow, 'hidden');
+check(
+  'the document does not scroll in either direction',
+  await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight && document.documentElement.scrollWidth <= window.innerWidth),
+  true
+);
+check('the ground carries three radial gradients', (rootStyle.backgroundImage.match(/radial-gradient\(/g) ?? []).length, 3);
+check('the ground lies on the ground colour', await paintOf(page, rootStyle.backgroundColor), await paintOf(page, await tokenValue(page, '--color-ground')));
+
+const sidebar = page.locator('#app-sidebar > aside');
+const sidebarBox = await sidebar.boundingBox();
+check(
+  'the sidebar is 240 wide in a 252 column, 12 from the edges',
+  `${sidebarBox.x} ${sidebarBox.y} ${sidebarBox.width} ${sidebarBox.height}`,
+  '12 12 240 876'
+);
+const sidebarStyle = await styleOf(sidebar, ['borderTopLeftRadius', 'backdropFilter', 'backgroundColor', 'boxShadow', 'borderTopWidth']);
+check('the sidebar has the panel radius', sidebarStyle.borderTopLeftRadius, '24px');
+check('the sidebar blurs by 20 and saturates by 1.5', ['blur(20px)', 'saturate(1.5)'].every(part => sidebarStyle.backdropFilter.includes(part)), true);
+check('the sidebar is glass at 62 percent white', sidebarStyle.backgroundColor, 'rgba(255, 255, 255, 0.62)');
+check('the sidebar casts the sidebar shadow', sidebarStyle.boxShadow.includes('0px 20px 50px -30px'), true);
+check('the sidebar has a one pixel border', sidebarStyle.borderTopWidth, '1px');
+
+const shellHeader = page.getByRole('banner');
+const headerBox = await shellHeader.boundingBox();
+check('the header is 56 pixels tall', headerBox.height, 56);
+check('the content column starts 22 pixels after the sidebar column', headerBox.x, 252 + 22);
+const mainStyle = await styleOf(page.getByRole('main'), ['overflowY', 'display']);
+check('the content area scrolls on its own', mainStyle.overflowY, 'auto');
+
+const logoTile = sidebar.getByRole('link', { name: 'breezyboard' }).locator('span').first();
+const logoStyle = await styleOf(logoTile, ['width', 'height', 'borderTopLeftRadius', 'backgroundImage', 'boxShadow']);
+check('the logo tile is 36 pixels with the control radius', `${logoStyle.width} ${logoStyle.height} ${logoStyle.borderTopLeftRadius}`, '36px 36px 12px');
+check('the logo tile is the reference gradient', logoStyle.backgroundImage.startsWith('linear-gradient(135deg'), true);
+check('the logo tile casts the logo shadow', logoStyle.boxShadow.includes('0px 8px 18px -8px'), true);
+const logoStops = (await tokenValue(page, '--gradient-logo')).match(/oklch\([^)]*\)/g);
+check('the logo gradient has two stops', logoStops?.length, 2);
+// A logo is exempt from 1.4.3 and 1.4.11, and the product owner kept the
+// reference gradient. The number is recorded so that the exemption is a
+// measurement and not an assumption, and so a change to the stops is seen.
+const logoPairs = await measurePairs(page, [['the white glyph on the light stop of the logo', '#ffffff', logoStops[1], 0]]);
+check(`the white glyph is about 2.2:1 on the light end of the logo (${logoPairs[0][1]}:1)`, logoPairs[0][1] > 2 && logoPairs[0][1] < 2.5, true);
+const wordmark = await sidebar.getByRole('link', { name: 'breezyboard' }).evaluate(link => {
+  const [heavy, regular] = link.querySelectorAll('span > span');
+  return { heavy: getComputedStyle(heavy).fontWeight, regular: getComputedStyle(regular).fontWeight, size: getComputedStyle(heavy).fontSize, family: getComputedStyle(heavy).fontFamily };
+});
+check('the wordmark is breezy at 800 and board at 400', `${wordmark.heavy} ${wordmark.regular}`, '800 400');
+check('the wordmark is 21 pixels in the display face', `${wordmark.size} ${leads(wordmark.family, 'Bricolage Grotesque')}`, '21px true');
+
+const homeItem = sidebar.getByRole('link', { name: 'Home', exact: true });
+const homeStyle = await styleOf(homeItem, ['height', 'borderTopLeftRadius', 'backgroundColor', 'boxShadow', 'fontWeight', 'fontSize']);
+check('the active nav item is 40 pixels with the control radius', `${homeStyle.height} ${homeStyle.borderTopLeftRadius}`, '40px 12px');
+check('the active nav item is white and lifted', `${await paintOf(page, homeStyle.backgroundColor)} ${homeStyle.boxShadow.includes('0px 6px 16px -10px')}`, '255,255,255 true');
+check('a nav item is 14 pixels at 600', `${homeStyle.fontSize} ${homeStyle.fontWeight}`, '14px 600');
+
+const boardLink = sidebar.getByRole('link', { name: gateBoard });
+const boardStyle = await styleOf(boardLink, ['height', 'borderTopLeftRadius', 'fontWeight', 'fontSize']);
+check('a board item is 38 pixels at 500 and 14 pixels when it is not the open one', `${boardStyle.height} ${boardStyle.fontWeight} ${boardStyle.fontSize}`, '38px 500 14px');
+const boardDot = await styleOf(boardLink.locator('span').first(), ['width', 'height', 'rotate', 'borderTopLeftRadius']);
+check('a board dot is a 12 pixel square turned 12 degrees with the dot radius', `${boardDot.width} ${boardDot.height} ${boardDot.rotate} ${boardDot.borderTopLeftRadius}`, '12px 12px 12deg 4px');
+const eyebrow = await styleOf(sidebar.locator('#sidebar-boards-label'), ['fontFamily', 'fontSize', 'letterSpacing', 'textTransform']);
+check('the BOARDS label is mono caps at 11 pixels, tracked 0.1em', `${leads(eyebrow.fontFamily, 'DM Mono')} ${eyebrow.fontSize} ${eyebrow.letterSpacing} ${eyebrow.textTransform}`, 'true 11px 1.1px uppercase');
+
+// Small text on the glass is measured against what is painted behind it: the
+// glass is translucent over a gradient, so no token pair says what the ratio
+// is. The text is made transparent, the box is photographed, and the darkest
+// pixel found is the worst background the text can sit on.
+const worstBackdrop = async locator => {
+  await locator.evaluate(element => {
+    element.dataset.keptColor = element.style.color;
+    // A colour transition would leave the text half visible in the photograph.
+    element.style.transition = 'none';
+    element.style.color = 'transparent';
+  });
+  const shot = await locator.screenshot();
+  await locator.evaluate(element => {
+    element.style.color = element.dataset.keptColor;
+    element.style.transition = '';
+    delete element.dataset.keptColor;
+  });
+  return page.evaluate(async encoded => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${encoded}`)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    let darkest = [255, 255, 255];
+    let lowest = Infinity;
+    for (let i = 0; i < data.length; i += 4) {
+      const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      if (lum < lowest) {
+        lowest = lum;
+        darkest = [data[i], data[i + 1], data[i + 2]];
+      }
+    }
+    return darkest.join(',');
+  }, shot.toString('base64'));
+};
+for (const [label, locator, token] of [
+  ['the BOARDS label', sidebar.locator('#sidebar-boards-label'), '--color-ink-tertiary'],
+  ['a board name', boardLink.locator('span.truncate'), '--color-ink-secondary'],
+  ['the author line', sidebar.getByText(/Kevin Feuerschvenger$/), '--color-ink-tertiary'],
+  ['a legal link', sidebar.getByRole('button', { name: 'Privacy policy' }), '--color-ink-secondary'],
+]) {
+  const behind = await worstBackdrop(locator);
+  await reportPairs(page, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
+}
+
 // The account menu: it rises in, and while it leaves it is already out of
 // reach.
 const menuOpening = await page.evaluate(

@@ -43,7 +43,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   // indication of why. The form looked ordinary and was permanently dead. It
   // surfaced twice as "the submit button never became enabled" and was twice
   // diagnosed as a timing problem.
-  const colorsQuery = useColors('board');
+  const colorsQuery = useColors('board', open);
   const templatesQuery = useTemplates(open);
 
   const boardColors = colorsQuery.data ?? NO_COLORS;

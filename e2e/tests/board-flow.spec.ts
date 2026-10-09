@@ -20,8 +20,9 @@ test.describe('board core loop', () => {
       await page.getByLabel(/board name/i).fill(boardName);
       await page.getByRole('button', { name: /^create board$/i }).last().click();
 
-      await expect(page.getByText(boardName)).toBeVisible();
-      await page.getByText(boardName).first().click();
+      // The sidebar lists the board too, so the tile is found inside the page.
+      await expect(page.getByRole('main').getByText(boardName)).toBeVisible();
+      await page.getByRole('main').getByText(boardName).click();
       await expect(page).toHaveURL(/\/board\/[a-f0-9]{24}$/);
     });
 
@@ -366,6 +367,11 @@ test.describe('board core loop', () => {
 
       await handleOf(page, 'A1').focus();
       await page.keyboard.press('Space');
+      // The sensor starts listening for the arrows one task after the key that
+      // picks the card up, so an arrow sent in the same instant is lost. A
+      // person cannot press that fast, and waiting for the announcement is what
+      // they would do.
+      await expect(dndAnnouncement(page)).toHaveText('Picked up A1. Backlog, position 1 of 2.');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowDown');
       await expect(dndAnnouncement(page)).toHaveText('Up Next, position 2 of 2.');
@@ -393,6 +399,8 @@ test.describe('board core loop', () => {
 
       await handleOf(page, 'A2').focus();
       await page.keyboard.press('Space');
+      // See the test above: the arrows are heard from one task after the pick up.
+      await expect(dndAnnouncement(page)).toHaveText('Picked up A2. Backlog, position 2 of 3.');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('Escape');
@@ -457,10 +465,13 @@ test.describe('board core loop', () => {
   /**
    * The account menu is the shared Menu primitive, which draws its popup in a
    * portal at fixed coordinates. Where that lands is a layout fact no layer
-   * below a real browser computes, so it is measured here: under the button,
-   * lined up with its right edge, and inside the screen at both widths.
+   * below a real browser computes, so it is measured here: above the button,
+   * because the button is at the foot of the sidebar and there is no room
+   * below it, lined up with its left edge, and inside the screen at both
+   * widths. Below the large breakpoint the button is in the navigation panel,
+   * which is opened first.
    */
-  test('the account menu opens under its button, on screen, and works from the keyboard', async ({
+  test('the account menu opens above its button, on screen, and works from the keyboard', async ({
     page,
     authedUser,
   }) => {
@@ -470,6 +481,8 @@ test.describe('board core loop', () => {
     for (const width of [1440, 390]) {
       await test.step(`at ${width} pixels`, async () => {
         await page.setViewportSize({ width, height: 844 });
+        const openNavigation = page.getByRole('button', { name: 'Open navigation' });
+        if (await openNavigation.isVisible()) await openNavigation.click();
         await trigger.click();
 
         const menu = page.getByRole('menu');
@@ -477,12 +490,11 @@ test.describe('board core loop', () => {
         const button = (await trigger.boundingBox())!;
         const popup = (await menu.boundingBox())!;
 
-        expect(popup.y, 'opens below the button').toBeGreaterThanOrEqual(button.y + button.height);
+        expect(popup.y + popup.height, 'opens above the button').toBeLessThanOrEqual(button.y);
+        expect(popup.y, 'inside at the top').toBeGreaterThanOrEqual(0);
         expect(popup.x, 'inside on the left').toBeGreaterThanOrEqual(0);
         expect(popup.x + popup.width, 'inside on the right').toBeLessThanOrEqual(width);
-        expect(Math.abs(popup.x + popup.width - (button.x + button.width)), 'lined up with the button').toBeLessThan(
-          width === 1440 ? 2 : 9
-        );
+        expect(Math.abs(popup.x - button.x), 'lined up with the button').toBeLessThan(2);
 
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
@@ -520,7 +532,7 @@ test.describe('board core loop', () => {
     await page.getByRole('button', { name: /create board/i }).first().click();
     await page.getByLabel(/board name/i).fill(boardName);
     await page.getByRole('button', { name: /^create board$/i }).last().click();
-    await expect(page.getByText(boardName)).toBeVisible();
+    await expect(page.getByRole('main').getByText(boardName)).toBeVisible();
 
     await test.step('the options button stays above the stretched link', async () => {
       await page.getByRole('button', { name: `Options for ${boardName}` }).click();
@@ -534,7 +546,7 @@ test.describe('board core loop', () => {
     });
 
     await test.step('the title opens the board from the keyboard alone', async () => {
-      const title = page.getByRole('link', { name: boardName });
+      const title = page.getByRole('main').getByRole('link', { name: boardName });
       await title.focus();
       await expect(title).toBeFocused();
       await page.keyboard.press('Enter');

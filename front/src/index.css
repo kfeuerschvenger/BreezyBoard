@@ -199,6 +199,21 @@
      hues, so white holds 3.65:1 or better along the whole tile. */
   --gradient-mark: linear-gradient(135deg, oklch(0.5 0.14 248), oklch(0.6 0.12 205));
 
+  /* The logo tile of the sidebar is the reference design's own gradient and
+     keeps it: white on its light end measures about 2.2:1. The decision is the
+     product owner's. A logo is exempt from WCAG 1.4.3 and 1.4.11 as a logotype,
+     and the control it sits in carries its name as text beside it. */
+  --gradient-logo: linear-gradient(135deg, oklch(0.55 0.14 248), oklch(0.74 0.12 192));
+  --shadow-logo: 0 8px 18px -8px oklch(0.55 0.14 232 / 0.8);
+
+  /* The ground of the application shell: three soft radial lights laid over
+     the ground colour, a sky blue at the top left, a mint at the top right and
+     a sand at the bottom right. */
+  --gradient-ground:
+    radial-gradient(1200px 620px at 8% -12%, oklch(0.92 0.05 232) 0%, transparent 60%),
+    radial-gradient(900px 620px at 100% -5%, oklch(0.95 0.04 192), transparent 60%),
+    radial-gradient(1000px 700px at 85% 112%, oklch(0.955 0.045 82), transparent 60%);
+
   /* Whole animations, each a keyframe set below with its timing and easing.
      `animate-bb-up` and the rest are the only way a component names one, so
      the timing lives here and never in a class string. Every one of them is

@@ -8,10 +8,10 @@ import { BoardActions } from '@/features/boards';
 import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
 import { motion } from 'motion/react';
 import { IconPlus } from '@tabler/icons-react';
-import { LoadingScreen, Icon } from '@/shared/ui';
+import { Button, LoadingScreen, Icon } from '@/shared/ui';
+import { ShellAction } from '@/app/layouts/shell/ShellAction';
 import NotFound from './NotFound';
 import PageHeader from '../components/PageHeader';
-import UserAvatar from '../components/UserAvatar';
 
 const Board = () => {
   const navigate = useNavigate();
@@ -97,7 +97,7 @@ const Board = () => {
     });
   };
 
-  if (isLoading) return <LoadingScreen label="Loading this board" />;
+  if (isLoading) return <LoadingScreen label="Loading this board" fill="parent" />;
 
   // Ahead of the generic failure: a board that is missing, deleted or not the
   // caller's answers the same on every attempt, so "Try again" would only
@@ -113,23 +113,17 @@ const Board = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
-        <div role="alert" className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center max-w-md">
-          <p className="text-gray-900 font-medium mb-2">This board could not be loaded</p>
-          <p className="text-sm text-gray-600 mb-6">{error}</p>
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 cursor-pointer"
-            >
+      <div className="flex flex-1 items-center justify-center p-8">
+        <div role="alert" className="max-w-md rounded-panel border border-line-08 bg-surface p-8 text-center shadow-card">
+          <p className="mb-2 font-medium text-ink">This board could not be loaded</p>
+          <p className="mb-6 text-sm text-ink-secondary">{error}</p>
+          <div className="flex justify-center gap-3">
+            <Button type="button" onClick={() => window.location.reload()}>
               Try again
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate('/')}>
               Back to boards
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -141,24 +135,27 @@ const Board = () => {
     // viewport: the header takes what it needs and the columns take the rest,
     // so the only things that scroll are the column row sideways and each
     // column body down.
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <PageHeader
         title={board ? board.title : 'Project Board'}
         subtitle="Manage tasks in this board"
         showBackButton
         onBack={() => navigate('/')}
       >
-        <button
-          onClick={openNewTask}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
-          disabled={columns.length === 0}
-        >
-          <Icon as={IconPlus} size={20} />
-          Add Task
-        </button>
         {board && <BoardActions board={board} onDeleted={() => navigate('/')} />}
-        <UserAvatar />
       </PageHeader>
+
+      <ShellAction>
+        <Button
+          type="button"
+          size="sm"
+          onClick={openNewTask}
+          disabled={columns.length === 0}
+          leftIcon={<Icon as={IconPlus} size={18} />}
+        >
+          Add Task
+        </Button>
+      </ShellAction>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
