@@ -5,11 +5,12 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig } from 'motion/react';
 
 import { AppShell } from '@/app/layouts/AppShell';
+import { AuthLayout } from '@/app/layouts/AuthLayout';
 import { createQueryClient } from '@/app/queryClient';
 import { AuthProvider } from '@/context/AuthProvider';
 import { AuthToastProvider } from '@/context/AuthToastProvider';
 import { useAuth } from '@/hooks/useAuth';
-import { Board, Home, Login, NotFound, Profile, Register, ResetPassword } from '@/pages';
+import { Auth, Board, Home, NotFound, Profile, ResetPassword } from '@/pages';
 import { LoadingScreen } from '@/shared/ui';
 
 import './index.css';
@@ -45,11 +46,16 @@ const SignedInLayout = () => {
 const AppRoutes = () => {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      {/* Public by necessity: the person arriving from the emailed link has
-          no session, and one who has is signed out when the reset succeeds. */}
-      <Route path="/reset-password" element={<ResetPassword />} />
+      {/* The pages a visitor with no session uses to get in share one frame,
+          so the branding column stays mounted while the page beside it
+          changes. Reset is public by necessity: the person arriving from the
+          emailed link has no session, and one who has is signed out when the
+          reset succeeds. */}
+      <Route element={<AuthLayout />}>
+        <Route path="/login" element={<Auth mode="signin" />} />
+        <Route path="/register" element={<Auth mode="signup" />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+      </Route>
       <Route element={<SignedInLayout />}>
         <Route
           path="/"

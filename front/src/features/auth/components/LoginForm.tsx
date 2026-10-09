@@ -2,19 +2,20 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { motion } from 'motion/react';
-import { IconLock, IconMail } from '@tabler/icons-react';
-import { Field, Input, PasswordInput, Icon } from '@/shared/ui';
+import { IconArrowRight } from '@tabler/icons-react';
+import { Button, Field, Icon, Input, PasswordInput } from '@/shared/ui';
 import type { LoginCredentials } from '@/models';
+import { useShake } from '../useShake';
+import { AuthBanner } from './AuthBanner';
 
 /**
  * The messages are the page's own, not the browser's.
  *
- * The form is submitted with `noValidate` for the same reason. The email
- * field used to be a validating `type="email"` on a validating form, so the
- * browser refused the submit before the handler ran: the person saw the
- * browser's wording with none of this page's styling, and the branch that
- * wrote "Email is invalid" could never run at all.
+ * The form is submitted with `noValidate` for the same reason: a validating
+ * `type="email"` on a validating form makes the browser refuse the submit
+ * before the handler runs, so the person sees the browser's wording with none
+ * of this page's styling and the branch that writes "Email is invalid" can
+ * never run at all.
  */
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Email is invalid'),
@@ -26,13 +27,21 @@ export type LoginFormValues = z.infer<typeof loginSchema>;
 export interface LoginFormProps {
   /** Rejects when the credentials are refused. */
   onSubmit: (credentials: LoginCredentials) => Promise<void>;
-  /** Shown above the fields, for a failure the form itself cannot predict. */
+  /** Shown in the banner, for a failure the form itself cannot predict. */
   error: string | null;
   /** Called on the first keystroke after a failure, to clear it. */
   onDirty: () => void;
   onForgotPassword: () => void;
 }
 
+/**
+ * The sign in form. A refused submit, whether the fields failed validation or
+ * the server refused the credentials, shakes the form once.
+ *
+ * There is no "Remember me": nothing in the frontend or the backend would read
+ * it, and a session that outlives the tab is a decision about the session
+ * contract, not a checkbox.
+ */
 export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, error, onDirty, onForgotPassword }) => {
   const {
     register,
@@ -43,60 +52,60 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSubmit, error, onDirty, 
     mode: 'onSubmit',
     defaultValues: { email: '', password: '' },
   });
+  const { ref, shake } = useShake<HTMLFormElement>(error, isSubmitting);
 
   return (
-    <>
-      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+    <form
+      ref={ref}
+      onSubmit={handleSubmit(onSubmit, shake)}
+      onChange={onDirty}
+      className="flex flex-col gap-4.5"
+      noValidate
+    >
+      <Field label="Email address" error={errors.email?.message}>
+        {props => (
+          <Input {...props} {...register('email')} type="email" autoComplete="email" placeholder="you@company.com" />
+        )}
+      </Field>
 
-      <form onSubmit={handleSubmit(onSubmit)} onChange={onDirty} className="space-y-6" noValidate>
-        <Field label="Email address" error={errors.email?.message} icon={<Icon as={IconMail} className="h-5 w-5 text-gray-400" />}>
-          {props => <Input {...props} {...register('email')} placeholder="Enter your email" className="pl-10" />}
-        </Field>
-
-        <Field label="Password" error={errors.password?.message}>
-          {props => (
-            <PasswordInput
-              {...props}
-              {...register('password')}
-              placeholder="Enter your password"
-              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
-            />
-          )}
-        </Field>
-
-        {/*
-          There was a "Remember me" checkbox here. It was uncontrolled, no
-          part of the frontend or the backend read it, and nothing ever sent
-          it, so ticking it had no effect of any kind. Finding P4-14, removed
-          rather than implemented: a session that outlives the tab is a
-          decision about the session contract in section 9, not a checkbox.
-        */}
-        <div className="flex items-center justify-end">
-          {/*
-            A button, not a link. It opens a dialog on this page and
-            navigates nowhere, and it used to be a `Link to="#"` with the
-            navigation cancelled in its own handler.
-          */}
+      <Field
+        label="Password"
+        error={errors.password?.message}
+        labelAside={
+          // A button, not a link: it opens a dialog on this page and navigates
+          // nowhere.
           <button
             type="button"
             onClick={onForgotPassword}
-            className="py-2 text-sm text-blue-600 hover:text-blue-500 font-medium cursor-pointer"
+            className="focus-ring -my-1.5 min-h-8 cursor-pointer rounded-chip px-1 text-[13px] font-medium text-link transition-colors hover:text-ink"
           >
-            Forgot password?
+            Forgot it?
           </button>
-        </div>
+        }
+      >
+        {props => (
+          <PasswordInput
+            {...props}
+            {...register('password')}
+            autoComplete="current-password"
+            placeholder="At least 6 characters"
+          />
+        )}
+      </Field>
 
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isSubmitting ? 'Signing in...' : 'Sign in'}
-        </motion.button>
-      </form>
-    </>
+      {error && <AuthBanner>{error}</AuthBanner>}
+
+      <Button type="submit" size="lg" isLoading={isSubmitting} className="w-full">
+        {isSubmitting ? (
+          'Signing in...'
+        ) : (
+          <>
+            Sign in
+            <Icon as={IconArrowRight} size={18} />
+          </>
+        )}
+      </Button>
+    </form>
   );
 };
 

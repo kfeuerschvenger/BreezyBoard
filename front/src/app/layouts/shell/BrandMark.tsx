@@ -19,6 +19,18 @@ export const LogoGlyph = ({ size = 21, className = '' }: { size?: number; classN
   </svg>
 );
 
+/**
+ * "breezy" in the heavy weight and "board" in the regular one: the wordmark on
+ * its own, for the places that set it beside a tile of their own. The size and
+ * colour come from the caller.
+ */
+export const Wordmark = ({ className = '' }: { className?: string }) => (
+  <span className={`font-heading leading-none tracking-[-0.03em] ${className}`}>
+    <span className="font-extrabold">breezy</span>
+    <span className="font-normal">board</span>
+  </span>
+);
+
 export interface BrandMarkProps {
   /** Whether the glyph sways. It follows the Breeze setting, so a still sky stops it. */
   sway?: boolean;
@@ -44,10 +56,7 @@ export const BrandMark = ({ sway = false, onNavigate }: BrandMarkProps) => (
     <span className="flex size-9 shrink-0 items-center justify-center rounded-control bg-[image:var(--gradient-logo)] text-white shadow-logo">
       <LogoGlyph className={sway ? 'animate-bb-sway' : ''} />
     </span>
-    <span className="font-heading text-[21px] leading-none tracking-[-0.03em] text-ink">
-      <span className="font-extrabold">breezy</span>
-      <span className="font-normal">board</span>
-    </span>
+    <Wordmark className="text-[21px] text-ink" />
   </Link>
 );
 

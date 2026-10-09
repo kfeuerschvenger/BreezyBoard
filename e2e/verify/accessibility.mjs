@@ -159,7 +159,7 @@ await scan('login');
 // The forgot password dialog was the fifth hand-written modal and the one
 // finding P3-4 missed, which is exactly what an unscanned state buys you. It
 // is scanned now, open.
-await page.getByRole('button', { name: /forgot password/i }).click();
+await page.getByRole('button', { name: 'Forgot it?' }).click();
 await page.waitForTimeout(400);
 await scan('login, forgot password open');
 

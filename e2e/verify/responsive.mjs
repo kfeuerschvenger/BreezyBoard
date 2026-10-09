@@ -535,7 +535,7 @@ const anonymous = [
     open: async () => {
       await anonPage.goto(`${FRONT}/login`);
       await anonPage.waitForSelector('form');
-      await anonPage.getByRole('button', { name: /forgot password/i }).click();
+      await anonPage.getByRole('button', { name: 'Forgot it?' }).click();
       await anonPage.getByRole('dialog').waitFor();
     },
   },
@@ -547,7 +547,7 @@ const anonymous = [
     open: async () => {
       await anonPage.goto(`${FRONT}/login`);
       await anonPage.waitForSelector('form');
-      await anonPage.getByRole('button', { name: /forgot password/i }).click();
+      await anonPage.getByRole('button', { name: 'Forgot it?' }).click();
       const dialog = anonPage.getByRole('dialog', { name: 'Forgot password' });
       await dialog.getByLabel('Email address').fill('a.very.long.address.nobody.owns@example.test');
       await dialog.getByRole('button', { name: 'Send reset link' }).click();
@@ -587,7 +587,7 @@ const anonymous = [
     open: async () => {
       await anonPage.goto(`${FRONT}/register`);
       await anonPage.waitForSelector('form');
-      await anonPage.getByRole('button', { name: 'Terms of Service' }).click();
+      await anonPage.getByRole('button', { name: 'Terms', exact: true }).click();
       await anonPage.getByRole('dialog').waitFor();
       await anonPage.getByRole('dialog').getByText(/\S{4,}/).first().waitFor();
     },

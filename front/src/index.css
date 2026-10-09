@@ -229,6 +229,29 @@
   --animate-bb-shake: bbShake 0.45s;
   --animate-bb-sway: bbSway 4s ease-in-out infinite;
   --animate-bb-toast: bbToast 0.45s var(--ease-standard) both;
+  /* The two floating cards on the auth screen drift on different periods and
+     out of phase, so they never move together. */
+  --animate-bb-float-a: bbFloat 6s ease-in-out infinite alternate;
+  --animate-bb-float-b: bbFloat 7s ease-in-out -2s infinite alternate;
+
+  /* The brand panel of the auth screen: a teal light at the top right and a
+     coral one at the bottom left over a navy that lifts towards a steel blue. */
+  --gradient-brand-panel:
+    radial-gradient(800px 520px at 88% 12%, oklch(0.72 0.11 192 / 0.55), transparent 60%),
+    radial-gradient(700px 520px at 0% 105%, oklch(0.74 0.13 38 / 0.4), transparent 60%),
+    linear-gradient(165deg, #0f1b2d 0%, oklch(0.34 0.09 248) 52%, oklch(0.5 0.11 222) 100%);
+
+  /* The one word of the brand headline set in a warm gradient. */
+  --gradient-wind-word: linear-gradient(90deg, oklch(0.88 0.12 82), oklch(0.78 0.14 38));
+
+  /* The sticky note drawn on the auth screen. The notes module chooses its own
+     set of tints, so this one is named for the sand it is rather than for a note. */
+  --color-note-sand: oklch(0.955 0.035 82);
+
+  /* Postcard and floating card shadows are black, not navy: they sit on a dark
+     panel, where a navy shadow would not show. */
+  --shadow-postcard: 0 34px 60px -26px rgb(0 0 0 / 0.6);
+  --shadow-float: 0 30px 60px -24px rgb(0 0 0 / 0.5);
 }
 
 /*

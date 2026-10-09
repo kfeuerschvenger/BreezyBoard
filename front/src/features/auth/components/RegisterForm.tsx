@@ -1,17 +1,12 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React from 'react';
 import { useForm } from 'react-hook-form';
-
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-
-import { IconLock, IconMail, IconUser } from '@tabler/icons-react';
-import { motion } from 'motion/react';
-
-import { Field, Input, PasswordInput, Icon } from '@/shared/ui';
-import LegalModal from '@/components/LegalModal';
-import { useAuth } from '@/hooks/useAuth';
+import { IconArrowRight } from '@tabler/icons-react';
+import { Button, Field, Icon, Input, PasswordInput } from '@/shared/ui';
 import type { RegisterCredentials } from '@/models';
+import { useShake } from '../useShake';
+import { AuthBanner } from './AuthBanner';
 
 /**
  * Validation schema using zod
@@ -39,13 +34,24 @@ const registerSchema = z
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
-const RegisterForm: React.FC = () => {
-  const navigate = useNavigate();
-  const { register: authRegister } = useAuth(); // rename to avoid conflict with react-hook-form's register
-  const [openModal, setOpenModal] = useState<'terms' | 'privacy' | null>(null);
-  const [apiError, setApiError] = useState<string | null>(null);
+export interface RegisterFormProps {
+  /** Rejects when the account could not be created. */
+  onSubmit: (credentials: RegisterCredentials) => Promise<void>;
+  /** Shown in the banner, for a failure the form itself cannot predict. */
+  error: string | null;
+  /** Called on the first keystroke after a failure, to clear it. */
+  onDirty: () => void;
+}
 
-  // react-hook-form setup
+/**
+ * The sign up form. The submit stays disabled until every field is valid and
+ * the terms are accepted, so a refused submit is always the server's and
+ * shakes the form through the banner's error.
+ *
+ * The terms are accepted here and read through the legal links the auth screen
+ * carries under the form, which open the same dialogs as the sidebar's.
+ */
+export const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, error, onDirty }) => {
   const {
     register,
     handleSubmit,
@@ -63,141 +69,81 @@ const RegisterForm: React.FC = () => {
       terms: false,
     },
   });
+  const { ref } = useShake<HTMLFormElement>(error, isSubmitting);
 
   const watchedTerms = watch('terms');
 
-  const onSubmit = async (values: RegisterFormValues) => {
-    setApiError(null);
-    try {
-      const payload: RegisterCredentials = {
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-        password: values.password,
-      };
-
-      await authRegister(payload);
-      navigate('/');
-    } catch (err) {
-      console.error('Registration failed:', err);
-      setApiError('Registration failed. Please try again.');
-    }
-  };
-
-  // modal helpers
-  const openTerms = () => setOpenModal('terms');
-  const openPrivacy = () => setOpenModal('privacy');
-  const closeModal = () => setOpenModal(null);
+  const submit = ({ firstName, lastName, email, password }: RegisterFormValues) =>
+    onSubmit({ firstName, lastName, email, password });
 
   return (
-    <>
-      {apiError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{apiError}</div>}
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="First name" error={errors.firstName?.message} icon={<Icon as={IconUser} className="h-5 w-5 text-gray-400" />}>
-            {props => <Input {...props} {...register('firstName')} placeholder="John" className="pl-10" />}
-          </Field>
-
-          <Field label="Last name" error={errors.lastName?.message} icon={<Icon as={IconUser} className="h-5 w-5 text-gray-400" />}>
-            {props => <Input {...props} {...register('lastName')} placeholder="Doe" className="pl-10" />}
-          </Field>
-        </div>
-
-        <Field label="Email address" error={errors.email?.message} icon={<Icon as={IconMail} className="h-5 w-5 text-gray-400" />}>
-          {props => (
-            <Input {...props} {...register('email')} type="email" placeholder="john@example.com" className="pl-10" />
-          )}
+    <form ref={ref} onSubmit={handleSubmit(submit)} onChange={onDirty} className="flex flex-col gap-4.5" noValidate>
+      <div className="grid grid-cols-1 gap-4.5 sm:grid-cols-2 sm:gap-3">
+        <Field label="First name" error={errors.firstName?.message}>
+          {props => <Input {...props} {...register('firstName')} autoComplete="given-name" placeholder="Lucía" />}
         </Field>
 
-        <Field label="Password" error={errors.password?.message}>
-          {props => (
-            <PasswordInput
-              {...props}
-              {...register('password')}
-              placeholder="Create a strong password"
-              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
-              toggleLabel="password"
-            />
-          )}
+        <Field label="Last name" error={errors.lastName?.message}>
+          {props => <Input {...props} {...register('lastName')} autoComplete="family-name" placeholder="Ferreyra" />}
         </Field>
-
-        <Field label="Confirm password" error={errors.confirmPassword?.message}>
-          {props => (
-            <PasswordInput
-              {...props}
-              {...register('confirmPassword')}
-              placeholder="Confirm your password"
-              icon={<Icon as={IconLock} className="h-5 w-5 text-gray-400" />}
-              toggleLabel="confirm password"
-            />
-          )}
-        </Field>
-
-        <div className="flex items-center">
-          <input
-            id="terms"
-            type="checkbox"
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            {...register('terms')}
-          />
-          <label htmlFor="terms" className="ml-2 block py-2 text-sm text-gray-700">
-            I agree to the{' '}
-            <button
-              type="button"
-              onClick={openTerms}
-              onMouseEnter={() => fetch(encodeURI('/terms-of-service.txt')).catch(() => {})}
-              className="text-blue-600 hover:text-blue-500 font-medium underline cursor-pointer"
-            >
-              Terms of Service
-            </button>{' '}
-            and{' '}
-            <button
-              type="button"
-              onClick={openPrivacy}
-              onMouseEnter={() => fetch(encodeURI('/privacy-policy.txt')).catch(() => {})}
-              className="text-blue-600 hover:text-blue-500 font-medium underline cursor-pointer"
-            >
-              Privacy Policy
-            </button>
-          </label>
-        </div>
-        {errors.terms?.message && <p className="mt-1 text-sm text-red-600">{errors.terms?.message}</p>}
-
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          type="submit"
-          disabled={!isValid || !watchedTerms || isSubmitting}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {isSubmitting ? 'Creating account...' : 'Create account'}
-        </motion.button>
-      </form>
-
-      <div className="mt-6 text-center">
-        <p className="text-gray-600">
-          Already have an account?{' '}
-          <Link to="/login" className="text-blue-600 hover:text-blue-500 font-medium">
-            Sign in
-          </Link>
-        </p>
       </div>
 
-      {/* Legal modals */}
-      <LegalModal
-        open={openModal === 'terms'}
-        onClose={closeModal}
-        title="Terms of Service - BreezyBoard"
-        filePath="/terms-of-service.txt"
-      />
-      <LegalModal
-        open={openModal === 'privacy'}
-        onClose={closeModal}
-        title="Privacy Policy - BreezyBoard"
-        filePath="/privacy-policy.txt"
-      />
-    </>
+      <Field label="Email address" error={errors.email?.message}>
+        {props => (
+          <Input {...props} {...register('email')} type="email" autoComplete="email" placeholder="you@company.com" />
+        )}
+      </Field>
+
+      <Field label="Password" error={errors.password?.message}>
+        {props => (
+          <PasswordInput
+            {...props}
+            {...register('password')}
+            autoComplete="new-password"
+            placeholder="Create a strong password"
+          />
+        )}
+      </Field>
+
+      <Field label="Confirm password" error={errors.confirmPassword?.message}>
+        {props => (
+          <PasswordInput
+            {...props}
+            {...register('confirmPassword')}
+            autoComplete="new-password"
+            placeholder="Confirm your password"
+            toggleLabel="confirm password"
+          />
+        )}
+      </Field>
+
+      <div>
+        <div className="flex items-center gap-2.5">
+          <input id="terms" type="checkbox" className="focus-ring size-4.5 cursor-pointer accent-accent" {...register('terms')} />
+          <label htmlFor="terms" className="block cursor-pointer py-2 text-sm text-ink-secondary">
+            I agree to the Terms of Service and the Privacy Policy
+          </label>
+        </div>
+        {errors.terms?.message && (
+          <p role="alert" className="mt-1.5 text-[13px] font-medium text-danger-strong">
+            {errors.terms.message}
+          </p>
+        )}
+      </div>
+
+      {error && <AuthBanner>{error}</AuthBanner>}
+
+      <Button type="submit" size="lg" isLoading={isSubmitting} disabled={!isValid || !watchedTerms} className="w-full">
+        {isSubmitting ? (
+          'Creating account...'
+        ) : (
+          <>
+            Create account
+            <Icon as={IconArrowRight} size={18} />
+          </>
+        )}
+      </Button>
+    </form>
   );
 };
 
