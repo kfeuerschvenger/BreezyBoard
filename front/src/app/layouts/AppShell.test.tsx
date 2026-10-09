@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
-import { AuthService, BoardService, ColorService, TemplateService } from '@/services';
+import { restoreMatchMedia, stubMatchMedia } from '@/test/matchMedia';
+import { AuthService, BoardService, ColorService, TemplateService, UserService } from '@/services';
 import type { Board, User } from '@/models';
 import { AppShell } from './AppShell';
 import { ShellAction } from './shell/ShellAction';
@@ -14,7 +15,21 @@ vi.mock('@/services', () => ({
   BoardService: { getAll: vi.fn(), getById: vi.fn(), create: vi.fn() },
   ColorService: { getByType: vi.fn() },
   TemplateService: { getAll: vi.fn() },
-  UserService: { update: vi.fn() },
+  UserService: { update: vi.fn(), getById: vi.fn() },
+}));
+
+// The shell reads the signed in person for the Breeze setting.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: {
+      _id: 'user-ada',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@example.com',
+      avatar: '',
+      breeze: 'breezy',
+    },
+  }),
 }));
 
 // The legal dialogs read a text file from the public folder. A stub keeps the
@@ -62,7 +77,7 @@ const renderShell = (path = '/', page: React.ReactNode = <p>page content</p>) =>
           <Route path="*" element={page} />
         </Route>
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 beforeEach(() => {
@@ -302,5 +317,84 @@ describe('the header', () => {
     await screen.findByRole('link', { name: 'Roadmap' });
 
     expect(within(breadcrumb()).getByText('Boards')).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+describe('the wind and the Breeze control', () => {
+  const REDUCED = '(prefers-reduced-motion: reduce)';
+  const LARGE = '(min-width: 1024px)';
+
+  /** The ambient layer: the one decorative box in the frame that takes no pointer events. */
+  const windLayer = (container: HTMLElement) => container.querySelector('div[aria-hidden="true"].pointer-events-none');
+  const streaks = (container: HTMLElement) => windLayer(container)?.querySelectorAll('svg path').length ?? 0;
+  const particles = (container: HTMLElement) => windLayer(container)?.querySelectorAll(':scope > span').length ?? 0;
+  const logoGlyph = () => screen.getByRole('link', { name: 'breezyboard' }).querySelector('svg');
+
+  beforeEach(() => {
+    vi.mocked(UserService.update)
+      .mockReset()
+      .mockResolvedValue({} as never);
+  });
+
+  afterEach(restoreMatchMedia);
+
+  it('draws the stored level over the ground, in the dark tone, behind the sidebar and the page', async () => {
+    const { container } = renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    expect(streaks(container)).toBe(6);
+    expect(particles(container)).toBe(9);
+    // The dark tone is coloured and the light one white, and the ground is light.
+    expect(windLayer(container)?.querySelector('svg path')?.getAttribute('stroke')).toMatch(/^oklch\(/);
+    expect(windLayer(container)?.nextElementSibling?.id).toBe('app-sidebar');
+  });
+
+  it('changes the wind when a level is chosen, and removes it at still', async () => {
+    const user = userEvent.setup();
+    const { container } = renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    await user.click(screen.getByRole('radio', { name: 'Gusty' }));
+    expect([streaks(container), particles(container)]).toEqual([11, 20]);
+
+    await user.click(screen.getByRole('radio', { name: 'Calm' }));
+    expect([streaks(container), particles(container)]).toEqual([3, 3]);
+
+    await user.click(screen.getByRole('radio', { name: 'Still' }));
+    expect(windLayer(container)).toBeNull();
+    await waitFor(() => expect(UserService.update).toHaveBeenLastCalledWith('user-ada', { breeze: 'still' }));
+  });
+
+  it('sways the logo while there is wind and holds it still when there is none', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+    expect(logoGlyph()).toHaveClass('animate-bb-sway');
+
+    await user.click(screen.getByRole('radio', { name: 'Still' }));
+
+    expect(logoGlyph()).not.toHaveClass('animate-bb-sway');
+  });
+
+  it('draws no wind and no sway when the system asks for reduced motion, and keeps the choice shown', async () => {
+    stubMatchMedia({ [LARGE]: true, [REDUCED]: true });
+    const { container } = renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    expect(windLayer(container)).toBeNull();
+    expect(logoGlyph()).not.toHaveClass('animate-bb-sway');
+    expect(screen.getByText('Reduced motion')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Breezy' })).toBeChecked();
+  });
+
+  it('puts the wind back when the preference is lifted', async () => {
+    const media = stubMatchMedia({ [LARGE]: true, [REDUCED]: true });
+    const { container } = renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+    expect(windLayer(container)).toBeNull();
+
+    media.set(REDUCED, false);
+
+    expect(streaks(container)).toBe(6);
   });
 });

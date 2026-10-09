@@ -147,4 +147,21 @@ describe('SegmentedControl', () => {
     rerender(<SegmentedControl label="Breeze" options={OPTIONS} value="calm" onChange={() => {}} size="md" />);
     expect(screen.getByRole('radio', { name: 'Calm' }).closest('label')).toHaveClass('h-[38px]');
   });
+
+  // Four options in the sidebar's narrow box only fit if each is as wide as its label,
+  // and an equal share would clip the longest one. A stylesheet is not loaded
+  // here, so the class is what is held.
+  it('lets the narrow size share the width by label rather than equally', () => {
+    const { rerender } = render(
+      <SegmentedControl label="Breeze" options={OPTIONS} value="calm" onChange={() => {}} size="xs" />
+    );
+    const label = () => screen.getByRole('radio', { name: 'Calm' }).closest('label');
+
+    expect(label()).toHaveClass('flex-auto', 'h-7');
+    expect(label()).not.toHaveClass('flex-1');
+
+    rerender(<SegmentedControl label="Breeze" options={OPTIONS} value="calm" onChange={() => {}} size="sm" />);
+    expect(label()).toHaveClass('flex-1');
+    expect(label()).not.toHaveClass('flex-auto');
+  });
 });

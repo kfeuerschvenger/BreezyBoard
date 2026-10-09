@@ -1013,6 +1013,126 @@ for (const [label, locator, token] of [
   await reportPairs(page, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
 }
 
+log('\n--- the Breeze control and the wind over the shell ---');
+
+const sessionToken = await page.evaluate(() => localStorage.getItem('token'));
+const storedBreeze = async () =>
+  (await (await page.request.get(`${API}/auth/me`, { headers: { Authorization: `Bearer ${sessionToken}` } })).json()).data.breeze;
+const windOfShell = () =>
+  page.evaluate(() => {
+    const layer = document.getElementById('app-sidebar').previousElementSibling;
+    if (!layer || layer.getAttribute('aria-hidden') !== 'true') return null;
+    const probe = document.elementFromPoint(
+      document.querySelector('#app-sidebar a[href="/"]').getBoundingClientRect().x + 10,
+      document.querySelector('#app-sidebar a[href="/"]').getBoundingClientRect().y + 10
+    );
+    return {
+      streaks: layer.querySelectorAll('svg path').length,
+      particles: layer.querySelectorAll(':scope > span').length,
+      running: layer.getAnimations({ subtree: true }).filter(a => a.playState === 'running').length,
+      pointerEvents: getComputedStyle(layer).pointerEvents,
+      stroke: layer.querySelector('svg path').getAttribute('stroke'),
+      // What is under the sidebar's own link is the link, not the wind.
+      linkOnTop: Boolean(probe?.closest('#app-sidebar')),
+    };
+  });
+
+check('a new account reads as breezy', await storedBreeze(), 'breezy');
+const breezyWind = await windOfShell();
+check('the default wind is 6 streaks and 9 particles', `${breezyWind?.streaks} ${breezyWind?.particles}`, '6 9');
+check('every streak and particle is running', breezyWind?.running, 15);
+check('the wind is coloured, the dark tone, on the light ground', breezyWind?.stroke.startsWith('oklch('), true);
+check('the wind takes no pointer events', breezyWind?.pointerEvents, 'none');
+check('the sidebar is above the wind', breezyWind?.linkOnTop, true);
+
+// The radios are visually hidden and a press lands on their segment, which
+// is what a pointer does.
+const chooseBreeze = name => sidebar.locator('label', { hasText: new RegExp(`^${name}$`) }).click();
+const breezeBox = sidebar.getByRole('radiogroup', { name: 'Breeze' });
+const boxGeometry = await breezeBox.evaluate(group => {
+  const frame = group.getBoundingClientRect();
+  const panel = group.closest('aside').getBoundingClientRect();
+  return {
+    labels: [...group.querySelectorAll('label')].map(label => {
+      const box = label.getBoundingClientRect();
+      return { text: label.textContent, left: box.left, right: box.right, height: Math.round(box.height) };
+    }),
+    insideFrame: [...group.querySelectorAll('label')].every(label => {
+      const box = label.getBoundingClientRect();
+      return box.left >= frame.left - 0.5 && box.right <= frame.right + 0.5;
+    }),
+    insidePanel: frame.left >= panel.left && frame.right <= panel.right,
+    scrolls: group.scrollWidth > group.clientWidth,
+  };
+});
+check('the four segments are Still, Calm, Breezy and Gusty in a row', boxGeometry.labels.map(l => l.text).join(' '), 'Still Calm Breezy Gusty');
+check('every segment is inside the frame of the control', boxGeometry.insideFrame, true);
+check('the control does not overflow its own box or the sidebar', `${boxGeometry.scrolls} ${boxGeometry.insidePanel}`, 'false true');
+check('every segment is 28 pixels tall', boxGeometry.labels.every(l => l.height === 28), true);
+check(
+  'the segments touch and none overlaps the next',
+  boxGeometry.labels.every((l, i, all) => i === 0 || l.left >= all[i - 1].right - 0.5),
+  true
+);
+check('the box says 38 km/h at the default', await sidebar.getByText('38 km/h').isVisible(), true);
+
+await chooseBreeze('Gusty');
+await page.waitForTimeout(400);
+const gustyWind = await windOfShell();
+check('gusty is 11 streaks and 20 particles', `${gustyWind?.streaks} ${gustyWind?.particles}`, '11 20');
+check('the box says 74 km/h for gusty', await sidebar.getByText('74 km/h').isVisible(), true);
+check('the choice is stored on the user', await storedBreeze(), 'gusty');
+check('a gusty logo glyph sways', await sidebar.getByRole('link', { name: 'breezyboard' }).locator('svg').evaluate(svg => getComputedStyle(svg).animationName), 'bbSway');
+
+// The stored value is what a new load reads: nothing is kept in the browser.
+await page.reload();
+await page.getByText('My Boards').waitFor();
+check('the choice is still gusty after a reload', (await windOfShell())?.streaks, 11);
+check('the control shows the stored choice after a reload', await page.getByRole('radio', { name: 'Gusty' }).isChecked(), true);
+
+await chooseBreeze('Still');
+await page.waitForTimeout(400);
+check('still removes the wind from the page entirely', await windOfShell(), null);
+check('still holds the logo glyph still', await sidebar.getByRole('link', { name: 'breezyboard' }).locator('svg').evaluate(svg => getComputedStyle(svg).animationName), 'none');
+// Ambient motion is what runs without end. A transition or an entrance that
+// is finishing is not, so only animations that repeat forever are counted.
+check(
+  'nothing on the page repeats forever at still',
+  await page.evaluate(() => document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations === Infinity).length),
+  0
+);
+check('still is stored on the user', await storedBreeze(), 'still');
+
+// The system's preference wins over the stored choice and does not overwrite
+// it: the same account, stored at gusty, opened on a device that asks for
+// less motion.
+await page.request.put(`${API}/users/${await page.evaluate(() => JSON.parse(localStorage.getItem('user'))._id)}`, {
+  headers: { Authorization: `Bearer ${sessionToken}` },
+  data: { breeze: 'gusty' },
+});
+const quiet = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+const quietPage = await quiet.newPage();
+await quietPage.goto(`${FRONT}/login`);
+await quietPage.locator('form').first().getByLabel('Email address', { exact: true }).fill(gateUser.email);
+await quietPage.locator('form').first().getByLabel('Password', { exact: true }).fill(gateUser.password);
+await quietPage.locator('form').first().getByRole('button', { name: /sign in/i }).click();
+await quietPage.getByText('My Boards').waitFor();
+await quietPage.waitForTimeout(600);
+check('under reduced motion there is no wind layer in the shell', await quietPage.evaluate(() => document.getElementById('app-sidebar').previousElementSibling?.getAttribute('aria-hidden') === 'true'), false);
+check('the speed hint says the motion is reduced', await quietPage.getByText('Reduced motion').isVisible(), true);
+check(
+  'the group is named for the reduction',
+  await quietPage.getByRole('radiogroup', { name: 'Breeze, held still because your system asks for reduced motion' }).isVisible(),
+  true
+);
+check('the stored choice is still the one selected', await quietPage.getByRole('radio', { name: 'Gusty' }).isChecked(), true);
+check('nothing was written over the stored choice', await storedBreeze(), 'gusty');
+await quiet.close();
+await page.reload();
+await page.getByText('My Boards').waitFor();
+await chooseBreeze('Breezy');
+await page.waitForTimeout(400);
+
 // The account menu: it rises in, and while it leaves it is already out of
 // reach.
 const menuOpening = await page.evaluate(

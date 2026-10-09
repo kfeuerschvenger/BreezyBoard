@@ -8,7 +8,11 @@ export interface SegmentedOption {
   icon?: React.ReactNode;
 }
 
-export type SegmentedSize = 'sm' | 'md';
+/**
+ * `xs` is the sidebar's: the same 28 pixel segments as `sm` with the padding
+ * taken in, each as wide as its own label, for four options in a narrow box.
+ */
+export type SegmentedSize = 'xs' | 'sm' | 'md';
 
 export interface SegmentedControlProps {
   /** Names the group for assistive technology. Required: a bare row of options has no meaning. */
@@ -23,13 +27,15 @@ export interface SegmentedControlProps {
 }
 
 const FRAME_CLASSES: Record<SegmentedSize, string> = {
+  xs: 'gap-[3px] rounded-control p-[3px]',
   sm: 'gap-[3px] rounded-control p-[3px]',
   md: 'gap-1 rounded-field p-1',
 };
 
 const SEGMENT_CLASSES: Record<SegmentedSize, string> = {
-  sm: 'h-7 rounded-[8px] px-3 text-[13px]',
-  md: 'h-[38px] rounded-[10px] px-4 text-sm',
+  xs: 'h-7 flex-auto rounded-[8px] px-1.5 text-xs',
+  sm: 'h-7 flex-1 rounded-[8px] px-3 text-[13px]',
+  md: 'h-[38px] flex-1 rounded-[10px] px-4 text-sm',
 };
 
 // A segment is one of a set of mutually exclusive radios, so the group, the
@@ -69,7 +75,7 @@ export const SegmentedControl: React.FC<SegmentedControlProps> = ({
       {options.map(option => (
         <label
           key={option.id}
-          className={`focus-ring-within inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap font-semibold text-ink-secondary transition-colors duration-200 hover:text-ink ${SEGMENT_CLASSES[size]} ${SELECTED_CLASSES}`}
+          className={`focus-ring-within inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap font-semibold text-ink-secondary transition-colors duration-200 hover:text-ink ${SEGMENT_CLASSES[size]} ${SELECTED_CLASSES}`}
         >
           <input
             type="radio"
