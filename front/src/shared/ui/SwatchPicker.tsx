@@ -1,4 +1,8 @@
 import React, { useId } from 'react';
+import { IconLoader2 } from '@tabler/icons-react';
+import { Icon } from './Icon';
+import { EDGE_BORDER } from './hue';
+import type { Hue } from './hue';
 
 export interface SwatchOption {
   /** The value stored when this swatch is chosen. */
@@ -7,6 +11,12 @@ export interface SwatchOption {
   label: string;
   /** The colour itself, as anything CSS accepts for a background. */
   color: string;
+  /**
+   * The design system hue this colour belongs to, when it is one. The swatch
+   * is then outlined in that hue's edge step; without it the outline is the
+   * control border colour.
+   */
+  hue?: Hue;
 }
 
 export type SwatchLayout = 'inline' | 'grid';
@@ -24,18 +34,22 @@ export interface SwatchPickerProps {
   isLoading?: boolean;
 }
 
-const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-heading';
+const LEGEND_CLASSES = 'mb-2 block text-[13px] font-semibold text-ink-secondary';
 
+// The outline is what makes a swatch a shape: the mid step of a hue is 2.35 to
+// 2.59:1 on white, and the outline is 3:1 or better on white and on the ground
+// for every hue. The chosen swatch gets the white and ink double ring, which
+// is ink on white and so readable without colour. Hover grows it a little.
 const INLINE_OPTION_CLASSES =
-  'w-8 h-8 rounded-full border-2 transition-transform cursor-pointer inline-block ' +
-  'border-gray-300 hover:border-gray-400 has-[:checked]:border-gray-900 has-[:checked]:scale-110 ' +
-  'has-[:checked]:ring-2 has-[:checked]:ring-blue-500 ' +
-  'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
+  'focus-ring-within inline-block size-8 cursor-pointer rounded-full border-[1.5px] ' +
+  'transition-[scale,box-shadow] duration-200 hover:scale-115 has-[:checked]:shadow-swatch-ring';
+
+const INLINE_FALLBACK_BORDER = 'border-line-control';
 
 const GRID_OPTION_CLASSES =
-  'relative block cursor-pointer rounded-lg border-2 p-3 transition-all ' +
-  'border-gray-200 hover:border-gray-300 has-[:checked]:border-blue-500 ' +
-  'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
+  'focus-ring-within relative block cursor-pointer rounded-control border-[1.5px] border-line-control p-3 ' +
+  'transition-[border-color,box-shadow] duration-200 hover:border-ink-secondary ' +
+  'has-[:checked]:border-ink has-[:checked]:shadow-swatch-ring';
 
 /**
  * A colour chosen from a set, as one radio group.
@@ -67,8 +81,9 @@ export const SwatchPicker: React.FC<SwatchPickerProps> = ({
     return (
       <fieldset>
         <legend className={LEGEND_CLASSES}>{legend}</legend>
-        <div className="flex justify-center py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" role="status">
+        <div className="flex justify-center py-4 text-accent">
+          <div role="status">
+            <Icon as={IconLoader2} size={24} className="animate-bb-spin" aria-hidden="true" />
             <span className="sr-only">Loading colours</span>
           </div>
         </div>
@@ -80,11 +95,15 @@ export const SwatchPicker: React.FC<SwatchPickerProps> = ({
     <fieldset>
       <legend className={LEGEND_CLASSES}>{legend}</legend>
 
-      <div className={layout === 'grid' ? 'grid grid-cols-4 gap-3' : 'flex flex-wrap gap-2'}>
+      <div className={layout === 'grid' ? 'grid grid-cols-4 gap-3' : 'flex flex-wrap gap-2.5'}>
         {options.map(option => (
           <label
             key={option.id}
-            className={layout === 'grid' ? GRID_OPTION_CLASSES : INLINE_OPTION_CLASSES}
+            className={
+              layout === 'grid'
+                ? GRID_OPTION_CLASSES
+                : `${INLINE_OPTION_CLASSES} ${option.hue ? EDGE_BORDER[option.hue] : INLINE_FALLBACK_BORDER}`
+            }
             style={layout === 'grid' ? undefined : { backgroundColor: option.color }}
           >
             <input
@@ -98,8 +117,11 @@ export const SwatchPicker: React.FC<SwatchPickerProps> = ({
             />
             {layout === 'grid' ? (
               <>
-                <span className="block w-full h-8 rounded" style={{ backgroundColor: option.color }} />
-                <span className="block text-xs text-gray-600 mt-2 text-center">{option.label}</span>
+                <span
+                  className={`block h-8 w-full rounded-button-small border ${option.hue ? EDGE_BORDER[option.hue] : INLINE_FALLBACK_BORDER}`}
+                  style={{ backgroundColor: option.color }}
+                />
+                <span className="mt-2 block text-center text-xs text-ink-secondary">{option.label}</span>
               </>
             ) : (
               <span className="sr-only">{option.label}</span>
@@ -109,7 +131,7 @@ export const SwatchPicker: React.FC<SwatchPickerProps> = ({
       </div>
 
       {error && (
-        <p id={errorId} role="alert" className="mt-1 text-sm text-red-600">
+        <p id={errorId} role="alert" className="mt-1.5 text-[13px] font-medium text-danger-strong">
           {error}
         </p>
       )}

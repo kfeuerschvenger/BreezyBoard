@@ -194,8 +194,10 @@
   --duration-away: 0.46s;
   --duration-land: 0.55s;
 
-  /* The logo tile and the loading mark. */
-  --gradient-logo: linear-gradient(135deg, oklch(0.55 0.14 248), oklch(0.74 0.12 192));
+  /* The loading mark. The reference's logo gradient ends at lightness 0.74,
+     where a white glyph is 2.2:1; this one stops at 0.6 and keeps the same two
+     hues, so white holds 3.65:1 or better along the whole tile. */
+  --gradient-mark: linear-gradient(135deg, oklch(0.5 0.14 248), oklch(0.6 0.12 205));
 
   /* Whole animations, each a keyframe set below with its timing and easing.
      `animate-bb-up` and the rest are the only way a component names one, so

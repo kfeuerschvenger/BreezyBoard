@@ -15,13 +15,13 @@ export interface BoardStatsProps {
  * which is the only reason `icon` is a node instead of a component.
  */
 const TILES: { key: keyof DashboardStats; label: string; tone: StatTileTone; icon: React.ReactNode }[] = [
-  { key: 'totalBoards', label: 'Total Boards', tone: 'blue', icon: <Icon as={IconFolder} className="text-blue-600" size={20} /> },
+  { key: 'totalBoards', label: 'Total Boards', tone: 'sky', icon: <Icon as={IconFolder} className="text-blue-600" size={20} /> },
   { key: 'totalMembers', label: 'Team Members', tone: 'green', icon: <Icon as={IconUsers} className="text-green-600" size={20} /> },
-  { key: 'totalTasks', label: 'Total Tasks', tone: 'orange', icon: <Icon as={IconCalendar} className="text-orange-600" size={20} /> },
+  { key: 'totalTasks', label: 'Total Tasks', tone: 'sand', icon: <Icon as={IconCalendar} className="text-orange-600" size={20} /> },
   {
     key: 'avgProgress',
     label: 'Avg Progress',
-    tone: 'purple',
+    tone: 'lavender',
     icon: (
       <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
         <div className="w-2 h-2 bg-white rounded-full" />
