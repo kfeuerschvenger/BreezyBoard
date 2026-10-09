@@ -1102,6 +1102,7 @@ check(
   0
 );
 check('still is stored on the user', await storedBreeze(), 'still');
+check('the browser keeps a copy of the choice for the signed out screen', await page.evaluate(() => localStorage.getItem('bb.breeze')), 'still');
 
 // The system's preference wins over the stored choice and does not overwrite
 // it: the same account, stored at gusty, opened on a device that asks for
@@ -1298,7 +1299,8 @@ const stillLife = await authPage.locator('aside [aria-hidden="true"].h-80').eval
     postcard: getComputedStyle(el.firstElementChild).rotate !== 'none',
   };
 });
-check('the two floating cards run bbFloat', stillLife.names, 'bbFloat bbFloat');
+// At still the cards lose their animation class, so none is left to match.
+check('under reduced motion no card carries a float animation', stillLife.names, '');
 check('the floating cards and the postcard are lifted and tilted', `${stillLife.shadows} ${stillLife.postcard}`, 'true true');
 
 // Reduced motion collapses the float to a single play, so the cards rest.
@@ -1307,6 +1309,34 @@ check(
   await authPage.evaluate(() => document.querySelector('aside').getAnimations({ subtree: true }).filter(a => a.effect.getTiming().iterations === Infinity).length),
   0
 );
+
+// The signed out screen plays the level this browser last saw for a person,
+// kept under `bb.breeze`, and the default, breezy, when there is none.
+const authMotion = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const authMotionPage = await authMotion.newPage();
+const authWind = async stored => {
+  await authMotionPage.goto(`${FRONT}/login`);
+  await authMotionPage.evaluate(level => (level === null ? localStorage.removeItem('bb.breeze') : localStorage.setItem('bb.breeze', level)), stored);
+  await authMotionPage.reload();
+  await authMotionPage.waitForSelector('form');
+  return authMotionPage.locator('aside').evaluate(el => ({
+    level: el.getAttribute('data-breeze'),
+    streaks: el.querySelectorAll('.pointer-events-none svg path').length,
+    floating: [...el.querySelectorAll('[class*="animate-bb-float"]')].map(card => getComputedStyle(card).animationName).join(' '),
+    repeating: el.getAnimations({ subtree: true }).filter(a => a.effect.getTiming().iterations === Infinity).length,
+  }));
+};
+const authDefault = await authWind(null);
+check('with nothing stored the auth screen plays breezy', `${authDefault.level} ${authDefault.streaks}`, 'breezy 6');
+check('with nothing stored the two floating cards run bbFloat', authDefault.floating, 'bbFloat bbFloat');
+const authGusty = await authWind('gusty');
+check('a stored gusty plays 11 streaks on the auth screen', `${authGusty.level} ${authGusty.streaks}`, 'gusty 11');
+const authStill = await authWind('still');
+check('a stored still stops every ambient animation on the auth screen', `${authStill.level} ${authStill.streaks} ${authStill.repeating}`, 'still 0 0');
+check('a stored still leaves no card with a float animation', authStill.floating, '');
+const authJunk = await authWind('hurricane');
+check('a stored value that is not a level plays the default', authJunk.level, 'breezy');
+await authMotion.close();
 
 await authPage.addStyleTag({ content: 'aside * { color: transparent !important; -webkit-text-fill-color: transparent !important; border-color: transparent !important; background-image: none !important; }' });
 const textTargets = [

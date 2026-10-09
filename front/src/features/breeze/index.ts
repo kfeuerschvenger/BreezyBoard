@@ -4,6 +4,8 @@
 export { BreezeProvider } from './BreezeProvider';
 export { BreezeBox } from './components/BreezeBox';
 export { useBreeze } from './useBreeze';
+export { useSignedOutBreeze } from './useSignedOutBreeze';
+export { BREEZE_STORAGE_KEY, readStoredBreeze, writeStoredBreeze } from './breezeStorage';
 export type { BreezeContextValue } from './breezeContext';
 export { BREEZE_KMH, BREEZE_LABEL, BREEZE_LEVELS, DEFAULT_BREEZE } from './breeze';
 export type { BreezeLevel } from './breeze';

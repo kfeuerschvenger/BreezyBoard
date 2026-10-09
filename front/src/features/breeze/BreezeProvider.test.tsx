@@ -233,6 +233,79 @@ describe('a system that asks for reduced motion', () => {
   });
 });
 
+describe('the copy kept for the signed out screen', () => {
+  const remembered = () => window.localStorage.getItem('bb.breeze');
+
+  beforeEach(() => window.localStorage.clear());
+
+  it('is written when the signed in user is known', () => {
+    renderProbe();
+
+    expect(remembered()).toBe('gusty');
+  });
+
+  it('is written again whenever the choice changes', async () => {
+    const user = userEvent.setup();
+    renderProbe();
+
+    await user.click(screen.getByRole('button', { name: 'calm' }));
+
+    expect(remembered()).toBe('calm');
+  });
+
+  it('follows the stored choice back when the save fails', async () => {
+    const user = userEvent.setup();
+    mockedUsers.update.mockRejectedValue(new Error('offline'));
+    renderProbe();
+
+    await user.click(screen.getByRole('button', { name: 'calm' }));
+
+    await waitFor(() => expect(remembered()).toBe('gusty'));
+  });
+
+  it('is not overwritten by the reduced motion preference', () => {
+    media = stubMatchMedia({ [REDUCED]: true });
+    renderProbe();
+
+    expect(level()).toBe('still');
+    expect(remembered()).toBe('gusty');
+  });
+
+  it('is left alone when nobody is signed in, and when the user signs out', () => {
+    window.localStorage.setItem('bb.breeze', 'calm');
+    auth.user = null;
+    const view = renderProbe();
+    expect(remembered()).toBe('calm');
+
+    auth.user = { _id: 'user-1', breeze: 'gusty' };
+    view.rerender(
+      <BreezeProvider>
+        <Probe />
+      </BreezeProvider>,
+    );
+    expect(remembered()).toBe('gusty');
+
+    auth.user = null;
+    view.rerender(
+      <BreezeProvider>
+        <Probe />
+      </BreezeProvider>,
+    );
+    expect(remembered()).toBe('gusty');
+  });
+
+  it('does not break the provider when storage throws', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+
+    renderProbe();
+
+    expect(stored()).toBe('gusty');
+    vi.restoreAllMocks();
+  });
+});
+
 describe('with no provider', () => {
   it('is a still sky that cannot be changed, so a component can be rendered on its own', async () => {
     const user = userEvent.setup();
