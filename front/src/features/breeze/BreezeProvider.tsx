@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMediaQuery } from '@/shared/hooks/useMediaQuery';
 import { useToast } from '@/shared/hooks/useToast';
+import { writeStoredBreeze } from './breezeStorage';
 import { BreezeContext } from './breezeContext';
 import type { BreezeContextValue } from './breezeContext';
 import { useBreezeSetting } from './queries';
@@ -27,6 +28,13 @@ export const BreezeProvider = ({ children }: { children: ReactNode }) => {
   const setting = useBreezeSetting(user?._id ?? null, user?.breeze);
 
   const { level: stored, setLevel: save } = setting;
+  const signedIn = Boolean(user);
+
+  // Mirrors the level for the signed out screen, on load and on every change.
+  // The server value stays the truth; sign out leaves the copy in place.
+  useEffect(() => {
+    if (signedIn) writeStoredBreeze(stored);
+  }, [signedIn, stored]);
 
   const value = useMemo<BreezeContextValue>(
     () => ({
