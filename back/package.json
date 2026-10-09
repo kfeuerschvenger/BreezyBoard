@@ -9,6 +9,7 @@
     "seed:templates": "node seeds/templates_and_colors.js",
     "seed:users": "node seeds/users.seed.js",
     "seed:all": "npm run seed:templates && npm run seed:users",
+    "migrate:board-hues": "node seeds/migrate_board_hues.js",
     "test": "vitest run",
     "test:watch": "vitest watch"
   },

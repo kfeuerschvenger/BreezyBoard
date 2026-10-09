@@ -11,6 +11,7 @@ import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middl
 import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
 import { ErrorCode } from '../constants/errorCodes.js';
+import { BOARD_HUES } from '../constants/boardHues.js';
 
 // Columns are copied out of the template rather than referenced, so that the
 // board owns its column ids. Mongoose assigns fresh subdocument ids on the
@@ -44,10 +45,15 @@ const copyColumnsFromTemplate = async templateId => {
 // 'board' kind: a task or column colour is a real entry but belongs to a
 // different surface, so it is refused like an id that names nothing.
 //
+// The board palette is the six design hues, so the entry must also hold one of
+// them. The palette model refuses to store anything else, and checking the
+// value here as well means a row that predates the hues and was never
+// migrated is refused rather than saved onto a board.
+//
 // A 400 rather than a 404: the board being written is fine, it is the value
 // sent for one of its fields that is not.
 const assertBoardColorExists = async colorId => {
-  if (!(await ColorPalette.exists({ _id: colorId, type: 'board' }))) {
+  if (!(await ColorPalette.exists({ _id: colorId, type: 'board', value: { $in: BOARD_HUES } }))) {
     throw new ApiError(400, 'color must be the id of a board color', [], ErrorCode.VALIDATION_ERROR);
   }
 };

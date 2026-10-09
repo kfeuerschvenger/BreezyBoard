@@ -98,7 +98,7 @@ describe('boards', () => {
 
   test('update changes name, description and colour together and answers with the new colour', async () => {
     const board = await createBoard(owner.token, colors.boardColor._id, { title: 'Before', description: 'Old' });
-    const other = await ColorPalette.create({ name: 'Other', value: '#112233', type: 'board' });
+    const other = await ColorPalette.create({ name: 'Coral', value: 'coral', type: 'board' });
 
     const res = await request(app)
       .put(`/api/boards/${board._id}`)
@@ -107,7 +107,7 @@ describe('boards', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ title: 'After', description: 'New' });
-    expect(res.body.data.color.value).toBe('#112233');
+    expect(res.body.data.color.value).toBe('coral');
   });
 
   test('update refuses an empty name and a member', async () => {
@@ -187,6 +187,46 @@ describe('boards', () => {
     expect((await Board.findById(board._id)).color.toString()).toBe(colors.boardColor._id.toString());
   });
 
+  // The board palette is the six design hues. The palette model will not store
+  // a seventh, so a row that predates the hues has to be written past it, which
+  // is how one reaches a database that was never migrated.
+  test('create and update refuse a board colour that is not one of the six hues', async () => {
+    const { insertedId } = await ColorPalette.collection.insertOne({ name: 'Royal Blue', value: '#0052CC', type: 'board' });
+    const board = await createBoard(owner.token, colors.boardColor._id);
+
+    const created = await request(app)
+      .post('/api/boards')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Painted with a hex', color: insertedId.toString() });
+    const updated = await request(app)
+      .put(`/api/boards/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ color: insertedId.toString() });
+
+    expect(created.status).toBe(400);
+    expect(created.body.code).toBe('VALIDATION_ERROR');
+    expect(updated.status).toBe(400);
+    expect(await Board.countDocuments({ title: 'Painted with a hex' })).toBe(0);
+    expect((await Board.findById(board._id)).color.toString()).toBe(colors.boardColor._id.toString());
+  });
+
+  test.each(['sky', 'teal', 'green', 'sand', 'coral', 'lavender'])('create accepts the %s hue', async hue => {
+    // Sky is already in the palette from the seed, and `value` is unique.
+    const entry = await ColorPalette.findOneAndUpdate(
+      { value: hue, type: 'board' },
+      { $setOnInsert: { name: hue } },
+      { upsert: true, new: true }
+    );
+
+    const res = await request(app)
+      .post('/api/boards')
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: `A ${hue} board`, color: entry._id.toString() });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.color.value).toBe(hue);
+  });
+
   describe('member ids must belong to existing users', () => {
     const nobody = 'ffffffffffffffffffffffff';
     const idOf = account => account.user.id ?? account.user._id;
@@ -263,7 +303,7 @@ describe('boards', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.title).toBe('Only the name');
-    expect(res.body.data.color.value).toBe('#0052CC');
+    expect(res.body.data.color.value).toBe('sky');
   });
 
   test('get by id tells the caller their own role on the board', async () => {

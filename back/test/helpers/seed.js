@@ -7,8 +7,8 @@ import ColorPalette from '../../src/models/ColorPalette.js';
 // through the API, so they are inserted directly via the Mongoose models.
 export async function seedColorsAndTemplates() {
   const boardColor = await ColorPalette.create({
-    name: 'Royal Blue',
-    value: '#0052CC',
+    name: 'Sky',
+    value: 'sky',
     type: 'board',
   });
 

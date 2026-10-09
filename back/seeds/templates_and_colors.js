@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import env from '../src/config/env.js';
 import BoardTemplate from '../src/models/BoardTemplate.js';
 import ColorPalette from '../src/models/ColorPalette.js';
+import { BOARD_HUES, BOARD_HUE_NAMES } from '../src/constants/boardHues.js';
 
 const connectDB = async () => {
   try {
@@ -14,15 +15,9 @@ const connectDB = async () => {
 };
 
 const allColors = [
-  // Colors for boards
-  { name: 'Royal Blue', value: '#0052CC', type: 'board' },
-  { name: 'Purple', value: '#6B3FA0', type: 'board' },
-  { name: 'Emerald', value: '#2F9E44', type: 'board' },
-  { name: 'Orange', value: '#FF9700', type: 'board' },
-  { name: 'Teal', value: '#0CA678', type: 'board' },
-  { name: 'Pink', value: '#F783AC', type: 'board' },
-  { name: 'Amber', value: '#F08A24', type: 'board' },
-  { name: 'Cyan', value: '#00B4D8', type: 'board' },
+  // Colors for boards: the six design hues, stored by key. The interface
+  // derives each hue's steps from its own token layer.
+  ...BOARD_HUES.map(hue => ({ name: BOARD_HUE_NAMES[hue], value: hue, type: 'board' })),
 
   // Colors for tasks
   { name: 'Coral', value: '#FF6B6B', type: 'task' },
