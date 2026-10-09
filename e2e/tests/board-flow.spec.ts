@@ -264,8 +264,11 @@ test.describe('board core loop', () => {
       expect(menuBox.x).toBeGreaterThanOrEqual(0);
       expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(390);
       expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(844);
+      // `offsetHeight` is the layout height. The popup scales in from 97 percent,
+      // and a bounding box read while it does is smaller than the item is.
       for (const item of await page.getByRole('menuitem').all()) {
-        expect((await item.boundingBox())!.height, 'menu item height').toBeGreaterThanOrEqual(44);
+        const height = await item.evaluate(element => (element as HTMLElement).offsetHeight);
+        expect(height, 'menu item height').toBeGreaterThanOrEqual(44);
       }
     });
 
