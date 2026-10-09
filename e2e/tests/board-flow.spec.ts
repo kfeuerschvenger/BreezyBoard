@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, logInThroughTheUi, columnCount, seedBoard } from './fixtures';
+import { test, expect, logInThroughTheUi, columnCount, seedBoard, waitUntilSettled } from './fixtures';
 
 /**
  * The product's core loop. This single spec covers the two defects that were
@@ -70,10 +70,7 @@ test.describe('board core loop', () => {
       // card's first frame, so both readings see the starting position and agree.
       // The card's own state can: the spring ends with its transform cleared.
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      const card = page.locator('[role="article"]').first();
-      await expect
-        .poll(() => card.evaluate(element => getComputedStyle(element).opacity === '1' && getComputedStyle(element).transform === 'none'))
-        .toBe(true);
+      await waitUntilSettled(page.locator('[role="article"]').first());
 
       const from = await handle.boundingBox();
       const to = await page.getByText('In Progress', { exact: true }).first().boundingBox();
@@ -87,7 +84,9 @@ test.describe('board core loop', () => {
       const cy = from!.y + from!.height / 2;
       await page.mouse.move(cx, cy);
       await page.mouse.down();
-      await page.waitForTimeout(100);
+      // Paces the input, it does not synchronise: the sensor needs the press and
+      // the first move apart in time.
+      await page.waitForTimeout(100); // NOSONAR typescript:S2925
       await page.mouse.move(cx + 12, cy + 12);
 
       // Wait for the sensor to actually pick the item up rather than assuming it
@@ -106,9 +105,12 @@ test.describe('board core loop', () => {
           from!.y + (to!.y + 220 - from!.y) * (step / 25),
           { steps: 2 }
         );
-        await page.waitForTimeout(25);
+        // Paces the input, it does not synchronise: dnd-kit coalesces a burst of moves.
+        await page.waitForTimeout(25); // NOSONAR typescript:S2925
       }
-      await page.waitForTimeout(300);
+      // Release only once dnd-kit reports the pointer over the target column. Its
+      // announcement names the column, so this is the drop target being active.
+      await expect(page.locator('[id^="DndLiveRegion"]')).toContainText('In Progress');
       await page.mouse.up();
 
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
@@ -314,7 +316,7 @@ test.describe('board core loop', () => {
       await page.goto(`/board/${boardId}`);
       await expect(page.getByRole('heading', { name: title, level: 3 })).toBeVisible();
       // The cards fade in, and a handle focused mid animation is a stale box.
-      await page.waitForTimeout(600);
+      await waitUntilSettled(page.locator('[role="article"]'));
     };
 
     test('Enter picks up, arrows move across columns, Enter drops, focus returns and the order persists', async ({

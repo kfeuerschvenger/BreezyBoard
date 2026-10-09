@@ -108,7 +108,9 @@ test.describe('editing and deleting a board from its page', () => {
   });
 
   test('after a keyboard delete, Undo has focus and the toast stays while it does', async ({ page, authedUser }) => {
-    test.setTimeout(90_000);
+    // Installed before the toast exists so every timer it sets is the fake one.
+    // Time still flows in real time until the test jumps it.
+    await page.clock.install();
     const boardId = await seedBoard(page, authedUser.token!, [['Keyboard task']]);
     await logInThroughTheUi(page, authedUser);
     await page.goto(boardUrl(boardId));
@@ -129,7 +131,9 @@ test.describe('editing and deleting a board from its page', () => {
 
     // Ten seconds is how long it lasts untouched. Focus holds it past that,
     // which is how a keyboard user gets more time (WCAG 2.2.1).
-    await page.waitForTimeout(11_000);
+    // The toast's timers are setTimeout and Date, so the page's fake clock
+    // jumps past the limit without the test waiting for it.
+    await page.clock.runFor(11_000);
     await expect(toast).toBeVisible();
 
     await page.keyboard.press('Enter');
