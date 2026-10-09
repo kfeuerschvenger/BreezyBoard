@@ -112,15 +112,20 @@ test.describe('password recovery', () => {
     await expect(page.getByRole('dialog', { name: 'Forgot password' })).toBeVisible();
   });
 
-  test('an address with no account gets the same confirmation and no email', async ({ page }) => {
+  test('an address with no account gets the same confirmation and no email', async ({ page, authedUser }) => {
     const unknown = `nobody-${Date.now()}@example.test`;
 
     await requestResetThroughTheUi(page, unknown);
 
     // Same wording as for a real account, checked by requestResetThroughTheUi.
-    // Whether a message went out is read from the catcher, after a pause long
-    // enough for a mistaken send to have arrived.
-    await page.waitForTimeout(1500);
+    // Whether a message went out is read from the catcher. Silence proves
+    // nothing by itself, so a control follows: a reset for a real account, asked
+    // after the unknown one. Mail leaves in the order it was requested, so once
+    // the control has arrived a mistaken send to the unknown address would
+    // already be there too.
+    await requestResetThroughTheUi(page, authedUser.email);
+    await waitForMailTo(page, authedUser.email);
+
     const response = await page.request.get(`${MAIL_URL}/api/v1/search`, { params: { query: `to:${unknown}` } });
     expect((await response.json()).messages ?? []).toHaveLength(0);
   });

@@ -1,4 +1,5 @@
-import { test as base, expect, type Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { test as base, expect, type Locator, type Page } from '@playwright/test';
 
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
 
@@ -13,7 +14,7 @@ export interface TestUser {
 
 /** Every run registers its own account, so the suite never depends on seeded users. */
 export function makeUser(): TestUser {
-  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const stamp = `${Date.now()}-${randomUUID().slice(0, 8)}`;
   return {
     firstName: 'E2E',
     lastName: 'Runner',
@@ -84,6 +85,8 @@ export async function seedBoard(page: Page, token: string, columns: string[][]):
 
   for (const [index, titles] of columns.entries()) {
     for (const title of titles) {
+      // Sequential on purpose: the server mints each task's position at the end
+      // of its column, so creating them in parallel would shuffle the order.
       const task = await page.request.post(`${API_URL}/tasks/board/${board._id}`, {
         headers,
         data: { title, status: boardColumns[index]._id, color: taskColors[0]._id },
@@ -97,8 +100,30 @@ export async function seedBoard(page: Page, token: string, columns: string[][]):
 /** Reads the count badge rendered next to a column title. */
 export async function columnCount(page: Page, columnTitle: string): Promise<number> {
   const text = await page.locator('body').innerText();
-  const match = text.match(new RegExp(`${columnTitle}\\s+(\\d+)`));
+  const escaped = columnTitle.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const match = new RegExp(String.raw`${escaped}\s+(\d+)`).exec(text);
   return match ? Number(match[1]) : -1;
+}
+
+/**
+ * Waits until every element the locator matches has finished its entrance
+ * animation: fully opaque with its transform cleared, which is what a spring
+ * leaves behind when it ends. A box read or a press before that lands on a
+ * position the element is about to leave. Fails when nothing matches, so an
+ * empty page cannot pass as settled.
+ */
+export async function waitUntilSettled(target: Locator): Promise<void> {
+  await expect
+    .poll(() =>
+      target.evaluateAll(elements => {
+        if (elements.length === 0) return false;
+        return elements.every(element => {
+          const style = getComputedStyle(element);
+          return style.opacity === '1' && style.transform === 'none';
+        });
+      })
+    )
+    .toBe(true);
 }
 
 export const test = base.extend<{ authedUser: TestUser }>({
