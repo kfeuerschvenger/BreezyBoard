@@ -18,7 +18,21 @@ vi.mock('@/services', () => ({
   BoardService: { getAll: vi.fn(), getById: vi.fn(), create: vi.fn() },
   ColorService: { getByType: vi.fn() },
   TemplateService: { getAll: vi.fn() },
-  UserService: { update: vi.fn() },
+  UserService: { update: vi.fn(), getById: vi.fn() },
+}));
+
+// The shell reads the signed in person for the Breeze setting.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: {
+      _id: 'user-ada',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@example.com',
+      avatar: '',
+      breeze: 'breezy',
+    },
+  }),
 }));
 
 vi.mock('@/hooks/useTextFile', () => ({
@@ -30,7 +44,16 @@ const LARGE = '(min-width: 1024px)';
 const ADA: User = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
 
 const makeBoard = (id: string, title: string): Board =>
-  ({ _id: id, title, description: '', color: '#3B82F6', columns: [], template: 't1', createdBy: 'u', members: [] }) as unknown as Board;
+  ({
+    _id: id,
+    title,
+    description: '',
+    color: '#3B82F6',
+    columns: [],
+    template: 't1',
+    createdBy: 'u',
+    members: [],
+  }) as unknown as Board;
 
 const ROADMAP = makeBoard('board-1', 'Roadmap');
 const LAUNCH = makeBoard('board-2', 'Launch plan');
@@ -45,11 +68,12 @@ const renderShell = (path = '/') =>
           <Route path="*" element={<p>page content</p>} />
         </Route>
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 
 /** The sidebar wrapper, found through the button that controls it. */
-const panel = () => document.getElementById(screen.getByRole('button', { name: 'Open navigation' }).getAttribute('aria-controls')!)!;
+const panel = () =>
+  document.getElementById(screen.getByRole('button', { name: 'Open navigation' }).getAttribute('aria-controls')!)!;
 const menuButton = () => screen.getByRole('button', { name: 'Open navigation' });
 /** Everything beside the panel: the header and the page. */
 const pageColumn = () => screen.getByRole('main').parentElement!;

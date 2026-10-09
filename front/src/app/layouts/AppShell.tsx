@@ -2,10 +2,11 @@ import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation, useMatch } from 'react-router-dom';
 import { IconMenu2 } from '@tabler/icons-react';
+import { BreezeProvider, useBreeze } from '@/features/breeze';
 import { useEscapeKey } from '@/shared/hooks/useEscapeKey';
 import { useFocusTrap } from '@/shared/hooks/useFocusTrap';
 import { useMediaQuery } from '@/shared/hooks/useMediaQuery';
-import { Icon, IconButton } from '@/shared/ui';
+import { Icon, IconButton, WindLayer } from '@/shared/ui';
 import { CreateBoardDialog } from './shell/CreateBoardDialog';
 import { ShellContext } from './shell/shellContext';
 import { ShellHeader } from './shell/ShellHeader';
@@ -36,9 +37,20 @@ const SIDEBAR_ID = 'app-sidebar';
  * is invisible and inert, so its links are neither seen nor tabbed to.
  *
  * The create board dialog is hosted here, because the sidebar and the home
- * page both open it and neither can own it for the other.
+ * page both open it and neither can own it for the other. So is the Breeze
+ * setting: the wind drawn on the ground, the sway of the logo and the control
+ * in the sidebar all read the one level, and the pages below read it too.
  */
-export const AppShell = ({ children }: { children?: ReactNode }) => {
+export const AppShell = ({ children }: { children?: ReactNode }) => (
+  <BreezeProvider>
+    <ShellFrame>{children}</ShellFrame>
+  </BreezeProvider>
+);
+
+/** The ambient wind over the ground, at whatever level the interface is playing. */
+const AmbientWind = () => <WindLayer tone="dark" level={useBreeze().level} />;
+
+const ShellFrame = ({ children }: { children?: ReactNode }) => {
   const onBoard = useMatch('/board/:boardId') !== null;
   const { pathname } = useLocation();
   const isLarge = useMediaQuery(LARGE, true);
@@ -71,10 +83,7 @@ export const AppShell = ({ children }: { children?: ReactNode }) => {
     if (!document.querySelector('[role="dialog"][aria-modal="true"]')) closePanel();
   });
 
-  const shell = useMemo(
-    () => ({ headerSlot, openCreateBoard: () => setCreatingBoard(true) }),
-    [headerSlot]
-  );
+  const shell = useMemo(() => ({ headerSlot, openCreateBoard: () => setCreatingBoard(true) }), [headerSlot]);
 
   const menuButton = (
     <IconButton
@@ -93,6 +102,8 @@ export const AppShell = ({ children }: { children?: ReactNode }) => {
   return (
     <ShellContext.Provider value={shell}>
       <div className="relative grid h-dvh grid-cols-1 overflow-hidden bg-ground bg-[image:var(--gradient-ground)] lg:grid-cols-[252px_minmax(0,1fr)]">
+        <AmbientWind />
+
         {/* Closed, the panel is invisible once it has slid out and inert
             throughout, so nothing in it can be seen, tabbed to or read. */}
         <div

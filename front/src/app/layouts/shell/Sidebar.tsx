@@ -1,4 +1,5 @@
 import { IconX } from '@tabler/icons-react';
+import { BreezeBox, useBreeze } from '@/features/breeze';
 import { Icon, IconButton } from '@/shared/ui';
 import { BrandMark } from './BrandMark';
 import { SidebarBoards } from './SidebarBoards';
@@ -26,27 +27,34 @@ export interface SidebarProps {
  * left between the fixed parts above and below them, so the account button is
  * always at the foot of the screen and never pushed off it.
  */
-export const Sidebar = ({ onCreateBoard, onNavigate, onClose, className = '' }: SidebarProps) => (
-  <aside
-    aria-label="Sidebar"
-    className={`min-h-0 flex-col gap-[18px] rounded-panel border border-glass-border bg-glass px-3 pb-3 pt-[18px] shadow-sidebar backdrop-blur-[20px] backdrop-saturate-150 ${className}`}
-  >
-    <div className="flex items-center justify-between gap-2">
-      <BrandMark onNavigate={onNavigate} />
-      <IconButton
-        type="button"
-        size="lg"
-        aria-label="Close navigation"
-        onClick={onClose}
-        className="shrink-0 lg:hidden"
-      >
-        <Icon as={IconX} size={20} />
-      </IconButton>
-    </div>
-    <SidebarNav onNavigate={onNavigate} />
-    <SidebarBoards onCreate={onCreateBoard} onNavigate={onNavigate} />
-    <SidebarFoot />
-  </aside>
-);
+export const Sidebar = ({ onCreateBoard, onNavigate, onClose, className = '' }: SidebarProps) => {
+  // The logo's sway is ambient motion like the wind, so it follows the same
+  // level and stops when the sky is still.
+  const { level } = useBreeze();
+
+  return (
+    <aside
+      aria-label="Sidebar"
+      className={`min-h-0 flex-col gap-[18px] rounded-panel border border-glass-border bg-glass px-3 pb-3 pt-[18px] shadow-sidebar backdrop-blur-[20px] backdrop-saturate-150 ${className}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <BrandMark sway={level !== 'still'} onNavigate={onNavigate} />
+        <IconButton
+          type="button"
+          size="lg"
+          aria-label="Close navigation"
+          onClick={onClose}
+          className="shrink-0 lg:hidden"
+        >
+          <Icon as={IconX} size={20} />
+        </IconButton>
+      </div>
+      <SidebarNav onNavigate={onNavigate} />
+      <SidebarBoards onCreate={onCreateBoard} onNavigate={onNavigate} />
+      <BreezeBox />
+      <SidebarFoot />
+    </aside>
+  );
+};
 
 export default Sidebar;
