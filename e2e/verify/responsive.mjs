@@ -58,6 +58,9 @@ const SMALL = 640;
 /** The medium breakpoint: the drawer is a bottom sheet strictly below it. */
 const MD = 768;
 
+/** The large breakpoint: from here up the sidebar is a column, below it a panel. */
+const LARGE = 1024;
+
 const req = async (method, path, token, body) => {
   const response = await fetch(API + path, {
     method,
@@ -337,6 +340,19 @@ const scanSurface = async (target, surface, width) => {
   }
 };
 
+/**
+ * Opens the sidebar where it is a panel, and does nothing where it is a column.
+ * The header's menu button is on screen only below the large breakpoint, so
+ * whether it is visible is the question to ask, not the viewport width.
+ */
+const openNavigation = async () => {
+  const button = page.getByRole('button', { name: 'Open navigation' });
+  if (!(await button.isVisible())) return;
+  await button.click();
+  await page.getByRole('dialog', { name: 'Navigation' }).waitFor();
+  await settle(page);
+};
+
 const openMoveMenu = async () => {
   await page.getByRole('button', { name: /^Move .* to another column$/ }).first().click();
   await page.getByRole('menu').waitFor();
@@ -355,8 +371,11 @@ const authed = [
     open: async () => {
       await page.goto(`${FRONT}/`);
       await page.getByText('My Boards').waitFor();
-      await page.getByRole('button', { name: /create board/i }).first().click();
-      await page.getByRole('dialog').waitFor();
+      // The view's own button in the header, which is on screen at every width.
+      // The sidebar's plus button opens the same dialog but is not on screen
+      // while the sidebar is a closed panel.
+      await page.getByRole('button', { name: 'New board' }).click();
+      await page.getByRole('dialog', { name: 'Create New Board' }).waitFor();
     },
   },
   {
@@ -374,8 +393,23 @@ const authed = [
     open: async () => {
       await page.goto(`${FRONT}/`);
       await page.getByText('My Boards').waitFor();
+      await openNavigation();
       await page.getByRole('button', { name: /^Account menu/ }).click();
       await page.getByRole('menu').waitFor();
+    },
+  },
+  {
+    // Below the large breakpoint the sidebar is a panel that is closed until
+    // the header's button opens it, so this is the surface where its contents
+    // are measured: every control in it must fit, clear its neighbours and be
+    // large enough to press. At and above the breakpoint it is a column of
+    // every other surface and needs no surface of its own.
+    name: 'dashboard, navigation panel',
+    below: LARGE,
+    open: async () => {
+      await page.goto(`${FRONT}/`);
+      await page.getByText('My Boards').waitFor();
+      await openNavigation();
     },
   },
   {
@@ -428,7 +462,8 @@ const authed = [
         template: templates.body.data[0]._id,
       });
       await page.goto(`${FRONT}/`);
-      await page.getByRole('link', { name: title }).waitFor();
+      // The sidebar lists the board as well as the tile.
+      await page.getByRole('link', { name: title }).first().waitFor();
       await page.getByRole('button', { name: `Options for ${title}` }).click();
       await page.getByRole('button', { name: /^Delete$/ }).click();
       await page.getByRole('dialog', { name: 'Delete this board?' }).getByRole('button', { name: 'Delete board' }).click();
@@ -565,6 +600,7 @@ for (const viewport of VIEWPORTS) {
   await anonPage.setViewportSize(viewport);
 
   for (const surface of authed) {
+    if (surface.below !== undefined && viewport.width >= surface.below) continue;
     await surface.open();
     await scanSurface(page, surface.name, viewport.width);
   }

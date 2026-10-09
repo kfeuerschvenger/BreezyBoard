@@ -1,33 +1,23 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { IconFolder, IconPlus } from '@tabler/icons-react';
-import {
-  BoardCard,
-  BoardStats,
-  CreateBoardModal,
-  DeleteBoardDialog,
-  useBoardDashboard,
-  useBoardMenu,
-} from '@/features/boards';
+import { BoardCard, BoardStats, DeleteBoardDialog, useBoardDashboard, useBoardMenu } from '@/features/boards';
 import { resolveColor } from '@/features/colors';
 import { AddMemberModal } from '@/features/users';
-import type { NewBoard } from '@/features/boards';
 import type { Board, User } from '@/models';
-import { EmptyState, LoadingScreen, Icon } from '@/shared/ui';
+import { Button, EmptyState, LoadingScreen, Icon } from '@/shared/ui';
+import { ShellAction } from '@/app/layouts/shell/ShellAction';
+import { useShell } from '@/app/layouts/shell/shellContext';
 import PageHeader from '../components/PageHeader';
-import UserAvatar from '../components/UserAvatar';
 
 const BoardDashboard: React.FC = () => {
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [memberBoard, setMemberBoard] = useState<Board | null>(null);
   const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
 
   const dashboard = useBoardDashboard();
   const menu = useBoardMenu();
-
-  const handleCreateBoard = async (board: NewBoard) => {
-    if (await dashboard.createBoard(board)) setShowCreateModal(false);
-  };
+  const shell = useShell();
+  const createBoard = () => shell?.openCreateBoard();
 
   const handleAddMembers = async (members: User[]) => {
     if (!memberBoard) return;
@@ -54,38 +44,34 @@ const BoardDashboard: React.FC = () => {
     menu.close();
   };
 
-  if (dashboard.isLoading) return <LoadingScreen label="Loading boards..." showLabel />;
+  if (dashboard.isLoading) return <LoadingScreen label="Loading boards..." showLabel fill="parent" />;
 
   if (dashboard.error) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-4">{dashboard.error}</div>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <div role="alert" className="mb-4 rounded-control bg-danger-bg p-4 text-danger">
+            {dashboard.error}
+          </div>
+          <Button type="button" onClick={() => window.location.reload()}>
             Reload Page
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <PageHeader title="My Boards" subtitle="Manage and organize your project boards">
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
-        >
-          <Icon as={IconPlus} size={20} />
-          Create Board
-        </button>
-        <UserAvatar />
-      </PageHeader>
+    <div className="mx-auto w-full max-w-7xl">
+      <PageHeader title="My Boards" subtitle="Manage and organize your project boards" />
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
+      <ShellAction>
+        <Button type="button" size="sm" onClick={createBoard} leftIcon={<Icon as={IconPlus} size={18} />}>
+          New board
+        </Button>
+      </ShellAction>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pt-2">
         <BoardStats stats={dashboard.stats} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -110,26 +96,17 @@ const BoardDashboard: React.FC = () => {
 
         {dashboard.boards.length === 0 && (
           <EmptyState
-            icon={<Icon as={IconFolder} className="text-gray-400" size={24} />}
+            icon={<Icon as={IconFolder} className="text-ink-tertiary" size={24} />}
             title="No boards yet"
             description="Create your first board to get started with project management"
             action={
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-lg hover:shadow-xl"
-              >
+              <Button type="button" onClick={createBoard}>
                 Create Your First Board
-              </button>
+              </Button>
             }
           />
         )}
       </motion.div>
-
-      <CreateBoardModal
-        open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreateBoard={handleCreateBoard}
-      />
 
       <DeleteBoardDialog
         board={boardToDelete}

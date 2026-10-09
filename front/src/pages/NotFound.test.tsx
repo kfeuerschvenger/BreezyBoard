@@ -56,10 +56,13 @@ describe('NotFound', () => {
     expect(screen.queryByRole('link', { name: 'Back to my boards' })).not.toBeInTheDocument();
   });
 
-  it('keeps the page inside a main landmark in both states', () => {
+  // A signed in visitor is inside the application shell, which owns the page's
+  // main landmark. A second one inside it would be nested landmarks.
+  it('is its own main landmark only when there is no shell around it', () => {
     mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
     const { unmount } = renderPage();
-    expect(screen.getByRole('main')).toHaveTextContent(/nothing at this address/i);
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing at this address/i)).toBeInTheDocument();
     unmount();
 
     mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false }));

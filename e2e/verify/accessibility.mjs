@@ -46,47 +46,27 @@ const BASELINE = {
   // that is the whole argument of P3-4 in one measurement.
   'login, forgot password open': {},
   register: {},
-  dashboard: { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
+  // region and landmark-one-main were measured here and have no line now: the
+  // application shell gives every signed in page a banner, a main, a
+  // complementary sidebar and navigation landmarks, so nothing sits outside one.
+  dashboard: { 'heading-order': 1 },
   // button-name was 1 here and its line is gone rather than sitting at zero:
   // the create board modal now uses the shared Modal, whose close control is
   // an IconButton that cannot be rendered without a label. region fell from
   // 10 to 6 and heading-order from 2 to 1 in the same change, and what is
   // left of both is the dashboard behind the dialog rather than the dialog.
-  'dashboard, create board modal open': { region: 6, 'heading-order': 1 },
-  board: { 'landmark-one-main': 1, region: 1 },
-  // aria-dialog-name was 1 here and its line is gone rather than sitting at
-  // zero. It was the violation section 10.2 predicted this gate would find,
-  // word for word, and it closed when the task drawer moved onto the shared
-  // Drawer, whose dialog is labelled by its own title.
-  'board, task drawer open': { region: 1 },
-  // Added with the bottom sheet. The same drawer below the medium breakpoint is
-  // a different layout, a bottom sheet with its own scrolling body and a footer
-  // outside it, and a layout nothing scanned at a desktop width says anything
-  // about. It is scanned with a checklist item added, because an item is three
-  // controls, a drag handle, a checkbox and a delete button, and each of them
-  // has to be named. The first two were not, and no surface scanned an item.
-  'board, task drawer open, phone': { region: 1 },
-  // Added on 2026-10-07, when the "Move to" menu shipped. The menu renders in
-  // a portal at the end of the body, outside the page's landmarks, so a
-  // second `region` node is what this surface exists to catch. Its two
-  // numbers are the board's own, unchanged: no main landmark, and the one
-  // region node the board already carries. The popup adds nothing to either.
-  'board, move menu open': { 'landmark-one-main': 1, region: 1 },
-  // Added with board deletion. The dashboard with an undo toast showing. The
-  // numbers are the dashboard's own, empty because the only board was just
-  // deleted: the toast, its live region and its landmark add nothing to any
-  // of the three. The delete confirmation scans clean, the page behind a
-  // modal being inert to axe, so it carries no entry.
-  'dashboard, undo toast showing': { region: 6, 'heading-order': 1, 'landmark-one-main': 1 },
-  // Added on 2026-09-25, when this surface was scanned for the first time.
-  // Its two numbers are the same debt every other surface carries: no main
-  // landmark, and content sitting outside one. aria-prohibited-attr was also
-  // 1 on the first measurement and its line is absent rather than zero,
-  // because it was fixed in the same change: PageHeader's action wrapper is a
-  // div with no role and carried an aria-label, which ARIA does not allow.
-  // It only ever surfaced here because this is the first scanned page that
-  // renders that header with an empty action area.
-  profile: { 'landmark-one-main': 1, region: 17 },
+  'dashboard, create board modal open': { 'heading-order': 1 },
+  // The board, its task drawer (at a desktop and a phone width), the board
+  // not found page, the delete confirmation, the edit dialog and the profile
+  // have no line: each scans clean.
+  //
+  // The "Move to" menu renders in a portal at the end of the body, outside the
+  // page's landmarks, so its popup is the one `region` node that remains. The
+  // second surface here is the one that exists to catch a popup in a portal.
+  'board, move menu open': { region: 1 },
+  // The dashboard with an undo toast showing. Its one number is the
+  // dashboard's own; the toast, its live region and its landmark add nothing.
+  'dashboard, undo toast showing': { 'heading-order': 1 },
 };
 
 // There is deliberately no colour-contrast entry anywhere above. The first
@@ -227,7 +207,18 @@ await form.getByRole('button', { name: /sign in/i }).click();
 await page.getByText('My Boards').waitFor();
 await scan('dashboard');
 
-await page.getByRole('button', { name: /create board/i }).first().click();
+// The sidebar is a column on this screen and a panel on a phone, and the panel
+// is a different surface: a dialog that holds focus, over a page made inert,
+// with a scrim between them. It is scanned open at a phone width.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.getByRole('button', { name: 'Open navigation' }).click();
+await page.getByRole('dialog', { name: 'Navigation' }).waitFor();
+await scan('dashboard, navigation panel open, phone');
+await page.keyboard.press('Escape');
+await page.getByRole('dialog', { name: 'Navigation' }).waitFor({ state: 'detached' });
+await page.setViewportSize({ width: 1440, height: 900 });
+
+await page.getByRole('button', { name: 'New board' }).click();
 await page.waitForTimeout(400);
 await scan('dashboard, create board modal open');
 

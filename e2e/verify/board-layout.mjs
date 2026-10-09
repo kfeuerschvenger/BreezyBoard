@@ -141,7 +141,9 @@ const measure = () =>
         hint: empty.textContent.trim(),
       },
       footers: document.querySelectorAll("footer").length,
-      headerBottom: document.querySelector("header").getBoundingClientRect()
+      // The page's own title block, not the shell's banner above it: the
+      // columns sit directly under the former.
+      headerBottom: document.querySelector("main header").getBoundingClientRect()
         .bottom,
       viewportHeight: window.innerHeight,
     };
@@ -151,9 +153,14 @@ const VIEWPORTS = [
   // Narrower than four columns at any width, so the row must overflow.
   { name: "phone 390", width: 390, height: 844, overflows: true },
   { name: "laptop 1024", width: 1024, height: 768, overflows: true },
-  // Wide enough for the four columns of the default template, so only the
-  // page-level assertions apply: nothing may scroll sideways at all.
-  { name: "desktop 1440", width: 1440, height: 900, overflows: false },
+  // The sidebar takes 252 pixels and the page margins 40 more, so the four
+  // columns of the default template, 1376 pixels with their gaps, do not fit
+  // beside it at 1440.
+  { name: "desktop 1440", width: 1440, height: 900, overflows: true },
+  // Wide enough for the four columns of the default template beside the
+  // sidebar, so only the page-level assertions apply: nothing may scroll
+  // sideways at all.
+  { name: "wide desktop 1920", width: 1920, height: 1080, overflows: false },
 ];
 
 for (const viewport of VIEWPORTS) {

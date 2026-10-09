@@ -9,7 +9,19 @@ export interface LoadingScreenProps {
    */
   label?: string;
   showLabel?: boolean;
+  /**
+   * `screen` is a page of its own, as tall as the window on the ground
+   * colour. `parent` fills the box it is placed in and draws no ground of its
+   * own, for a page that already sits inside the application shell, where a
+   * window-tall box would make the content area scroll for nothing.
+   */
+  fill?: 'screen' | 'parent';
 }
+
+const FILL_CLASSES = {
+  screen: 'min-h-screen bg-ground',
+  parent: 'min-h-0 flex-1',
+} as const;
 
 /**
  * A page that has nothing to show yet.
@@ -22,8 +34,12 @@ export interface LoadingScreenProps {
  * The mark carries `role="status"` and a name. Without them it is a drawing
  * and nothing else: the page reads as empty to anyone not looking at it.
  */
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ label = 'Loading', showLabel = false }) => (
-  <div className="flex min-h-screen items-center justify-center bg-ground p-6">
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({
+  label = 'Loading',
+  showLabel = false,
+  fill = 'screen',
+}) => (
+  <div className={`flex items-center justify-center p-6 ${FILL_CLASSES[fill]}`}>
     <div className="text-center">
       <div
         role="status"

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { IconArrowLeft } from '@tabler/icons-react';
-import { Icon } from '@/shared/ui';
+import { Icon, IconButton } from '@/shared/ui';
 import { useNavigate } from 'react-router-dom';
 
 export interface PageHeaderProps {
@@ -22,8 +22,13 @@ export interface PageHeaderProps {
 
 /**
  * PageHeader
- * - Semantic header component with optional back button and action area.
- * - Focus / keyboard and aria improvements for accessibility.
+ * The title block at the top of a page's own content: the h1, an optional
+ * subtitle, a back button and the page's own actions.
+ *
+ * It is not the application's header. That one is the shell's and holds the
+ * breadcrumb and the view's main action, and this sits in the page below it.
+ * It is a `header` element inside the page's `main`, which makes it a
+ * sectioning header rather than a second banner landmark.
  */
 const PageHeader: React.FC<PageHeaderProps> = ({
   title,
@@ -51,47 +56,40 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   }, [navigate, onBack]);
 
   return (
-    <header role="banner" className={`bg-white border-b border-gray-200 ${className}`}>
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6">
-        {/*
-          The row wraps instead of squeezing. On a phone the title block and
-          the actions do not fit side by side, and a long title would
-          otherwise push the actions out of the viewport: the title may shrink
-          to a minimum width, and once it would go below it the actions drop to
-          their own line, right aligned.
-        */}
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="flex min-w-0 flex-1 basis-56 items-center gap-3 sm:gap-4">
-            {showBackButton && (
-              <button
-                type="button"
-                onClick={handleBack}
-                aria-label={backAriaLabel}
-                className="shrink-0 p-3 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                <Icon as={IconArrowLeft} size={20} className="text-gray-600" aria-hidden="true" />
-              </button>
+    <header className={`pb-5 pt-1 ${className}`}>
+      {/*
+        The row wraps instead of squeezing. On a phone the title block and
+        the actions do not fit side by side, and a long title would
+        otherwise push the actions out of the viewport: the title may shrink
+        to a minimum width, and once it would go below it the actions drop to
+        their own line, right aligned.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="flex min-w-0 flex-1 basis-56 items-center gap-3 sm:gap-4">
+          {showBackButton && (
+            <IconButton type="button" size="lg" onClick={handleBack} aria-label={backAriaLabel} className="shrink-0">
+              <Icon as={IconArrowLeft} size={20} aria-hidden="true" />
+            </IconButton>
+          )}
+
+          <div className="min-w-0">
+            {/* Title: main landmark for the page */}
+            <h1 className="break-words font-heading text-xl font-bold tracking-tight text-ink sm:text-2xl">{title}</h1>
+            {subtitle && (
+              <p className="font-body text-sm text-ink-secondary sm:text-base" aria-live="polite">
+                {subtitle}
+              </p>
             )}
-
-            <div className="min-w-0">
-              {/* Title: main landmark for the page */}
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-heading break-words">{title}</h1>
-              {subtitle && (
-                <p className="text-sm sm:text-base text-gray-600 font-body" aria-live="polite">
-                  {subtitle}
-                </p>
-              )}
-            </div>
           </div>
-
-          {/*
-            A layout wrapper, so it carries no aria-label. ARIA prohibits one
-            on an element with no role, and the actions inside already name
-            themselves. The axe gate reported it the first time a surface
-            rendering this header with an empty action area was scanned.
-          */}
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-4">{children}</div>
         </div>
+
+        {/*
+          A layout wrapper, so it carries no aria-label. ARIA prohibits one
+          on an element with no role, which axe reports as
+          aria-prohibited-attr, and the actions inside already name
+          themselves.
+        */}
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-4">{children}</div>
       </div>
     </header>
   );

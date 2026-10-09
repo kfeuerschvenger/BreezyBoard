@@ -31,7 +31,7 @@ export type { TemplatePickerProps } from './components/TemplatePicker';
 export { BoardStats } from './components/BoardStats';
 export type { BoardStatsProps } from './components/BoardStats';
 export { useBoardDashboard } from './hooks/useBoardDashboard';
-export type { NewBoard, UseBoardDashboardResult } from './hooks/useBoardDashboard';
+export type { UseBoardDashboardResult } from './hooks/useBoardDashboard';
 export { useDeleteBoardWithUndo } from './hooks/useDeleteBoardWithUndo';
 export type { BoardToDelete, UseDeleteBoardWithUndoResult } from './hooks/useDeleteBoardWithUndo';
 export { DeleteBoardDialog } from './components/DeleteBoardDialog';

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig } from 'motion/react';
@@ -10,6 +10,7 @@ import { AuthProvider } from '@/context/AuthProvider';
 import { AuthToastProvider } from '@/context/AuthToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { Board, Home, Login, NotFound, Profile, Register, ResetPassword } from '@/pages';
+import { LoadingScreen } from '@/shared/ui';
 
 import './index.css';
 
@@ -17,18 +18,28 @@ import './index.css';
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingScreen label="Loading" />;
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
+};
+
+/**
+ * The frame around every page a signed in person sees, and nothing around the
+ * same address for a visitor with no session.
+ *
+ * Unknown addresses live under it too, so a signed in visitor who mistypes a
+ * link keeps the sidebar and the account, and a signed out one gets the bare
+ * not found page and is never redirected. The sign in, registration and
+ * password reset pages sit outside it: they are the way in, and a sidebar of
+ * boards that cannot be read yet would be wrong there.
+ */
+const SignedInLayout = () => {
+  const { isAuthenticated } = useAuth();
+
+  return isAuthenticated ? <AppShell /> : <Outlet />;
 };
 
 const AppRoutes = () => {
@@ -39,34 +50,36 @@ const AppRoutes = () => {
       {/* Public by necessity: the person arriving from the emailed link has
           no session, and one who has is signed out when the reset succeeds. */}
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/board/:boardId"
-        element={
-          <ProtectedRoute>
-            <Board />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        }
-      />
-      {/* Not behind ProtectedRoute: an unknown address is answered the same
-          way for everybody and never redirected, so nobody is bounced to
-          login for a page that does not exist. */}
-      <Route path="*" element={<NotFound />} />
+      <Route element={<SignedInLayout />}>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/board/:boardId"
+          element={
+            <ProtectedRoute>
+              <Board />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+        {/* Not behind ProtectedRoute: an unknown address is answered the same
+            way for everybody and never redirected, so nobody is bounced to
+            login for a page that does not exist. */}
+        <Route path="*" element={<NotFound />} />
+      </Route>
     </Routes>
   );
 };
@@ -85,9 +98,7 @@ const App = () => {
         <AuthProvider>
           <AuthToastProvider>
             <Router>
-              <AppShell>
-                <AppRoutes />
-              </AppShell>
+              <AppRoutes />
             </Router>
           </AuthToastProvider>
         </AuthProvider>

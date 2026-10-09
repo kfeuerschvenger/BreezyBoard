@@ -1,28 +1,306 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { renderWithQuery } from '@/test/renderWithQuery';
+import { AuthService, BoardService, ColorService, TemplateService } from '@/services';
+import type { Board, User } from '@/models';
 import { AppShell } from './AppShell';
+import { ShellAction } from './shell/ShellAction';
+import { useShell } from './shell/shellContext';
 
-const renderAt = (path: string) =>
-  render(
+vi.mock('@/services', () => ({
+  AuthService: { getCurrentUser: vi.fn(), logout: vi.fn() },
+  BoardService: { getAll: vi.fn(), getById: vi.fn(), create: vi.fn() },
+  ColorService: { getByType: vi.fn() },
+  TemplateService: { getAll: vi.fn() },
+  UserService: { update: vi.fn() },
+}));
+
+// The legal dialogs read a text file from the public folder. A stub keeps the
+// real network out and gives the dialog something to show.
+vi.mock('@/hooks/useTextFile', () => ({
+  default: () => ({ data: 'The document', loading: false, error: null, refetch: vi.fn() }),
+}));
+
+const navigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => navigate };
+});
+
+const mockedAuth = vi.mocked(AuthService);
+const mockedBoards = vi.mocked(BoardService);
+const mockedColors = vi.mocked(ColorService);
+const mockedTemplates = vi.mocked(TemplateService);
+
+const ADA: User = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
+
+const makeBoard = (id: string, title: string): Board =>
+  ({
+    _id: id,
+    title,
+    description: '',
+    color: '#3B82F6',
+    columns: [],
+    template: 'template-1',
+    createdBy: 'user-ada',
+    members: [],
+    taskCount: 0,
+    memberCount: 1,
+    progress: 0,
+  }) as Board;
+
+const ROADMAP = makeBoard('board-1', 'Roadmap');
+const LAUNCH = makeBoard('board-2', 'Launch plan');
+
+const renderShell = (path = '/', page: React.ReactNode = <p>page content</p>) =>
+  renderWithQuery(
     <MemoryRouter initialEntries={[path]}>
-      <AppShell>
-        <p>page content</p>
-      </AppShell>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="*" element={page} />
+        </Route>
+      </Routes>
     </MemoryRouter>
   );
 
-describe('AppShell', () => {
-  it('renders no footer on the board page', () => {
-    renderAt('/board/abc123');
+beforeEach(() => {
+  navigate.mockReset();
+  mockedAuth.getCurrentUser.mockReset().mockReturnValue(ADA);
+  mockedBoards.getAll.mockReset().mockResolvedValue([ROADMAP, LAUNCH]);
+  mockedBoards.getById.mockReset().mockResolvedValue(ROADMAP);
+  mockedBoards.create.mockReset();
+  mockedColors.getByType.mockReset().mockResolvedValue([]);
+  mockedTemplates.getAll.mockReset().mockResolvedValue([]);
+});
 
-    expect(screen.getByText('page content')).toBeInTheDocument();
+describe('the frame', () => {
+  it('puts the page in a main landmark under a banner, with no footer', async () => {
+    renderShell();
+
+    expect(within(screen.getByRole('main')).getByText('page content')).toBeInTheDocument();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
     expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Roadmap' })).toBeInTheDocument();
   });
 
-  it.each(['/', '/profile', '/login'])('still renders the footer on %s', path => {
-    renderAt(path);
+  // jsdom loads no stylesheet, so the class is the only thing to hold. The
+  // board's columns scroll inside themselves, so a content area that also
+  // scrolled would give the page a second vertical scrollbar beside theirs.
+  it.each([
+    ['/board/board-1', 'overflow-hidden'],
+    ['/', 'overflow-y-auto'],
+    ['/profile', 'overflow-y-auto'],
+  ])('clips the content area on a board and scrolls it elsewhere: %s', async (path, overflow) => {
+    renderShell(path);
 
-    expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveClass(overflow);
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('has exactly one banner and one main landmark', async () => {
+    renderShell();
+
+    expect(screen.getAllByRole('banner')).toHaveLength(1);
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+});
+
+describe('the sidebar navigation', () => {
+  it('links the logo and Home to the home page and marks Home as the current page there', async () => {
+    renderShell('/');
+
+    expect(screen.getByRole('link', { name: 'breezyboard' })).toHaveAttribute('href', '/');
+    const home = screen.getByRole('link', { name: 'Home' });
+    expect(home).toHaveAttribute('href', '/');
+    expect(home).toHaveAttribute('aria-current', 'page');
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('does not mark Home as current on a board', async () => {
+    renderShell('/board/board-1');
+
+    expect(screen.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current');
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('offers no Notes link until the page exists', async () => {
+    renderShell();
+
+    expect(screen.queryByRole('link', { name: /notes/i })).not.toBeInTheDocument();
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('lists every board as a real link and marks only the open one as current', async () => {
+    renderShell('/board/board-2');
+
+    const roadmap = await screen.findByRole('link', { name: 'Roadmap' });
+    const launch = screen.getByRole('link', { name: 'Launch plan' });
+
+    expect(roadmap).toHaveAttribute('href', '/board/board-1');
+    expect(launch).toHaveAttribute('href', '/board/board-2');
+    expect(launch).toHaveAttribute('aria-current', 'page');
+    expect(roadmap).not.toHaveAttribute('aria-current');
+  });
+
+  it('gives each board its own hue and the same one every time', async () => {
+    const first = renderShell();
+    const dotOf = async () => {
+      const link = await screen.findByRole('link', { name: 'Roadmap' });
+      return link.querySelector('[aria-hidden="true"]')?.className;
+    };
+    const before = await dotOf();
+    first.unmount();
+
+    renderShell();
+
+    expect(before).toMatch(/bg-(sky|teal|green|sand|coral|lavender)-mid/);
+    expect(await dotOf()).toBe(before);
+  });
+
+  it('says so when there are no boards', async () => {
+    mockedBoards.getAll.mockResolvedValue([]);
+    renderShell();
+
+    expect(await screen.findByText('No boards yet')).toBeInTheDocument();
+  });
+
+  it('reports a failed load and asks again when told to', async () => {
+    const user = userEvent.setup();
+    mockedBoards.getAll.mockRejectedValueOnce(new Error('offline'));
+    renderShell();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Boards could not be loaded.');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('link', { name: 'Roadmap' })).toBeInTheDocument();
+    expect(mockedBoards.getAll).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('creating a board from the sidebar', () => {
+  it('opens the create board dialog', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create board' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Create New Board' })).toBeInTheDocument();
+  });
+
+  it('opens the same dialog from a view that asks the shell for it', async () => {
+    const user = userEvent.setup();
+    // A view reaches the shell the way the home page does: its main action is
+    // drawn in the header and asks the shell to open the dialog.
+    const View = () => {
+      const shell = useShell();
+      return (
+        <ShellAction>
+          <button type="button" onClick={() => shell?.openCreateBoard()}>
+            New board
+          </button>
+        </ShellAction>
+      );
+    };
+    renderShell('/', <View />);
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    const action = await within(screen.getByRole('banner')).findByRole('button', { name: 'New board' });
+    expect(within(screen.getByRole('main')).queryByRole('button', { name: 'New board' })).not.toBeInTheDocument();
+    await user.click(action);
+
+    expect(await screen.findByRole('dialog', { name: 'Create New Board' })).toBeInTheDocument();
+  });
+});
+
+describe('the foot of the sidebar', () => {
+  it('opens the account menu with the profile and the way out', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    await user.click(screen.getByRole('button', { name: 'Account menu for Ada Lovelace' }));
+
+    expect(screen.getByRole('menuitem', { name: /Profile/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Log out/ })).toBeInTheDocument();
+  });
+
+  it('keeps the privacy policy and the terms one press away', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    await user.click(screen.getByRole('button', { name: 'Privacy policy' }));
+    expect(await screen.findByRole('dialog', { name: 'Privacy Policy - BreezyBoard' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Terms' }));
+    expect(await screen.findByRole('dialog', { name: 'Terms of Service - BreezyBoard' })).toBeInTheDocument();
+  });
+
+  it('keeps the three ways to reach the author, the external ones opening elsewhere', async () => {
+    renderShell();
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    const linkedin = screen.getByRole('link', { name: 'LinkedIn profile' });
+    const github = screen.getByRole('link', { name: 'GitHub profile' });
+    const email = screen.getByRole('link', { name: 'Send email' });
+
+    expect(linkedin).toHaveAttribute('href', 'https://www.linkedin.com/in/kevin-feuerschvenger/');
+    expect(github).toHaveAttribute('href', 'https://github.com/kfeuerschvenger');
+    expect(email).toHaveAttribute('href', 'mailto:kfeuerschvenger@gmail.com');
+    for (const external of [linkedin, github]) {
+      expect(external).toHaveAttribute('target', '_blank');
+      expect(external).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    }
+    expect(email).not.toHaveAttribute('target');
+    expect(screen.getByText(`${new Date().getFullYear()} Kevin Feuerschvenger`)).toBeInTheDocument();
+  });
+});
+
+describe('the header', () => {
+  const breadcrumb = () => screen.getByRole('navigation', { name: 'Breadcrumb' });
+
+  it('names the section on the home page', async () => {
+    renderShell('/');
+
+    expect(within(breadcrumb()).getByText('Home')).toHaveAttribute('aria-current', 'page');
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('names the section and the board on a board, and marks the board as the current page', async () => {
+    renderShell('/board/board-1');
+
+    const board = await within(breadcrumb()).findByText('Roadmap');
+
+    expect(board).toHaveAttribute('aria-current', 'page');
+    expect(within(breadcrumb()).getByText('Boards')).not.toHaveAttribute('aria-current');
+  });
+
+  it('names the profile', async () => {
+    renderShell('/profile');
+
+    expect(within(breadcrumb()).getByText('Profile')).toHaveAttribute('aria-current', 'page');
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('names an address that leads nowhere', async () => {
+    renderShell('/no/such/page');
+
+    expect(within(breadcrumb()).getByText('Not found')).toHaveAttribute('aria-current', 'page');
+    await screen.findByRole('link', { name: 'Roadmap' });
+  });
+
+  it('shows the section alone when the board cannot be read', async () => {
+    mockedBoards.getById.mockRejectedValue(new Error('gone'));
+    renderShell('/board/board-9');
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    expect(within(breadcrumb()).getByText('Boards')).toHaveAttribute('aria-current', 'page');
   });
 });

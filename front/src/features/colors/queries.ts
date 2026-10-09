@@ -17,10 +17,16 @@ export const colorKeys = {
  * the product writes to. `staleTime: Infinity` states that, so opening a
  * fourth drawer costs nothing and a window regaining focus does not refetch a
  * list that cannot have changed.
+ *
+ * `enabled` is for a consumer that is mounted all the time and needs the list
+ * only once it is shown, such as a dialog the application shell keeps closed
+ * on every page. Left true, that dialog would ask for the palette on pages
+ * that never open it.
  */
-export const useColors = (type: ColorType) =>
+export const useColors = (type: ColorType, enabled = true) =>
   useQuery({
     queryKey: colorKeys.byType(type),
     queryFn: () => ColorService.getByType(type),
     staleTime: Infinity,
+    enabled,
   });

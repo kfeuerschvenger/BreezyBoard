@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import App from './App';
 import { useAuth } from '@/hooks/useAuth';
 import type { AuthContextType } from '@/context/AuthContext';
@@ -33,6 +33,19 @@ vi.mock('react-router-dom', async importOriginal => {
 });
 
 vi.mock('@/hooks/useAuth');
+
+// The frame is tested on its own. Here it is a marker around whatever the
+// router puts inside it, which is all this suite needs to know about it.
+vi.mock('@/app/layouts/AppShell', async () => {
+  const { Outlet } = await import('react-router-dom');
+  return {
+    AppShell: () => (
+      <div data-testid="app-shell">
+        <Outlet />
+      </div>
+    ),
+  };
+});
 
 vi.mock('@/pages', () => ({
   Home: () => <div>Protected home content</div>,
@@ -84,13 +97,57 @@ describe('auth guard (ProtectedRoute)', () => {
   it('shows only the loading state while auth is still resolving', () => {
     mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false, loading: true }));
 
-    // The loading spinner, like the ones in Board and TaskDrawer, has no
-    // role="status" or accessible name, so it has to be located by class.
-    const { container } = render(<App />);
+    render(<App />);
 
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
     expect(screen.queryByText('Login page')).not.toBeInTheDocument();
     expect(screen.queryByText('Protected home content')).not.toBeInTheDocument();
+  });
+});
+
+describe('the application shell', () => {
+  beforeEach(() => {
+    mockedUseAuth.mockReset();
+    route.path = '/';
+  });
+
+  it.each([
+    ['/', 'Protected home content'],
+    ['/board/abc', 'Board page'],
+    ['/profile', 'Profile page'],
+    ['/no/such/page', 'Not found page'],
+  ])('frames %s for a signed in visitor', async (path, content) => {
+    route.path = path;
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
+
+    render(<App />);
+
+    expect(await screen.findByText(content)).toBeInTheDocument();
+    expect(within(screen.getByTestId('app-shell')).getByText(content)).toBeInTheDocument();
+  });
+
+  it('puts nothing around the not found page of a visitor with no session', async () => {
+    route.path = '/no/such/page';
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false }));
+
+    render(<App />);
+
+    expect(await screen.findByText('Not found page')).toBeInTheDocument();
+    expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['/login', 'Login page'],
+    ['/register', 'Register page'],
+    ['/reset-password', 'Reset password page'],
+  ])('never frames %s, even for somebody who has a session', async (path, content) => {
+    route.path = path;
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: true }));
+
+    render(<App />);
+
+    expect(await screen.findByText(content)).toBeInTheDocument();
+    expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
   });
 });
 
