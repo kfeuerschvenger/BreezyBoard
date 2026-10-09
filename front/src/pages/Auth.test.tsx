@@ -324,13 +324,88 @@ describe('Auth page structure', () => {
     expect(screen.getByText('Organize at the speed of', { exact: false }).closest('[aria-hidden="true"]')).toBeNull();
   });
 
-  it('offers the legal documents on both modes, and the terms dialog opens', async () => {
+  it('sets the legal documents under the form on sign in, and the terms dialog opens', async () => {
     const user = userEvent.setup();
-    renderAuth('/register');
+    renderAuth('/login');
 
+    expect(screen.getByRole('button', { name: 'Privacy policy' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Terms' }));
 
     expect(await screen.findByRole('dialog', { name: 'Terms of Service - BreezyBoard' })).toBeInTheDocument();
+  });
+});
+
+describe('Auth consent sentence', () => {
+  const checkbox = () => screen.getByRole('checkbox', { name: 'I agree to the Terms of Service and the Privacy Policy' });
+
+  it('names the checkbox with the whole sentence and sets the two links inside it', () => {
+    renderAuth('/register');
+
+    const sentence = checkbox().parentElement as HTMLElement;
+    expect(within(sentence).getByRole('button', { name: 'Terms of Service' })).toBeInTheDocument();
+    expect(within(sentence).getByRole('button', { name: 'Privacy Policy' })).toBeInTheDocument();
+  });
+
+  it('does not repeat the pair under the form on sign up', () => {
+    renderAuth('/register');
+
+    expect(screen.queryByRole('button', { name: 'Terms' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Privacy policy' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /Terms of Service|Privacy Policy/ })).toHaveLength(2);
+  });
+
+  it('opens the terms from its link without toggling the checkbox', async () => {
+    const user = userEvent.setup();
+    renderAuth('/register');
+
+    await user.click(screen.getByRole('button', { name: 'Terms of Service' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Terms of Service - BreezyBoard' })).toBeInTheDocument();
+    expect(checkbox()).not.toBeChecked();
+  });
+
+  it('opens the privacy policy from its link without toggling the checkbox', async () => {
+    const user = userEvent.setup();
+    renderAuth('/register');
+
+    await user.click(screen.getByRole('button', { name: 'Privacy Policy' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Privacy Policy - BreezyBoard' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Terms of Service - BreezyBoard' })).toBeNull();
+    expect(checkbox()).not.toBeChecked();
+  });
+
+  it.each(['{Enter}', ' '])('opens a dialog from the keyboard with %j and leaves the checkbox alone', async key => {
+    const user = userEvent.setup();
+    renderAuth('/register');
+
+    screen.getByRole('button', { name: 'Terms of Service' }).focus();
+    await user.keyboard(key);
+
+    expect(await screen.findByRole('dialog', { name: 'Terms of Service - BreezyBoard' })).toBeInTheDocument();
+    expect(checkbox()).not.toBeChecked();
+  });
+
+  it('still toggles the checkbox from the words in front of the links', async () => {
+    const user = userEvent.setup();
+    renderAuth('/register');
+
+    await user.click(screen.getByText('I agree to the'));
+
+    expect(checkbox()).toBeChecked();
+  });
+
+  it('gives focus back to the link that opened the dialog', async () => {
+    const user = userEvent.setup();
+    renderAuth('/register');
+    const link = screen.getByRole('button', { name: 'Privacy Policy' });
+
+    await user.click(link);
+    const dialog = await screen.findByRole('dialog', { name: 'Privacy Policy - BreezyBoard' });
+    await user.click(within(dialog).getAllByRole('button', { name: 'Close' })[1]);
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(link).toHaveFocus();
   });
 });
 

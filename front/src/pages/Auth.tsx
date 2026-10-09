@@ -140,9 +140,11 @@ const Auth = ({ mode }: AuthProps) => {
         </Link>
       </p>
 
-      <div className="flex justify-center">
-        <LegalLinks />
-      </div>
+      {mode === 'signin' && (
+        <div className="flex justify-center">
+          <LegalLinks />
+        </div>
+      )}
 
       <ForgotPasswordModal
         open={forgotOpen}
