@@ -66,3 +66,6 @@ export type { CoverProps } from './Cover';
 
 export { HUES, HUE_ANGLE, coverGradient, hueFromSeed } from './hue';
 export type { Hue } from './hue';
+
+export { WindLayer } from './WindLayer';
+export type { WindLayerProps, WindLevel, WindTone } from './WindLayer';

@@ -411,8 +411,8 @@ log('\n--- the new primitives, rendered for real ---');
 // loaded are found in the transformed entry module and imported by URL, so the
 // primitives are rendered with the same instances, the same stylesheet and the
 // same fonts as the application, with nothing added to the repository.
-const mountPrimitives = async (target, build) =>
-  target.evaluate(async source => {
+const mountPrimitives = async (target, build, args = {}) =>
+  target.evaluate(async ([source, args]) => {
     const entry = await (await fetch('/src/main.tsx')).text();
     const urlOf = name => entry.match(new RegExp(`/node_modules/[.]vite/deps/${name}[.]js[?]v=[a-f0-9]+`))?.[0];
     const react = await import(urlOf('react'));
@@ -429,9 +429,11 @@ const mountPrimitives = async (target, build) =>
     const root = createRoot(host);
     window.__probeRoot = root;
     // eslint-disable-next-line no-new-func
-    root.render(new Function('ui', 'h', 'React', `return (${source})(ui, h, React)`)(ui, createElement, react.default ?? react));
+    root.render(
+      new Function('ui', 'h', 'React', 'args', `return (${source})(ui, h, React, args)`)(ui, createElement, react.default ?? react, args)
+    );
     await new Promise(resolve => setTimeout(resolve, 150));
-  }, build.toString());
+  }, [build.toString(), args]);
 
 const unmountPrimitives = async target =>
   target.evaluate(() => {
@@ -787,6 +789,86 @@ await reportPairs(page, markStops.map((stop, index) => [`the white wind glyph on
 await reportPairs(page, [['the loading label on the ground', '--color-ink-secondary', '--color-ground', 4.5]]);
 await unmountPrimitives(page);
 
+// Wind layer. The streaks and particles are CSS animations on elements React
+// renders once, so what is asserted here is what the browser does with them:
+// that they run, that they are drawn over the box and cannot be clicked, and
+// that nothing in the page changes while they play.
+const windBox = (ui, h, React, { level, tone }) =>
+  h(
+    'div',
+    { id: 'wind-box', style: { position: 'relative', width: 600, height: 300, background: '#0f1b2d' } },
+    h('button', { id: 'under-wind', style: { position: 'absolute', left: 20, top: 20, width: 120, height: 40 } }, 'Under the wind'),
+    h(ui.WindLayer, { level, tone })
+  );
+await mountPrimitives(page, windBox, { level: 'breezy', tone: 'light' });
+const windLayer = page.locator('#wind-box > div[aria-hidden="true"]');
+check('a breezy wind layer draws 6 streaks', await windLayer.locator('svg path').count(), 6);
+check('a breezy wind layer draws 9 particles', await windLayer.locator(':scope > span').count(), 9);
+const windStyle = await styleOf(windLayer, ['pointerEvents', 'position', 'overflow', 'width', 'height']);
+check('the wind layer takes no pointer events', windStyle.pointerEvents, 'none');
+check('the wind layer fills the box it is placed in', `${windStyle.position} ${windStyle.width} ${windStyle.height}`, 'absolute 600px 300px');
+check('the wind layer clips what leaves the box', windStyle.overflow, 'hidden');
+check(
+  'a click on a control under the wind layer reaches the control',
+  await page.evaluate(() => {
+    const box = document.getElementById('under-wind').getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.id;
+  }),
+  'under-wind'
+);
+const streak = await styleOf(windLayer.locator('svg path').first(), ['animationName', 'animationDuration', 'animationIterationCount', 'strokeLinecap', 'stroke']);
+check('the first streak flows on bbFlow, 9 seconds, forever', `${streak.animationName} ${streak.animationDuration} ${streak.animationIterationCount}`, 'bbFlow 9s infinite');
+check('the first streak is a white line with round ends', `${streak.strokeLinecap} ${await paintOf(page, streak.stroke)}`.startsWith('round'), true);
+const secondStreak = await styleOf(windLayer.locator('svg path').nth(1), ['animationDuration']);
+check('the second streak flows on its own pace', secondStreak.animationDuration, '16s');
+const leaf = await styleOf(windLayer.locator(':scope > span').first(), ['animationName', 'animationDuration', 'width', 'height', 'top']);
+check('the first particle is a 9 by 5 leaf drifting on bbDrift for 14 seconds', `${leaf.animationName} ${leaf.animationDuration} ${leaf.width} ${leaf.height}`, 'bbDrift 14s 9px 5px');
+const dot = await styleOf(windLayer.locator(':scope > span').nth(1), ['width', 'height', 'top']);
+check('the second particle is a 6 by 3 dot', `${dot.width} ${dot.height}`, '6px 3px');
+check('the animations are running, one for every streak and particle', await page.evaluate(() => {
+  const animations = document.getElementById('wind-box').getAnimations({ subtree: true });
+  return animations.length === 15 && animations.every(animation => animation.playState === 'running');
+}), true);
+const driftBefore = await windLayer.locator(':scope > span').nth(1).evaluate(el => getComputedStyle(el).transform);
+await page.waitForTimeout(500);
+const driftAfter = await windLayer.locator(':scope > span').nth(1).evaluate(el => getComputedStyle(el).transform);
+check('a particle has moved half a second later', driftBefore !== driftAfter, true);
+check(
+  'nothing in the page changes while the wind plays',
+  await page.evaluate(
+    () =>
+      new Promise(resolve => {
+        let records = 0;
+        const observer = new MutationObserver(list => {
+          records += list.length;
+        });
+        observer.observe(document.getElementById('wind-box'), { subtree: true, childList: true, attributes: true, characterData: true });
+        setTimeout(() => {
+          observer.disconnect();
+          resolve(records);
+        }, 1200);
+      })
+  ),
+  0
+);
+await unmountPrimitives(page);
+
+await mountPrimitives(page, windBox, { level: 'breezy', tone: 'dark' });
+const darkStreak = await styleOf(page.locator('#wind-box svg path').first(), ['stroke']);
+check('the dark tone draws coloured streaks', darkStreak.stroke.startsWith('oklch'), true);
+await unmountPrimitives(page);
+
+await mountPrimitives(page, windBox, { level: 'still', tone: 'light' });
+check('the still level draws no layer at all', await page.locator('#wind-box > div[aria-hidden="true"]').count(), 0);
+check('the still level draws nothing inside the box either', await page.locator('#wind-box svg').count(), 0);
+await unmountPrimitives(page);
+
+await mountPrimitives(page, windBox, { level: 'gusty', tone: 'light' });
+check('a gusty wind layer draws 11 streaks and 20 particles', `${await page.locator('#wind-box svg path').count()} ${await page.locator('#wind-box > div > span').count()}`, '11 20');
+const gustyStreak = await styleOf(page.locator('#wind-box svg path').nth(1), ['animationDuration']);
+check('a gusty streak is faster than the same breezy one', Number.parseFloat(gustyStreak.animationDuration) < 16, true);
+await unmountPrimitives(page);
+
 log('\n--- the menu, the confirm dialog and the toast, signed in ---');
 
 // A real account, so the surfaces that only exist behind the sign in can be
@@ -1018,6 +1100,10 @@ for (const [name, animationName, duration, iterations] of animationTokens) {
   check(`--animate-${name} collapses to under 1ms and plays once`, duration < 1 && iterations === '1', true);
 }
 
+await mountPrimitives(calmPage, windBox, { level: 'gusty', tone: 'light' });
+check('under reduced motion the wind layer is not rendered at all', await calmPage.locator('#wind-box > div').count(), 0);
+check('under reduced motion nothing in the box is animated', await calmPage.evaluate(() => document.getElementById('wind-box').getAnimations({ subtree: true }).length), 0);
+await unmountPrimitives(calmPage);
 const calmOpening = await sampleOpening(calmPage);
 const dialog = calmPage.getByRole('dialog');
 await dialog.waitFor({ state: 'visible' });
