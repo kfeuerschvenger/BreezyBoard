@@ -134,6 +134,51 @@ describe('EditBoardModal', () => {
     await waitFor(() => expect(nameBox()).toHaveValue('Launch Plan'));
   });
 
+  // The form is brought back to the board while the dialog is closed and not on
+  // opening: a reset on opening empties react-hook-form's registry, and text
+  // typed before the fields register again is lost. The same property means a
+  // board that is refetched while somebody is typing does not take their edit.
+  it('keeps what is being typed when the board changes underneath it', async () => {
+    const view = renderModal();
+    await userEvent.clear(nameBox());
+    await userEvent.type(nameBox(), 'Typing in progress');
+
+    view.rerender(
+      <EditBoardModal
+        open
+        board={{ ...BOARD, title: 'Renamed elsewhere', description: 'Changed elsewhere' }}
+        onClose={view.onClose}
+        onSave={view.onSave}
+      />,
+    );
+
+    await waitFor(() => expect(nameBox()).toHaveValue('Typing in progress'));
+  });
+
+  it('starts from the board as it is by then when it is opened after the board changed', async () => {
+    const view = renderModal();
+    view.rerender(<EditBoardModal open={false} board={BOARD} onClose={view.onClose} onSave={view.onSave} />);
+
+    view.rerender(
+      <EditBoardModal
+        open={false}
+        board={{ ...BOARD, title: 'Renamed elsewhere' }}
+        onClose={view.onClose}
+        onSave={view.onSave}
+      />,
+    );
+    view.rerender(
+      <EditBoardModal
+        open
+        board={{ ...BOARD, title: 'Renamed elsewhere' }}
+        onClose={view.onClose}
+        onSave={view.onSave}
+      />,
+    );
+
+    await waitFor(() => expect(nameBox()).toHaveValue('Renamed elsewhere'));
+  });
+
   it('has no axe violations', async () => {
     renderModal();
     await screen.findByRole('radio', { name: 'Green' });

@@ -54,10 +54,17 @@ export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalP
     formState: { isValid, isSubmitting },
   } = form;
 
-  // Every opening starts from the board as it is now. Cancelling an edit and
-  // opening the dialog again must not show the abandoned text.
+  // The form is brought back to the board as it is now while the dialog is
+  // closed, so every opening starts from it and an abandoned edit is never
+  // shown again. It is not reset on opening. A reset empties react-hook-form's
+  // field registry and the fields register again on the next render, and text
+  // typed in between is written to a field the form no longer knows and then
+  // overwritten from its values: a person cannot type that fast, but the
+  // dialog is ready to type into before that render has happened. It also
+  // means a board that is refetched while the dialog is open does not take the
+  // edit away.
   useEffect(() => {
-    if (!open) return;
+    if (open) return;
     reset(initial);
     setSaveError(null);
   }, [open, initial, reset]);
