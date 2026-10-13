@@ -4,8 +4,14 @@ import type { Task } from '@/models';
 /**
  * Tasks sort by their ordering key, which is a fractional index and so a
  * string. Comparing two of them is a string comparison and never arithmetic.
+ *
+ * By code point and not by locale. The keys are minted over 0-9A-Za-z, whose
+ * code point order is its own order and is the order the database sorts them
+ * in; a locale-aware comparison ranks every lowercase letter before every
+ * capital, so a key minted for the top of a column would be drawn at the
+ * bottom of it.
  */
-export const byOrder = (a: Task, b: Task) => a.order.localeCompare(b.order);
+export const byOrder = (a: Task, b: Task) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0);
 
 export interface ArrangedColumn {
   /** The target column as it reads once the drop is applied. */

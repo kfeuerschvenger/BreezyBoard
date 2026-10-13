@@ -40,6 +40,16 @@ describe('byOrder', () => {
       'later',
     ]);
   });
+
+  // The server mints keys over 0-9A-Za-z and sorts them by code point, so a
+  // key for a card dropped above the first one starts with a capital and sorts
+  // before a lowercase key. A locale-aware comparison puts the capital after
+  // it, which showed such a card at the bottom of its column.
+  it('orders by code point, so a capital sorts before a lowercase letter and a digit before both', () => {
+    const sorted = [task('lower', TODO, 'a0'), task('capital', TODO, 'Zz'), task('digit', TODO, '9z')].sort(byOrder);
+
+    expect(sorted.map(entry => entry._id)).toEqual(['digit', 'capital', 'lower']);
+  });
 });
 
 describe('arrangeColumn, within one column', () => {
