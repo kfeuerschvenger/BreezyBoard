@@ -192,6 +192,57 @@ describe('announcements', () => {
       'Move cancelled. Task a2 is back in To Do, position 2 of 3.',
     );
   });
+
+  // A pointer lands where the held card's centre is, not where the hovered
+  // card stands, so a resolver says where the card would go and the words
+  // follow it. Hovering b1 here would otherwise read "position 1".
+  describe('with a resolver for where the card would land', () => {
+    const resolved = () =>
+      createAnnouncements(
+        () => snapshot,
+        () => ({ columnId: 'doing', index: 1 }),
+      );
+
+    it('speaks the resolved place while the card is carried and when it is dropped', () => {
+      const announcements = resolved();
+      announcements.onDragStart({ active: active('a2') });
+      announcements.onDragOver({ active: active('a2'), over: over('a2') });
+
+      expect(announcements.onDragOver({ active: active('a2'), over: over('b1') })).toBe('Doing, position 2 of 2.');
+      expect(announcements.onDragEnd({ active: active('a2'), over: over('b1') })).toBe(
+        'Dropped Task a2 in Doing, position 2 of 2.',
+      );
+    });
+
+    it('still says nothing about a card that is over nothing', () => {
+      expect(resolved().onDragOver({ active: active('a2'), over: null })).toBe('Task a2 is not over a column.');
+      expect(resolved().onDragEnd({ active: active('a2'), over: null })).toBe(
+        'Task a2 was dropped. It was not moved.',
+      );
+    });
+
+    it('lets the hovered droppable answer when the resolver has no answer', () => {
+      const announcements = createAnnouncements(
+        () => snapshot,
+        () => null,
+      );
+      announcements.onDragStart({ active: active('a2') });
+      announcements.onDragOver({ active: active('a2'), over: over('a2') });
+
+      expect(announcements.onDragOver({ active: active('a2'), over: over('b1') })).toBe('Doing, position 1 of 2.');
+    });
+
+    it('does not change what is said at the pick up or on a cancel', () => {
+      const announcements = resolved();
+
+      expect(announcements.onDragStart({ active: active('a2') })).toBe(
+        'Picked up Task a2. To Do, position 2 of 3.',
+      );
+      expect(announcements.onDragCancel({ active: active('a2') })).toBe(
+        'Move cancelled. Task a2 is back in To Do, position 2 of 3.',
+      );
+    });
+  });
 });
 
 describe('the keyboard coordinate getter', () => {
@@ -332,9 +383,27 @@ describe('collision detection', () => {
       collisionRect: rect,
       droppableRects: new Map([['near', rect]]),
       droppableContainers: [{ id: 'near' }],
-      pointerCoordinates: null,
+      pointerCoordinates: { x: 10, y: 10 },
     } as never);
 
     expect(collisions.map(collision => collision.id)).toEqual(['near']);
+  });
+
+  // A keyboard drag has no pointer. Before its first arrow key the card is over
+  // its own place, and corner matching would name whichever card has come to
+  // stand there now that the held card takes no room.
+  it('reports the held card itself for a keyboard drag that has not moved yet', () => {
+    const detect = createCollisionDetection({ current: null });
+    const rect = { left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 };
+
+    const collisions = detect({
+      active: { id: 'a1' },
+      collisionRect: rect,
+      droppableRects: new Map([['near', rect]]),
+      droppableContainers: [{ id: 'near' }],
+      pointerCoordinates: null,
+    } as never);
+
+    expect(collisions).toEqual([{ id: 'a1' }]);
   });
 });
