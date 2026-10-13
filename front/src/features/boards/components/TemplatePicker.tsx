@@ -12,9 +12,9 @@ export interface TemplatePickerProps {
   registration: UseFormRegisterReturn;
 }
 
-// The legend carries the same weight as a Field's label, so the group reads
-// as part of the same form rather than as decoration.
-const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-heading';
+// The legend is the swatch picker's legend, so the two groups of the form read
+// the same.
+const LEGEND_CLASSES = 'mb-2 block text-[13px] font-semibold text-ink-secondary';
 
 // Selection is expressed with real radio inputs inside labels, hidden from
 // sight but not from the accessibility tree. That is what buys keyboard
@@ -24,8 +24,9 @@ const LEGEND_CLASSES = 'block text-sm font-medium text-gray-700 mb-2 font-headin
 // an orphan label, which was two of the ten label-has-associated-control
 // warnings the gate used to hold.
 const OPTION_CLASSES =
-  'relative block cursor-pointer rounded-lg border-2 transition-all border-gray-200 hover:border-gray-300 ' +
-  'has-[:checked]:border-blue-500 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500';
+  'focus-ring-within relative block cursor-pointer rounded-control border-[1.5px] border-line-control ' +
+  'transition-[border-color,box-shadow,background-color] duration-200 hover:border-ink-secondary ' +
+  'has-[:checked]:border-ink has-[:checked]:bg-surface-subtle has-[:checked]:shadow-swatch-ring';
 
 const idOf = (template: Template) => template._id ?? template.name;
 
@@ -40,20 +41,20 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({ templates, value
         const isSelected = value === id;
 
         return (
-          <label key={id} className={`${OPTION_CLASSES} p-4 text-left has-[:checked]:bg-blue-50`}>
+          <label key={id} className={`${OPTION_CLASSES} p-4 text-left`}>
             <input type="radio" value={id} className="sr-only" {...registration} />
             <span className="flex items-start gap-3">
-              <span className={`p-2 rounded-lg ${isSelected ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                <Icon as={TemplateIcon} size={20} aria-hidden="true" className={isSelected ? 'text-blue-600' : 'text-gray-600'} />
+              <span className={`rounded-control p-2 ${isSelected ? 'bg-sky-tint text-sky-deep' : 'bg-line-06 text-ink-secondary'}`}>
+                <Icon as={TemplateIcon} size={20} aria-hidden="true" />
               </span>
               <span className="flex-1">
                 {/* h3, not h4. The dialog's own title is an h2, and jumping a
                     level is what axe reports as heading-order. */}
-                <h3 className="font-medium text-gray-900 mb-1">{template.name}</h3>
-                <span className="block text-sm text-gray-600 mb-2">{template.description}</span>
+                <h3 className="mb-1 font-semibold text-ink">{template.name}</h3>
+                <span className="mb-2 block text-sm text-ink-secondary">{template.description}</span>
                 <span className="flex flex-wrap gap-1">
                   {template.columns.map((column, index) => (
-                    <span key={index} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                    <span key={index} className="rounded-chip bg-line-06 px-2 py-1 text-xs text-ink-secondary">
                       {typeof column === 'string' ? column : column.title}
                     </span>
                   ))}

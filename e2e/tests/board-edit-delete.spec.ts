@@ -39,13 +39,13 @@ test.describe('editing and deleting a board from its page', () => {
     // The back button is a client side navigation, so what the dashboard shows
     // here is what the cache holds, not what a fresh load would fetch.
     await page.getByRole('button', { name: 'Go back' }).click();
-    await expect(page.getByRole('main').getByText('Renamed on the board page')).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Renamed on the board page', exact: true })).toBeVisible();
     await expect(page.getByText('A new description')).toBeVisible();
     // The sidebar names the board from the same cache.
     await expect(page.getByRole('navigation', { name: 'Boards' }).getByText('Renamed on the board page')).toBeVisible();
 
     await page.reload();
-    await expect(page.getByRole('main').getByText('Renamed on the board page')).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Renamed on the board page', exact: true })).toBeVisible();
 
     const stored = await page.request.get(`${API_URL}/boards/${boardId}`, {
       headers: { Authorization: `Bearer ${authedUser.token}` },
@@ -69,7 +69,7 @@ test.describe('editing and deleting a board from its page', () => {
     await confirm.getByRole('button', { name: 'Delete board' }).click();
 
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByText('My Boards')).toBeVisible();
+    await expect(page.getByText('Your boards')).toBeVisible();
     const toast = page.getByTestId('toast');
     await expect(toast).toContainText(`Deleted "${title}"`);
     await expect(page.getByRole('link', { name: title })).toHaveCount(0);
@@ -79,7 +79,7 @@ test.describe('editing and deleting a board from its page', () => {
 
     // Undo keeps the person on the dashboard, where the board is back.
     await expect(page).toHaveURL(/\/$/);
-    await page.getByRole('main').getByRole('link', { name: title }).click();
+    await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
     await expect(page).toHaveURL(boardUrl(boardId));
     for (const task of ['First task', 'Second task', 'Third task']) {
       await expect(page.getByText(task)).toBeVisible();
@@ -97,7 +97,7 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(page.getByTestId('toast')).toContainText(`Deleted "${title}"`);
 
     await page.reload();
-    await expect(page.getByText('My Boards')).toBeVisible();
+    await expect(page.getByText('Your boards')).toBeVisible();
     await expect(page.getByRole('link', { name: title })).toHaveCount(0);
 
     // Typing the address of a deleted board does not bring it back.
@@ -157,7 +157,7 @@ test.describe('editing and deleting a board from its page', () => {
   test('the dashboard delete asks, then offers the same undo', async ({ page, authedUser }) => {
     await seedBoard(page, authedUser.token!, [['Dashboard task']]);
     await logInThroughTheUi(page, authedUser);
-    const title = (await page.getByRole('main').getByRole('link', { name: /E2E Seeded/ }).innerText()).trim();
+    const title = (await page.getByRole('main').getByRole('link', { name: /^E2E Seeded/ }).innerText()).trim();
 
     await page.getByRole('button', { name: `Options for ${title}` }).click();
     await page.getByRole('button', { name: /^Delete$/ }).click();
@@ -168,7 +168,7 @@ test.describe('editing and deleting a board from its page', () => {
 
     await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click();
     await expect(page.getByRole('status')).toContainText(`Restored "${title}"`);
-    await expect(page.getByRole('main').getByRole('link', { name: title })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: title, exact: true })).toBeVisible();
   });
 });
 
@@ -188,7 +188,7 @@ test.describe('the dashboard card menu follows the role of whoever is looking', 
     expect(added.ok(), `Adding the member failed with ${added.status()}`).toBe(true);
 
     await logInThroughTheUi(page, member);
-    await expect(page.getByRole('main').getByRole('link', { name: /E2E Seeded/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /^E2E Seeded/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Options for / })).toHaveCount(0);
 
     await page.context().clearCookies();

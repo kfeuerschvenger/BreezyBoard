@@ -33,7 +33,7 @@ const form = page.locator('form').first();
 await form.getByLabel('Email address', { exact: true }).fill(user.email);
 await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
-await page.waitForSelector('text=My Boards');
+await page.waitForSelector('text=Your boards');
 
 const loginDoneAt = Date.now();
 apiCalls.length = 0;
@@ -87,16 +87,16 @@ if (mode === 'extend') {
   check('the warning is dismissed', (await toast.count()) === 0);
 
   await page.waitForTimeout(35000);
-  const stillIn = (await page.locator('body').innerText()).includes('My Boards');
+  const stillIn = (await page.locator('body').innerText()).includes('Your boards');
   check('the session survived past the original expiry', stillIn, `url ${page.url()}`);
 } else {
   log('\n--- letting it run out ---');
   for (let i = 0; i < 16; i++) {
     await waitAndReport(5);
-    const out = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('My Boards');
+    const out = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('Your boards');
     if (out) break;
   }
-  const signedOut = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('My Boards');
+  const signedOut = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('Your boards');
   check('signed out at expiry', signedOut, `url ${page.url()}`);
   check('the toast never auto-dismissed before expiry', sawToastAt !== null);
 }

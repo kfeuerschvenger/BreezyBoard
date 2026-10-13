@@ -49,13 +49,13 @@ const BASELINE = {
   // region and landmark-one-main were measured here and have no line now: the
   // application shell gives every signed in page a banner, a main, a
   // complementary sidebar and navigation landmarks, so nothing sits outside one.
-  dashboard: { 'heading-order': 1 },
-  // button-name was 1 here and its line is gone rather than sitting at zero:
-  // the create board modal now uses the shared Modal, whose close control is
-  // an IconButton that cannot be rendered without a label. region fell from
-  // 10 to 6 and heading-order from 2 to 1 in the same change, and what is
-  // left of both is the dashboard behind the dialog rather than the dialog.
-  'dashboard, create board modal open': { 'heading-order': 1 },
+  //
+  // The dashboard, its create board modal and its undo toast have no line:
+  // each scans clean. The home page is an h1 greeting, an h2 "Your boards" and
+  // h3 tile titles, so no level is skipped. The create board modal uses the
+  // shared Modal, whose close control is an IconButton that cannot be rendered
+  // without a label.
+  //
   // The board, its task drawer (at a desktop and a phone width), the board
   // not found page, the delete confirmation, the edit dialog and the profile
   // have no line: each scans clean.
@@ -64,9 +64,6 @@ const BASELINE = {
   // page's landmarks, so its popup is the one `region` node that remains. The
   // second surface here is the one that exists to catch a popup in a portal.
   'board, move menu open': { region: 1 },
-  // The dashboard with an undo toast showing. Its one number is the
-  // dashboard's own; the toast, its live region and its landmark add nothing.
-  'dashboard, undo toast showing': { 'heading-order': 1 },
 };
 
 // There is deliberately no colour-contrast entry anywhere above. The first
@@ -204,7 +201,7 @@ const form = page.locator('form').first();
 await form.getByLabel('Email address', { exact: true }).fill(user.email);
 await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
-await page.getByText('My Boards').waitFor();
+await page.getByText('Your boards').waitFor();
 await scan('dashboard');
 
 // The sidebar is a column on this screen and a panel on a phone, and the panel
@@ -218,7 +215,7 @@ await page.keyboard.press('Escape');
 await page.getByRole('dialog', { name: 'Navigation' }).waitFor({ state: 'detached' });
 await page.setViewportSize({ width: 1440, height: 900 });
 
-await page.getByRole('button', { name: 'New board' }).click();
+await page.getByRole('button', { name: 'New board' }).first().click();
 await page.waitForTimeout(400);
 await scan('dashboard, create board modal open');
 

@@ -14,8 +14,8 @@ vi.mock('@/services', () => ({
 const mockedColorService = vi.mocked(ColorService);
 
 const COLORS: Color[] = [
-  { _id: 'color-blue', name: 'Royal Blue', value: '#0052CC' },
-  { _id: 'color-green', name: 'Emerald', value: '#2F9E44' },
+  { _id: 'color-blue', name: 'Sky', value: 'sky' },
+  { _id: 'color-green', name: 'Green', value: 'green' },
 ];
 
 const BOARD = {
@@ -42,24 +42,49 @@ describe('EditBoardModal', () => {
 
     expect(nameBox()).toHaveValue('Launch Plan');
     expect(screen.getByRole('textbox', { name: /description/i })).toHaveValue('Everything for the launch');
-    expect(await screen.findByRole('radio', { name: 'Royal Blue' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'Emerald' })).not.toBeChecked();
+    expect(await screen.findByRole('radio', { name: 'Sky' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Green' })).not.toBeChecked();
+  });
+
+  it('offers the six hues and no other colour', async () => {
+    mockedColorService.getByType.mockResolvedValue([
+      ...COLORS,
+      { _id: 'color-old', name: 'Royal Blue', value: '#0052CC' },
+      { _id: 'color-teal', name: 'Teal', value: 'teal' },
+    ]);
+    renderModal();
+
+    await screen.findByRole('radio', { name: 'Teal' });
+
+    expect(screen.getAllByRole('radio').map(radio => radio.getAttribute('value'))).toEqual([
+      'color-blue',
+      'color-teal',
+      'color-green',
+    ]);
+    expect(screen.queryByRole('radio', { name: 'Royal Blue' })).not.toBeInTheDocument();
+  });
+
+  it('says so when the palette holds no hue', async () => {
+    mockedColorService.getByType.mockResolvedValue([{ _id: 'color-old', name: 'Royal Blue', value: '#0052CC' }]);
+    renderModal();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The colours could not be loaded.');
   });
 
   it('does not offer the template, which only seeds columns at creation', async () => {
     renderModal();
-    await screen.findByRole('radio', { name: 'Emerald' });
+    await screen.findByRole('radio', { name: 'Green' });
 
     expect(screen.queryByText(/template/i)).not.toBeInTheDocument();
   });
 
   it('saves the trimmed values with the chosen colour and closes', async () => {
     const { onSave, onClose } = renderModal();
-    await screen.findByRole('radio', { name: 'Emerald' });
+    await screen.findByRole('radio', { name: 'Green' });
 
     await userEvent.clear(nameBox());
     await userEvent.type(nameBox(), '  Renamed  ');
-    await userEvent.click(screen.getByRole('radio', { name: 'Emerald' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Green' }));
     await userEvent.click(save());
 
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
@@ -82,7 +107,7 @@ describe('EditBoardModal', () => {
   it('keeps the dialog open with the typed text when the save fails, and saves on a second try', async () => {
     const onSave = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined);
     const { onClose } = renderModal(onSave);
-    await screen.findByRole('radio', { name: 'Emerald' });
+    await screen.findByRole('radio', { name: 'Green' });
 
     await userEvent.clear(nameBox());
     await userEvent.type(nameBox(), 'Renamed');
@@ -111,7 +136,7 @@ describe('EditBoardModal', () => {
 
   it('has no axe violations', async () => {
     renderModal();
-    await screen.findByRole('radio', { name: 'Emerald' });
+    await screen.findByRole('radio', { name: 'Green' });
 
     expect(await axe(document.body)).toHaveNoViolations();
   });

@@ -94,7 +94,7 @@ const form = page.locator("form").first();
 await form.getByLabel("Email address", { exact: true }).fill(user.email);
 await form.getByLabel("Password", { exact: true }).fill(user.password);
 await form.getByRole("button", { name: /sign in/i }).click();
-await page.getByText("My Boards").waitFor();
+await page.getByText("Your boards").waitFor();
 
 const settle = async () => {
   await page.waitForLoadState("networkidle").catch(() => {});

@@ -26,8 +26,8 @@ const mockedColorService = vi.mocked(ColorService);
 const mockedTemplateService = vi.mocked(TemplateService);
 
 const COLORS: Color[] = [
-  { _id: 'color-blue', name: 'Royal Blue', value: '#0052CC' },
-  { _id: 'color-green', name: 'Emerald', value: '#2F9E44' },
+  { _id: 'color-blue', name: 'Sky', value: 'sky' },
+  { _id: 'color-green', name: 'Green', value: 'green' },
 ];
 
 const TEMPLATES: Template[] = [
@@ -94,6 +94,48 @@ describe('CreateBoardModal', () => {
     await waitFor(() => expect(mockedColorService.getByType).toHaveBeenCalledWith('board'));
   });
 
+  // The palette is the six design hues. The picker shows them in the hues' own
+  // order whatever order the server lists them in, and an entry that names no
+  // hue, such as an old hex colour left in the palette, is not offered because
+  // a board cannot be saved with it.
+  it('offers the six hues in their own order and leaves out an entry that is not one', async () => {
+    mockedColorService.getByType.mockResolvedValue([
+      { _id: 'color-lavender', name: 'Lavender', value: 'lavender' },
+      { _id: 'color-old', name: 'Royal Blue', value: '#0052CC' },
+      { _id: 'color-coral', name: 'Coral', value: 'coral' },
+      { _id: 'color-sky', name: 'Sky', value: 'sky' },
+    ]);
+    open();
+
+    await screen.findByRole('radio', { name: 'Sky' });
+
+    const names = screen.getAllByRole('radio', { name: /^(Sky|Coral|Lavender|Royal Blue)$/ }).map(radio => radio.getAttribute('value'));
+    expect(names).toEqual(['color-sky', 'color-coral', 'color-lavender']);
+  });
+
+  it('starts a new board on the first hue, not on whichever entry the server listed first', async () => {
+    mockedColorService.getByType.mockResolvedValue([
+      { _id: 'color-lavender', name: 'Lavender', value: 'lavender' },
+      { _id: 'color-sky', name: 'Sky', value: 'sky' },
+    ]);
+    const user = userEvent.setup();
+    const { onCreateBoard } = open();
+
+    await waitFor(() => expect(screen.getByText('Kanban Board')).toBeInTheDocument());
+    await user.type(titleBox(), 'Launch plan');
+    await user.click(submit());
+
+    expect(onCreateBoard.mock.calls[0][0]).toMatchObject({ color: 'color-sky' });
+  });
+
+  it('says so when the palette holds no hue, instead of leaving the form dead', async () => {
+    mockedColorService.getByType.mockResolvedValue([{ _id: 'color-old', name: 'Royal Blue', value: '#0052CC' }]);
+    open();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be loaded/);
+    expect(submit()).toBeDisabled();
+  });
+
   it('cannot be submitted until it has a name', async () => {
     const user = userEvent.setup();
     open();
@@ -145,7 +187,7 @@ describe('CreateBoardModal', () => {
 
     await waitFor(() => expect(screen.getByText('Sprint Board')).toBeInTheDocument());
     await user.type(titleBox(), 'Launch plan');
-    await user.click(screen.getByText('Emerald'));
+    await user.click(screen.getByText('Green'));
     await user.click(screen.getByText('Sprint Board'));
     await user.click(submit());
 
@@ -178,7 +220,7 @@ describe('CreateBoardModal', () => {
 
     resolveColors(COLORS);
 
-    await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Sky')).toBeInTheDocument());
 
     expect(titleBox()).toHaveValue('Typed while loading');
     // The submit gate has to re-open by itself once the data lands. The
@@ -254,7 +296,7 @@ describe('CreateBoardModal', () => {
         releaseColors(COLORS);
         await new Promise(resolve => setTimeout(resolve, 50));
       });
-      await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Sky')).toBeInTheDocument());
 
       expect(titleBox()).toHaveValue('Typed just now');
     });
@@ -334,7 +376,7 @@ describe('CreateBoardModal when the colours and templates cannot be loaded', () 
     await user.click(screen.getByRole('button', { name: /try again/i }));
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Sky')).toBeInTheDocument());
 
     await user.type(titleBox(), 'Recovered board');
     await waitFor(() => expect(submit()).toBeEnabled());
@@ -368,7 +410,7 @@ describe('CreateBoardModal when a keystroke lands while the defaults are applied
 
     resolveColors(COLORS);
 
-    await waitFor(() => expect(screen.getByText('Royal Blue')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Sky')).toBeInTheDocument());
 
     expect(input.value).toBe('Typed during the load');
   });

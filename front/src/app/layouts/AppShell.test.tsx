@@ -51,12 +51,12 @@ const mockedTemplates = vi.mocked(TemplateService);
 
 const ADA: User = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
 
-const makeBoard = (id: string, title: string): Board =>
+const makeBoard = (id: string, title: string, hue = 'sky'): Board =>
   ({
     _id: id,
     title,
     description: '',
-    color: '#3B82F6',
+    color: { _id: `color-${hue}`, name: hue, value: hue },
     columns: [],
     template: 'template-1',
     createdBy: 'user-ada',
@@ -66,8 +66,8 @@ const makeBoard = (id: string, title: string): Board =>
     progress: 0,
   }) as Board;
 
-const ROADMAP = makeBoard('board-1', 'Roadmap');
-const LAUNCH = makeBoard('board-2', 'Launch plan');
+const ROADMAP = makeBoard('board-1', 'Roadmap', 'coral');
+const LAUNCH = makeBoard('board-2', 'Launch plan', 'teal');
 
 const renderShell = (path = '/', page: React.ReactNode = <p>page content</p>) =>
   renderWithQuery(
@@ -160,19 +160,22 @@ describe('the sidebar navigation', () => {
     expect(roadmap).not.toHaveAttribute('aria-current');
   });
 
-  it('gives each board its own hue and the same one every time', async () => {
-    const first = renderShell();
-    const dotOf = async () => {
-      const link = await screen.findByRole('link', { name: 'Roadmap' });
-      return link.querySelector('[aria-hidden="true"]')?.className;
-    };
-    const before = await dotOf();
-    first.unmount();
-
+  it('draws the dot of each board in the hue its owner chose', async () => {
     renderShell();
 
-    expect(before).toMatch(/bg-(sky|teal|green|sand|coral|lavender)-mid/);
-    expect(await dotOf()).toBe(before);
+    const dotOf = async (name: string) => (await screen.findByRole('link', { name })).querySelector('[aria-hidden="true"]');
+
+    expect(await dotOf('Roadmap')).toHaveClass('bg-coral-mid');
+    expect(await dotOf('Launch plan')).toHaveClass('bg-teal-mid');
+  });
+
+  it('draws the dot of a board whose colour is not a hue in the default one', async () => {
+    mockedBoards.getAll.mockResolvedValue([{ ...ROADMAP, color: 'color-gone' }]);
+    renderShell();
+
+    const link = await screen.findByRole('link', { name: 'Roadmap' });
+
+    expect(link.querySelector('[aria-hidden="true"]')).toHaveClass('bg-sky-mid');
   });
 
   it('says so when there are no boards', async () => {

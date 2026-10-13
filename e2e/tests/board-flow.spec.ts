@@ -20,9 +20,11 @@ test.describe('board core loop', () => {
       await page.getByLabel(/board name/i).fill(boardName);
       await page.getByRole('button', { name: /^create board$/i }).last().click();
 
-      // The sidebar lists the board too, so the tile is found inside the page.
-      await expect(page.getByRole('main').getByText(boardName)).toBeVisible();
-      await page.getByRole('main').getByText(boardName).click();
+      // The sidebar lists the board too, and the banner has a button that opens
+      // the first board, so the tile is the link whose whole name is the title.
+      const tile = page.getByRole('main').getByRole('link', { name: boardName, exact: true });
+      await expect(tile).toBeVisible();
+      await tile.click();
       await expect(page).toHaveURL(/\/board\/[a-f0-9]{24}$/);
     });
 
@@ -541,7 +543,7 @@ test.describe('board core loop', () => {
     await page.getByRole('button', { name: /create board/i }).first().click();
     await page.getByLabel(/board name/i).fill(boardName);
     await page.getByRole('button', { name: /^create board$/i }).last().click();
-    await expect(page.getByRole('main').getByText(boardName)).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: boardName, exact: true })).toBeVisible();
 
     await test.step('the options button stays above the stretched link', async () => {
       await page.getByRole('button', { name: `Options for ${boardName}` }).click();
@@ -555,7 +557,7 @@ test.describe('board core loop', () => {
     });
 
     await test.step('the title opens the board from the keyboard alone', async () => {
-      const title = page.getByRole('main').getByRole('link', { name: boardName });
+      const title = page.getByRole('main').getByRole('link', { name: boardName, exact: true });
       await title.focus();
       await expect(title).toBeFocused();
       await page.keyboard.press('Enter');

@@ -13,6 +13,12 @@ export const HUES = ['sky', 'teal', 'green', 'sand', 'coral', 'lavender'] as con
 
 export type Hue = (typeof HUES)[number];
 
+/** The hue of anything whose stored colour names none. */
+export const DEFAULT_HUE: Hue = 'sky';
+
+/** True when the value is the key of one of the six hues. */
+export const isHue = (value: unknown): value is Hue => HUES.some(hue => hue === value);
+
 /** The angle each hue has in the token layer, for gradients built from the number. */
 export const HUE_ANGLE: Record<Hue, number> = {
   sky: 232,

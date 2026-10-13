@@ -1,6 +1,7 @@
 import { Controller, useFormContext } from 'react-hook-form';
 import type { Color } from '@/models';
 import { Field, Input, SwatchPicker, Textarea } from '@/shared/ui';
+import { boardHueOptions } from '../boardHue';
 import type { BoardFieldValues } from '../boardForm';
 
 export interface BoardFormFieldsProps {
@@ -44,11 +45,7 @@ export const BoardFormFields = ({ colors }: BoardFormFieldsProps) => {
             name={field.name}
             legend="Board Color"
             layout="grid"
-            options={colors.map(color => ({
-              id: color._id ?? color.value,
-              label: color.name ?? color.value,
-              color: color.value,
-            }))}
+            options={boardHueOptions(colors)}
             value={field.value}
             onChange={field.onChange}
           />

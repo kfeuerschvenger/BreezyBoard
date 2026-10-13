@@ -17,8 +17,8 @@ const mockedBoardService = vi.mocked(BoardService);
 const mockedColorService = vi.mocked(ColorService);
 const mockedDashboardService = vi.mocked(DashboardService);
 
-const BLUE: Color = { _id: 'color-blue', name: 'Royal Blue', value: '#0052CC' };
-const GREEN: Color = { _id: 'color-green', name: 'Emerald', value: '#2F9E44' };
+const BLUE: Color = { _id: 'color-blue', name: 'Sky', value: 'sky' };
+const GREEN: Color = { _id: 'color-green', name: 'Green', value: 'green' };
 
 const makeBoard = (overrides: Partial<Board> = {}): Board => ({
   _id: 'board-1',
@@ -89,7 +89,7 @@ describe('BoardActions', () => {
     await openEditor();
     await userEvent.clear(await screen.findByRole('textbox', { name: /board name/i }));
     await userEvent.type(screen.getByRole('textbox', { name: /board name/i }), 'Renamed');
-    await userEvent.click(await screen.findByRole('radio', { name: 'Emerald' }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'Green' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     await waitFor(() => expect(mockedBoardService.update).toHaveBeenCalledTimes(1));

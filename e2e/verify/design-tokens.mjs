@@ -888,7 +888,7 @@ const loginForm = page.locator('form').first();
 await loginForm.getByLabel('Email address', { exact: true }).fill(gateUser.email);
 await loginForm.getByLabel('Password', { exact: true }).fill(gateUser.password);
 await loginForm.getByRole('button', { name: /sign in/i }).click();
-await page.getByText('My Boards').waitFor();
+await page.getByText('Your boards').waitFor();
 
 const gateBoard = `Token Board ${Date.now()}`;
 await page.getByRole('button', { name: /create board/i }).first().click();
@@ -1086,7 +1086,7 @@ check('a gusty logo glyph sways', await sidebar.getByRole('link', { name: 'breez
 
 // The stored value is what a new load reads: nothing is kept in the browser.
 await page.reload();
-await page.getByText('My Boards').waitFor();
+await page.getByText('Your boards').waitFor();
 check('the choice is still gusty after a reload', (await windOfShell())?.streaks, 11);
 check('the control shows the stored choice after a reload', await page.getByRole('radio', { name: 'Gusty' }).isChecked(), true);
 
@@ -1117,7 +1117,7 @@ await quietPage.goto(`${FRONT}/login`);
 await quietPage.locator('form').first().getByLabel('Email address', { exact: true }).fill(gateUser.email);
 await quietPage.locator('form').first().getByLabel('Password', { exact: true }).fill(gateUser.password);
 await quietPage.locator('form').first().getByRole('button', { name: /sign in/i }).click();
-await quietPage.getByText('My Boards').waitFor();
+await quietPage.getByText('Your boards').waitFor();
 await quietPage.waitForTimeout(600);
 check('under reduced motion there is no wind layer in the shell', await quietPage.evaluate(() => document.getElementById('app-sidebar').previousElementSibling?.getAttribute('aria-hidden') === 'true'), false);
 check('the speed hint says the motion is reduced', await quietPage.getByText('Reduced motion').isVisible(), true);
@@ -1130,7 +1130,7 @@ check('the stored choice is still the one selected', await quietPage.getByRole('
 check('nothing was written over the stored choice', await storedBreeze(), 'gusty');
 await quiet.close();
 await page.reload();
-await page.getByText('My Boards').waitFor();
+await page.getByText('Your boards').waitFor();
 await chooseBreeze('Breezy');
 await page.waitForTimeout(400);
 
@@ -1409,6 +1409,274 @@ check('switching to sign up changes the address', new URL(authRoutePage.url()).p
 check('switching modes keeps the same branding column in the page', await panelHandle.evaluate(el => el.isConnected), true);
 check('switching moves focus to the new title', await authRoutePage.evaluate(() => document.activeElement?.tagName), 'H1');
 await authRoute.close();
+
+log('\n--- the home page, signed in ---');
+
+// One board in each of the six hues, made through the API for the gate
+// account, then the home page opened in a context that asks for reduced
+// motion. Reduced motion keeps the wind layer out of the picture: its streaks
+// are moving, translucent white and measured as decoration, not as the
+// background of the text, and it collapses the entrance animation so every
+// box is measured where it settles.
+const HUE_ANGLES = { sky: 232, teal: 192, green: 150, sand: 82, coral: 38, lavender: 300 };
+const homeAuth = { headers: { Authorization: `Bearer ${sessionToken}` } };
+const homePalette = (await (await page.request.get(`${API}/colors?type=board`, homeAuth)).json()).data;
+const homeTemplate = (await (await page.request.get(`${API}/templates`, homeAuth)).json()).data[0];
+check('the board palette is the six hues, by key', homePalette.map(entry => entry.value).sort().join(' '), Object.keys(HUE_ANGLES).sort().join(' '));
+for (const [hue] of Object.entries(HUE_ANGLES)) {
+  const created = await page.request.post(`${API}/boards`, {
+    ...homeAuth,
+    data: {
+      title: `Home ${hue}`,
+      description: `A ${hue} board`,
+      color: homePalette.find(entry => entry.value === hue)._id,
+      template: homeTemplate._id,
+    },
+  });
+  check(`a ${hue} board is created`, created.status(), 201);
+}
+const refusedHex = await page.request.post(`${API}/boards`, {
+  ...homeAuth,
+  data: { title: 'Home hex', color: homeTemplate.columns[0].color._id ?? homeTemplate.columns[0].color, template: homeTemplate._id },
+});
+check('a column colour is refused as a board colour', refusedHex.status(), 400);
+
+const homeContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+const homePage = await homeContext.newPage();
+await homePage.goto(`${FRONT}/login`);
+await homePage.locator('form').first().getByLabel('Email address', { exact: true }).fill(gateUser.email);
+await homePage.locator('form').first().getByLabel('Password', { exact: true }).fill(gateUser.password);
+await homePage.locator('form').first().getByRole('button', { name: /sign in/i }).click();
+await homePage.getByText('Your boards').waitFor();
+await homePage.locator('main').getByRole('link', { name: 'Home lavender', exact: true }).waitFor();
+
+// The text behind a box, photographed with the glyphs made transparent: the
+// lightest pixel is the worst case for light text and the darkest for dark.
+const extremeBehind = async (pg, locator, extreme) => {
+  await locator.evaluate(element => {
+    element.dataset.keptColor = element.style.color;
+    element.style.transition = 'none';
+    element.style.color = 'transparent';
+    element.style.webkitTextFillColor = 'transparent';
+  });
+  const shot = await locator.screenshot();
+  await locator.evaluate(element => {
+    element.style.color = element.dataset.keptColor;
+    element.style.webkitTextFillColor = '';
+    element.style.transition = '';
+    delete element.dataset.keptColor;
+  });
+  return pg.evaluate(
+    async ([encoded, wanted]) => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${encoded}`)).blob());
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0);
+      const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+      let best = null;
+      let bestLum = wanted === 'lightest' ? -1 : Infinity;
+      for (let i = 0; i < data.length; i += 4) {
+        const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        if (wanted === 'lightest' ? lum > bestLum : lum < bestLum) {
+          bestLum = lum;
+          best = [data[i], data[i + 1], data[i + 2]];
+        }
+      }
+      return best.join(',');
+    },
+    [shot.toString('base64'), extreme]
+  );
+};
+
+const heroHeader = homePage.locator('main header').first();
+const homeStructure = await homePage.evaluate(() => ({
+  h1: [...document.querySelectorAll('h1')].map(h => h.textContent),
+  h2: [...document.querySelectorAll('main h2')].map(h => h.textContent),
+  tileTitles: document.querySelectorAll('main h3').length,
+  levels: [...document.querySelectorAll('main h1, main h2, main h3')].map(h => h.tagName).join(' '),
+}));
+check('the home page has exactly one h1, the greeting', `${homeStructure.h1.length} ${/^Good (morning|afternoon|evening), Token\.$/.test(homeStructure.h1[0])}`, '1 true');
+check('the one h2 is Your boards', homeStructure.h2.join('|'), 'Your boards');
+check('every board title is an h3 under it', homeStructure.tileTitles, 6);
+check('the headings never skip a level', /^H1 H2( H3)+$/.test(homeStructure.levels), true);
+
+const heroStyle = await styleOf(heroHeader, ['borderTopLeftRadius', 'backgroundImage', 'boxShadow', 'minHeight', 'color']);
+check('the hero has the hero radius and is at least 240 pixels tall', `${heroStyle.borderTopLeftRadius} ${heroStyle.minHeight}`, '28px 240px');
+check('the hero paints a radial light over a linear gradient', `${heroStyle.backgroundImage.startsWith('radial-gradient')} ${heroStyle.backgroundImage.includes('linear-gradient')}`, 'true true');
+check('the hero casts the hero shadow', heroStyle.boxShadow.includes('0px 30px 60px -36px'), true);
+check('the hero text is white', await paintOf(homePage, heroStyle.color), '255,255,255');
+const heroStops = (await tokenValue(homePage, '--gradient-hero')).match(/linear-gradient\([^]*$/)[0].match(/oklch\([^)]*\)/g);
+check('the hero gradient has three stops', heroStops?.length, 3);
+await reportPairs(homePage, [['white on the lightest stop of the hero gradient', '#ffffff', heroStops[2], 4.5]]);
+
+const heroFrame = await homePage.locator('main header > div[aria-hidden="true"]').last().evaluate(el => {
+  const style = getComputedStyle(el);
+  const box = el.getBoundingClientRect();
+  return { width: Math.round(el.offsetWidth), height: Math.round(el.offsetHeight), rotate: style.rotate, radius: style.borderTopLeftRadius, hidden: el.getAttribute('aria-hidden'), box: box.width > 0 };
+});
+check('the photo frame is a 240 by 164 white frame turned 3 degrees', `${heroFrame.width} ${heroFrame.height} ${heroFrame.rotate} ${heroFrame.radius}`, '240 164 3deg 18px');
+
+// The hero text is measured on the pixels behind each box, at each width the
+// layout changes at. White on the lightest pixel behind it, the worst case.
+const heroTargets = [
+  ['the date', 'main header p.font-mono', 4.5],
+  ['the greeting', 'main header h1', 3],
+  ['the sentence', 'main header p.text-base', 4.5],
+  ['a total label', 'main header dt', 4.5],
+  ['a total figure', 'main header dd', 3],
+];
+for (const width of [1440, 1024, 768, 390, 320]) {
+  await homePage.setViewportSize({ width, height: 900 });
+  await homePage.waitForTimeout(250);
+  for (const [label, selector, minimum] of heroTargets) {
+    for (const [index, handle] of (await homePage.locator(selector).all()).entries()) {
+      const behind = await extremeBehind(homePage, handle, 'lightest');
+      await reportPairs(homePage, [[`${label}${index > 0 ? ` ${index + 1}` : ''} at ${width} on the lightest pixel behind it (${behind})`, '#ffffff', `rgb(${behind})`, minimum]]);
+    }
+  }
+}
+await homePage.setViewportSize({ width: 1440, height: 900 });
+await homePage.waitForTimeout(250);
+
+const heroLink = homePage.locator('main header').getByRole('link', { name: /^Open / });
+check('the hero button opens the board worked on last', await heroLink.getAttribute('href'), await homePage.locator('main').getByRole('link', { name: 'Home lavender', exact: true }).getAttribute('href'));
+await reportPairs(homePage, [
+  ['the hero button text on its white fill', '--color-ink', '--color-surface', 4.5],
+]);
+
+// The tiles. Each cover is the gradient of its hue, built from the same angle
+// the token layer declares, and the dot beside the board in the sidebar is the
+// mid step of the same hue.
+const tileFor = hue => homePage.locator('main [data-hue]', { has: homePage.getByRole('heading', { name: `Home ${hue}` }) });
+for (const [hue, angle] of Object.entries(HUE_ANGLES)) {
+  const tile = tileFor(hue);
+  check(`the ${hue} tile carries its hue`, await tile.getAttribute('data-hue'), hue);
+  const cover = await tile.locator(':scope > div').first().locator(':scope > div').first().evaluate(el => {
+    const style = getComputedStyle(el);
+    return { image: style.backgroundImage, height: el.offsetHeight, radius: style.borderTopLeftRadius };
+  });
+  check(
+    `the ${hue} cover is its three stop gradient from angle ${angle}`,
+    ['120deg', `oklch(0.5 0.13 ${angle})`, `oklch(0.66 0.12 ${(angle + 30) % 360})`, `oklch(0.83 0.09 ${(angle + 60) % 360})`].every(part => cover.image.includes(part)),
+    true
+  );
+  check(`the ${hue} cover is 96 pixels tall with rounded top corners`, `${cover.height} ${cover.radius}`, '96 22px');
+  const dot = await homePage.locator(`#app-sidebar a[href="${await tile.getByRole('link').first().getAttribute('href')}"] span[data-hue]`).evaluate(el => ({ hue: el.dataset.hue, color: getComputedStyle(el).backgroundColor }));
+  check(`the ${hue} sidebar dot is the mid step of the same hue`, `${dot.hue} ${await paintOf(homePage, dot.color)}`, `${hue} ${await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`))}`);
+  const fill = await tile.getByTestId('progress-fill').evaluate(el => getComputedStyle(el).backgroundColor);
+  check(`the ${hue} progress fill is the edge step`, await paintOf(homePage, fill), await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-edge`)));
+}
+
+const sampleTile = tileFor('sky');
+const tileStyle = await styleOf(sampleTile, ['borderTopLeftRadius', 'backdropFilter', 'backgroundColor', 'boxShadow', 'position']);
+check('a tile has the tile radius, blurs by 14 and is glass', `${tileStyle.borderTopLeftRadius} ${tileStyle.backdropFilter.includes('blur(14px)')} ${tileStyle.backgroundColor}`, '22px true rgba(255, 255, 255, 0.82)');
+check('a tile casts the tile shadow', tileStyle.boxShadow.includes('0px 14px 34px -24px'), true);
+const tileTitle = await styleOf(sampleTile.getByRole('heading'), ['fontFamily', 'fontSize', 'fontWeight']);
+check('a tile title is 17 pixels at 650 in the display face', `${leads(tileTitle.fontFamily, 'Bricolage Grotesque')} ${tileTitle.fontSize} ${tileTitle.fontWeight}`, 'true 17px 650');
+
+// Hover lifts the tile and turns it, and the shadow deepens.
+await sampleTile.hover();
+await homePage.waitForTimeout(400);
+const hovered = await styleOf(sampleTile, ['translate', 'rotate', 'boxShadow']);
+check('a hovered tile rises 4 pixels', hovered.translate, '0px -4px');
+check('a hovered tile turns by 0.6 degrees', hovered.rotate, '-0.6deg');
+check('a hovered tile casts the deeper shadow', hovered.boxShadow.includes('0px 26px 44px -24px'), true);
+await homePage.mouse.move(5, 5);
+
+// Keyboard focus on a tile draws a ring around the whole tile, not around the
+// words of its title: the tile's own outline, offset from its edge.
+await homePage.locator('main').getByRole('link', { name: 'Home sky', exact: true }).focus();
+await homePage.keyboard.press('Shift+Tab');
+await homePage.keyboard.press('Tab');
+const tileRing = await homePage.evaluate(() => {
+  const tile = document.activeElement.closest('[data-hue]');
+  const style = getComputedStyle(tile);
+  return {
+    onLink: document.activeElement.tagName,
+    style: style.outlineStyle,
+    width: style.outlineWidth,
+    offset: style.outlineOffset,
+    color: style.outlineColor,
+  };
+});
+check('the keyboard lands on the tile title link', tileRing.onLink, 'A');
+check('a focused tile draws a 2 pixel ring offset by 2 around the whole tile', `${tileRing.style} ${tileRing.width} ${tileRing.offset}`, 'solid 2px 2px');
+check('the tile ring is the focus colour', await paintOf(homePage, tileRing.color), await paintOf(homePage, await tokenValue(homePage, '--color-focus')));
+await homePage.locator('main').getByRole('button', { name: /^Options for Home sky$/ }).focus();
+await homePage.keyboard.press('Shift+Tab');
+await homePage.keyboard.press('Tab');
+check(
+  'the options button has focus without ringing the tile',
+  await homePage.evaluate(() => getComputedStyle(document.activeElement.closest('[data-hue]')).outlineStyle),
+  'none'
+);
+
+// The text on the glass is measured against the darkest pixel painted behind
+// it, which is the worst case for dark text.
+for (const [label, locator, token, minimum] of [
+  ['a tile title', sampleTile.getByRole('heading'), '--color-ink', 4.5],
+  ['a tile description', sampleTile.locator('p').first(), '--color-ink-secondary', 4.5],
+  ['the progress figure', sampleTile.locator('span.font-mono'), '--color-ink-tertiary', 4.5],
+  ['the task count', sampleTile.getByText(/ tasks$/), '--color-ink-tertiary', 4.5],
+  ['the updated date', sampleTile.getByText(/^Updated /), '--color-ink-tertiary', 4.5],
+  ['the boards count', homePage.getByText(/^\d+ boards$/), '--color-ink-tertiary', 4.5],
+  ['the Your boards heading', homePage.getByRole('heading', { name: 'Your boards' }), '--color-ink', 4.5],
+]) {
+  const behind = await extremeBehind(homePage, locator, 'darkest');
+  await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, minimum]]);
+}
+await reportPairs(homePage, [
+  ...Object.keys(HUE_ANGLES).map(hue => [`the owner initials on the ${hue} avatar fill`, '--color-ink', `--color-${hue}-mid`, 4.5]),
+  ...Object.entries(HUE_ANGLES).map(([hue, angle]) => [`the white template glyph on the darkest ${hue} cover stop`, '#ffffff', `oklch(0.5 0.13 ${angle})`, 3]),
+]);
+
+// The new board tile.
+const newTile = homePage.getByText('Fresh board, ready for take-off.').locator('xpath=ancestor::button');
+const newStyle = await styleOf(newTile, ['borderTopStyle', 'borderTopWidth', 'borderTopColor', 'borderTopLeftRadius', 'minHeight', 'backgroundColor']);
+check('the new board tile is a 2 pixel dashed outline with the tile radius', `${newStyle.borderTopStyle} ${newStyle.borderTopWidth} ${newStyle.borderTopLeftRadius}`, 'dashed 2px 22px');
+check('the new board tile outline is the control border colour, 3:1 or more', await paintOf(homePage, newStyle.borderTopColor), await paintOf(homePage, await tokenValue(homePage, '--color-line-control')));
+check('the new board tile is at least 196 pixels tall', Number.parseFloat(newStyle.minHeight) >= 196, true);
+for (const [label, locator, token] of [
+  ['the new board title', newTile.getByText('New board', { exact: true }), '--color-ink'],
+  ['the new board line', newTile.getByText('Fresh board, ready for take-off.'), '--color-ink-secondary'],
+]) {
+  const behind = await extremeBehind(homePage, locator, 'darkest');
+  await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
+}
+await newTile.hover();
+await homePage.waitForTimeout(400);
+const newHovered = await styleOf(newTile, ['translate', 'borderTopColor']);
+check('a hovered new board tile rises 3 pixels', newHovered.translate, '0px -3px');
+check('a hovered new board tile takes the accent outline', await paintOf(homePage, newHovered.borderTopColor), await paintOf(homePage, await tokenValue(homePage, '--color-accent')));
+await homePage.mouse.move(5, 5);
+await newTile.click();
+await homePage.getByRole('dialog', { name: 'Create New Board' }).waitFor();
+check('the new board tile opens the create board dialog', await homePage.getByRole('dialog', { name: 'Create New Board' }).isVisible(), true);
+
+// The dialog offers the six hues, in the hues' own order, as one named group.
+const swatches = homePage.getByRole('group', { name: 'Board Color' }).getByRole('radio');
+await swatches.first().waitFor();
+check('the create dialog offers exactly the six hues', await swatches.count(), 6);
+check('the hues are offered in their own order', (await swatches.evaluateAll(radios => radios.map(r => r.labels[0].textContent.trim()))).join(' '), 'Sky Teal Green Sand Coral Lavender');
+check('the first hue is the one chosen for a new board', await swatches.first().isChecked(), true);
+const swatchFills = await swatches.evaluateAll(radios => radios.map(r => getComputedStyle(r.labels[0].querySelector('span')).backgroundColor));
+const midFills = [];
+for (const hue of Object.keys(HUE_ANGLES)) midFills.push(await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`)));
+const paintedSwatches = [];
+for (const fill of swatchFills) paintedSwatches.push(await paintOf(homePage, fill));
+check('each swatch is filled with the mid step of its hue', paintedSwatches.join(' '), midFills.join(' '));
+await homePage.keyboard.press('Escape');
+
+// How many tiles share a row at each width, from the rendered boxes.
+const tileColumns = () =>
+  homePage.evaluate(() => new Set([...document.querySelectorAll('main [data-hue]')].map(tile => Math.round(tile.getBoundingClientRect().left))).size);
+for (const [width, expected] of [[320, 1], [390, 1], [768, 2], [1024, 3], [1440, 4]]) {
+  await homePage.setViewportSize({ width, height: 900 });
+  await homePage.waitForTimeout(250);
+  check(`at ${width} the tiles share ${expected} column${expected > 1 ? 's' : ''}`, await tileColumns(), expected);
+  check(`at ${width} the page does not scroll sideways`, await homePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+}
+await homeContext.close();
 
 log('\n--- the reduced motion policy ---');
 
