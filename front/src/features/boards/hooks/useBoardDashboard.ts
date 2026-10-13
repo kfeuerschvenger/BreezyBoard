@@ -1,7 +1,4 @@
-import { useMemo, useState } from 'react';
-import { toColorLookup } from '@/features/colors';
-import type { ColorLookup } from '@/features/colors';
-import { useColors } from '@/features/colors';
+import { useState } from 'react';
 import type { Board, DashboardStats, User } from '@/models';
 import { useAddBoardMembers, useBoards, useDashboardStats } from '../queries';
 import { useDeleteBoardWithUndo } from './useDeleteBoardWithUndo';
@@ -10,7 +7,6 @@ import type { BoardToDelete } from './useDeleteBoardWithUndo';
 export interface UseBoardDashboardResult {
   boards: Board[];
   stats: DashboardStats;
-  colorLookup: ColorLookup;
   isLoading: boolean;
   /** The one message worth showing instead of the page, read or write. */
   error: string | null;
@@ -47,12 +43,6 @@ export function useBoardDashboard(): UseBoardDashboardResult {
   const boardsQuery = useBoards();
   const statsQuery = useDashboardStats();
 
-  // The whole board palette in one request. The colours a board can carry are
-  // a fixed seeded list, so resolving each board's colour separately was a
-  // call per board for parts of a list one call already covers.
-  const { data: palette } = useColors('board');
-  const colorLookup = useMemo(() => toColorLookup(palette ?? []), [palette]);
-
   const boardDeletion = useDeleteBoardWithUndo();
   const addMembersMutation = useAddBoardMembers();
 
@@ -71,7 +61,6 @@ export function useBoardDashboard(): UseBoardDashboardResult {
   return {
     boards: boardsQuery.data ?? NO_BOARDS,
     stats: statsQuery.data ?? NO_STATS,
-    colorLookup,
     isLoading: boardsQuery.isPending || statsQuery.isPending,
     error:
       writeError ??

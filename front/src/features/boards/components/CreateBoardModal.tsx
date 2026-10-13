@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useColors } from '@/features/colors';
@@ -9,6 +9,7 @@ import { useDraft } from '@/shared/hooks/useDraft';
 import { Button, Modal } from '@/shared/ui';
 import { z } from 'zod';
 import { boardFieldsSchema } from '../boardForm';
+import { boardHueOptions } from '../boardHue';
 import { BoardFormFields } from './BoardFormFields';
 
 const boardSchema = boardFieldsSchema.extend({
@@ -47,9 +48,16 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   const templatesQuery = useTemplates(open);
 
   const boardColors = colorsQuery.data ?? NO_COLORS;
+  // The palette entries that are one of the six hues, in the hues' order. The
+  // first is what a new board starts on.
+  const hueOptions = useMemo(() => boardHueOptions(boardColors), [boardColors]);
   const templates = templatesQuery.data ?? NO_TEMPLATES;
   const isLoading = colorsQuery.isPending || templatesQuery.isPending;
-  const loadFailed = colorsQuery.isError || templatesQuery.isError;
+  // A palette that arrives with no hue in it, such as one the board hue
+  // migration has not run against, leaves the form with nothing to default to
+  // and the create button disabled for good, so it is reported like a failed load.
+  const loadFailed =
+    colorsQuery.isError || templatesQuery.isError || (colorsQuery.isSuccess && hueOptions.length === 0);
 
   const form = useForm<BoardFormData>({
     resolver: zodResolver(boardSchema),
@@ -128,10 +136,10 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
     // apply, and a partial pass would mark the job done with one field still
     // empty. A load where one request succeeds and the other fails is
     // exactly the case the retry below exists for.
-    if (boardColors.length === 0 || templates.length === 0) return;
+    if (hueOptions.length === 0 || templates.length === 0) return;
 
     const restored = draft.read();
-    const firstColor = boardColors[0]?._id ?? boardColors[0]?.value ?? '';
+    const firstColor = hueOptions[0]?.id ?? '';
     const firstTemplate = templates[0]?._id ?? templates[0]?.name ?? '';
 
     const fillIfEmpty = (name: keyof BoardFormData, value: string | undefined) => {
@@ -146,7 +154,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
 
     hasRestoredDraftRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isLoading, boardColors, templates, draft.read, getValues, setValue]);
+  }, [open, isLoading, hueOptions, templates, draft.read, getValues, setValue]);
 
   // Autosave while open. Gated on hasRestoredDraftRef so it never persists
   // the still-empty form before the effect above has had its turn: without
@@ -184,7 +192,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
     onCreateBoard(values);
     reset({
       ...EMPTY,
-      color: boardColors[0]?._id ?? '',
+      color: hueOptions[0]?.id ?? '',
       template: templates[0]?._id ?? '',
     });
   });
@@ -209,7 +217,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
       }
     >
       {loadFailed && (
-        <div role="alert" className="mb-6 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+        <div role="alert" className="mb-6 rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
           The colours and templates could not be loaded, so a board cannot be created yet.{' '}
           <button
             type="button"
@@ -217,7 +225,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
               void colorsQuery.refetch();
               void templatesQuery.refetch();
             }}
-            className="underline cursor-pointer"
+            className="focus-ring cursor-pointer rounded-chip font-semibold underline"
           >
             Try again
           </button>

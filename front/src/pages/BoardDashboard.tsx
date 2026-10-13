@@ -1,14 +1,40 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
 import { IconFolder, IconPlus } from '@tabler/icons-react';
-import { BoardCard, BoardStats, DeleteBoardDialog, useBoardDashboard, useBoardMenu } from '@/features/boards';
-import { resolveColor } from '@/features/colors';
+import {
+  BoardCard,
+  DeleteBoardDialog,
+  HomeHero,
+  NewBoardTile,
+  eyebrowFor,
+  greetingFor,
+  useBoardDashboard,
+  useBoardMenu,
+} from '@/features/boards';
 import { AddMemberModal } from '@/features/users';
 import type { Board, User } from '@/models';
+import { AuthService } from '@/services';
 import { Button, EmptyState, LoadingScreen, Icon } from '@/shared/ui';
 import { ShellAction } from '@/app/layouts/shell/ShellAction';
 import { useShell } from '@/app/layouts/shell/shellContext';
-import PageHeader from '../components/PageHeader';
+
+/**
+ * The first name to greet somebody by, read from the stored session. A
+ * session that cannot be read greets nobody by name rather than taking the
+ * page down.
+ */
+const firstNameOfSession = (): string | undefined => {
+  try {
+    return AuthService.getCurrentUser()?.firstName;
+  } catch {
+    return undefined;
+  }
+};
+
+/** The sentence under the greeting. It reads what the data holds today: boards, and nothing about due dates. */
+const lineFor = (boardCount: number): string =>
+  boardCount === 0
+    ? 'Clear skies: no boards yet. Start one and catch an idea.'
+    : "The wind's in your favor. Pick up where you left off.";
 
 const BoardDashboard: React.FC = () => {
   const [memberBoard, setMemberBoard] = useState<Board | null>(null);
@@ -50,7 +76,7 @@ const BoardDashboard: React.FC = () => {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="max-w-md text-center">
-          <div role="alert" className="mb-4 rounded-control bg-danger-bg p-4 text-danger">
+          <div role="alert" className="mb-4 rounded-control bg-danger-bg p-4 text-danger-strong">
             {dashboard.error}
           </div>
           <Button type="button" onClick={() => window.location.reload()}>
@@ -61,42 +87,58 @@ const BoardDashboard: React.FC = () => {
     );
   }
 
-  return (
-    <div className="mx-auto w-full max-w-7xl">
-      <PageHeader title="My Boards" subtitle="Manage and organize your project boards" />
+  const now = new Date();
+  const { boards } = dashboard;
+  const firstBoard = boards[0];
 
+  return (
+    <div className="mx-auto flex w-full max-w-310 animate-bb-view flex-col gap-7.5 pb-8">
       <ShellAction>
         <Button type="button" size="sm" onClick={createBoard} leftIcon={<Icon as={IconPlus} size={18} />}>
           New board
         </Button>
       </ShellAction>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pt-2">
-        <BoardStats stats={dashboard.stats} />
+      <HomeHero
+        eyebrow={eyebrowFor(now)}
+        greeting={greetingFor(now, firstNameOfSession())}
+        line={lineFor(boards.length)}
+        stats={dashboard.stats}
+        firstBoard={firstBoard ? { _id: firstBoard._id, title: firstBoard.title || 'Untitled Board' } : undefined}
+      />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {dashboard.boards.map((board, index) => (
-            // `_id` is required on the model and the API always sends it. The
-            // fallback this replaced ended in `temp-${Date.now()}`, which gave
-            // every render a different React key and defeated reconciliation
-            // for the whole grid. Finding P2-8.
-            <BoardCard
-              key={board._id}
-              board={board}
-              color={resolveColor(board.color, dashboard.colorLookup)}
-              delay={index * 0.08}
-              menuOpen={menu.isOpen(board._id)}
-              isDeleting={dashboard.isDeleting(board._id)}
-              onToggleMenu={() => menu.toggle(board._id)}
-              onAddMember={() => openAddMember(board._id)}
-              onDelete={() => setBoardToDelete(board)}
-            />
-          ))}
+      <section aria-labelledby="home-boards-heading">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2 id="home-boards-heading" className="font-heading text-2xl font-[650] tracking-[-0.02em] text-ink">
+            Your boards
+          </h2>
+          <span className="font-mono text-xs text-ink-tertiary">
+            {boards.length} {boards.length === 1 ? 'board' : 'boards'}
+          </span>
         </div>
 
-        {dashboard.boards.length === 0 && (
+        {boards.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+            {boards.map((board, index) => (
+              // `_id` is required on the model and the API always sends it. A
+              // key built from `Date.now()` would be different on every render
+              // and defeat reconciliation for the whole grid.
+              <BoardCard
+                key={board._id}
+                board={board}
+                delay={index * 0.06}
+                menuOpen={menu.isOpen(board._id)}
+                isDeleting={dashboard.isDeleting(board._id)}
+                onToggleMenu={() => menu.toggle(board._id)}
+                onAddMember={() => openAddMember(board._id)}
+                onDelete={() => setBoardToDelete(board)}
+              />
+            ))}
+            <NewBoardTile onClick={createBoard} delay={boards.length * 0.06} />
+          </div>
+        ) : (
           <EmptyState
-            icon={<Icon as={IconFolder} className="text-ink-tertiary" size={24} />}
+            icon={<Icon as={IconFolder} size={24} />}
             title="No boards yet"
             description="Create your first board to get started with project management"
             action={
@@ -106,7 +148,7 @@ const BoardDashboard: React.FC = () => {
             }
           />
         )}
-      </motion.div>
+      </section>
 
       <DeleteBoardDialog
         board={boardToDelete}

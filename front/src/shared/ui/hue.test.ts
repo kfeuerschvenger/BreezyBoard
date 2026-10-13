@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { coverGradient, hueFromSeed, HUES, HUE_ANGLE } from './hue';
+import { coverGradient, DEFAULT_HUE, hueFromSeed, HUES, HUE_ANGLE, isHue } from './hue';
+
+describe('isHue', () => {
+  it.each(['sky', 'teal', 'green', 'sand', 'coral', 'lavender'])('accepts %s', hue => {
+    expect(isHue(hue)).toBe(true);
+  });
+
+  it.each(['Sky', '#0052CC', 'blue', '', null, undefined, 232, {}])('refuses %j', value => {
+    expect(isHue(value)).toBe(false);
+  });
+
+  it('has a default that is one of the six', () => {
+    expect(isHue(DEFAULT_HUE)).toBe(true);
+  });
+});
 
 describe('hueFromSeed', () => {
   it('gives the same hue for the same seed, every time', () => {

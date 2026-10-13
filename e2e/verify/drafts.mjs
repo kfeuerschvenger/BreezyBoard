@@ -25,7 +25,7 @@ const form = page.locator('form').first();
 await form.getByLabel('Email address', { exact: true }).fill(user.email);
 await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
-await page.waitForSelector('text=My Boards');
+await page.waitForSelector('text=Your boards');
 
 const boardName = `Draft Board ${Date.now()}`;
 await page.getByRole('button', { name: /create board/i }).first().click();

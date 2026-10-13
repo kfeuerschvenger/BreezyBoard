@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useColors } from '@/features/colors';
 import type { Board, Color } from '@/models';
 import { Button, Modal } from '@/shared/ui';
+import { boardHueOptions } from '../boardHue';
 import { boardFieldsSchema } from '../boardForm';
 import type { BoardFieldValues } from '../boardForm';
 import { BoardFormFields } from './BoardFormFields';
@@ -91,17 +92,17 @@ export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalP
         </div>
       }
     >
-      {colorsQuery.isError && (
-        <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+      {(colorsQuery.isError || (colorsQuery.isSuccess && boardHueOptions(colorsQuery.data).length === 0)) && (
+        <div role="alert" className="mb-6 rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
           The colours could not be loaded.{' '}
-          <button type="button" onClick={() => void colorsQuery.refetch()} className="cursor-pointer underline">
+          <button type="button" onClick={() => void colorsQuery.refetch()} className="focus-ring cursor-pointer rounded-chip font-semibold underline">
             Try again
           </button>
         </div>
       )}
 
       {saveError && (
-        <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div role="alert" className="mb-6 rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
           {saveError}
         </div>
       )}

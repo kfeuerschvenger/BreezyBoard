@@ -95,7 +95,7 @@ export const SwatchPicker: React.FC<SwatchPickerProps> = ({
     <fieldset>
       <legend className={LEGEND_CLASSES}>{legend}</legend>
 
-      <div className={layout === 'grid' ? 'grid grid-cols-4 gap-3' : 'flex flex-wrap gap-2.5'}>
+      <div className={layout === 'grid' ? 'grid grid-cols-3 gap-3' : 'flex flex-wrap gap-2.5'}>
         {options.map(option => (
           <label
             key={option.id}

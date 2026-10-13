@@ -126,7 +126,7 @@ const form = page.locator('form').first();
 await form.getByLabel('Email address', { exact: true }).fill(user.email);
 await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
-await page.getByText('My Boards').waitFor();
+await page.getByText('Your boards').waitFor();
 
 const settle = async target => {
   await target.waitForLoadState('networkidle').catch(() => {});
@@ -363,18 +363,18 @@ const authed = [
     name: 'dashboard',
     open: async () => {
       await page.goto(`${FRONT}/`);
-      await page.getByText('My Boards').waitFor();
+      await page.getByText('Your boards').waitFor();
     },
   },
   {
     name: 'dashboard, create board modal',
     open: async () => {
       await page.goto(`${FRONT}/`);
-      await page.getByText('My Boards').waitFor();
+      await page.getByText('Your boards').waitFor();
       // The view's own button in the header, which is on screen at every width.
       // The sidebar's plus button opens the same dialog but is not on screen
       // while the sidebar is a closed panel.
-      await page.getByRole('button', { name: 'New board' }).click();
+      await page.getByRole('button', { name: 'New board' }).first().click();
       await page.getByRole('dialog', { name: 'Create New Board' }).waitFor();
     },
   },
@@ -382,7 +382,7 @@ const authed = [
     name: 'dashboard, add members modal',
     open: async () => {
       await page.goto(`${FRONT}/`);
-      await page.getByText('My Boards').waitFor();
+      await page.getByText('Your boards').waitFor();
       await page.getByRole('button', { name: /^Options for / }).first().click();
       await page.getByRole('button', { name: 'Add Member' }).click();
       await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
@@ -392,7 +392,7 @@ const authed = [
     name: 'dashboard, account menu',
     open: async () => {
       await page.goto(`${FRONT}/`);
-      await page.getByText('My Boards').waitFor();
+      await page.getByText('Your boards').waitFor();
       await openNavigation();
       await page.getByRole('button', { name: /^Account menu/ }).click();
       await page.getByRole('menu').waitFor();
@@ -408,7 +408,7 @@ const authed = [
     below: LARGE,
     open: async () => {
       await page.goto(`${FRONT}/`);
-      await page.getByText('My Boards').waitFor();
+      await page.getByText('Your boards').waitFor();
       await openNavigation();
     },
   },
@@ -760,7 +760,7 @@ const touchForm = touchPage.locator('form').first();
 await touchForm.getByLabel('Email address', { exact: true }).fill(user.email);
 await touchForm.getByLabel('Password', { exact: true }).fill(user.password);
 await touchForm.getByRole('button', { name: /sign in/i }).click();
-await touchPage.getByText('My Boards').waitFor();
+await touchPage.getByText('Your boards').waitFor();
 await settle(touchPage);
 
 const touchSurfaces = [

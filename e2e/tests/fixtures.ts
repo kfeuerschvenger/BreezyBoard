@@ -58,7 +58,7 @@ export async function logInThroughTheUi(page: Page, user: TestUser): Promise<voi
   await form.getByLabel('Email address', { exact: true }).fill(user.email);
   await form.getByLabel('Password', { exact: true }).fill(user.password);
   await form.getByRole('button', { name: /sign in/i }).click();
-  await expect(page.getByText('My Boards')).toBeVisible();
+  await expect(page.getByText('Your boards')).toBeVisible();
 }
 
 /**

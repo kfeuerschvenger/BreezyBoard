@@ -4,13 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import BoardDashboard from './BoardDashboard';
+import { ShellContext } from '@/app/layouts/shell/shellContext';
 import { AuthService, BoardService, ColorService, DashboardService, TemplateService } from '@/services';
 import type { Board } from '@/models';
+import { HUES, MID_BACKGROUND, hueFromSeed } from '@/shared/ui';
 
-// Characterization, written against the page as it stands before section
-// 12.5 takes it apart. Nothing here asserts an improvement: every case pins
-// behaviour a user can see today, so that the decomposition is judged by
-// these staying green rather than by reading the diff.
+// The home page: the greeting, the totals, one tile per board and the new
+// board tile, and the per board menu and deletion that every tile carries.
 //
 // The page mounts CreateBoardModal, AddMemberModal and UserAvatar whatever
 // it is doing, and each of those reaches a service of its own on mount, so
@@ -32,14 +32,18 @@ const mockedTemplateService = vi.mocked(TemplateService);
 
 const STATS = { totalBoards: 7, totalMembers: 12, totalTasks: 34, avgProgress: 58 };
 
+const SKY = { _id: 'color-sky', name: 'Sky', value: 'sky' };
+
+const OWNER = { _id: 'user-1', firstName: 'Ada', lastName: 'Lovelace', avatar: '' };
+
 const makeBoard = (overrides: Partial<Board>): Board => ({
   _id: 'board-default',
   title: 'Untitled',
   description: '',
-  color: '#3B82F6',
+  color: SKY,
   columns: [],
   template: { _id: 'template-1', name: 'Default', description: '', iconName: 'layout', columns: [] },
-  createdBy: 'user-1',
+  createdBy: OWNER,
   members: [],
   taskCount: 0,
   memberCount: 0,
@@ -55,19 +59,17 @@ const BOARDS: Board[] = [
     _id: 'board-launch',
     title: 'Launch Plan',
     description: 'Everything that has to happen before release',
-    color: '#3B82F6',
+    color: { _id: 'color-lavender', name: 'Lavender', value: 'lavender' },
     taskCount: 9,
     memberCount: 3,
     progress: 40,
     updatedAt: '2026-03-05T12:00:00.000Z',
   }),
-  // A colour held as an id rather than a hex value, which is the branch that
-  // sends the page to the colour service before it can paint the card.
   makeBoard({
     _id: 'board-hiring',
     title: 'Hiring',
     description: 'Open roles and candidates',
-    color: 'color-green',
+    color: { _id: 'color-green', name: 'Green', value: 'green' },
     taskCount: 2,
     memberCount: 5,
     progress: 0,
@@ -75,23 +77,32 @@ const BOARDS: Board[] = [
   }),
 ];
 
+const openCreateBoard = vi.fn();
+
 const renderDashboard = () =>
   renderWithQuery(
     <MemoryRouter>
-      <BoardDashboard />
+      <ShellContext.Provider value={{ headerSlot: null, openCreateBoard }}>
+        <BoardDashboard />
+      </ShellContext.Provider>
     </MemoryRouter>
   );
 
-const card = (title: string) => screen.getByRole('heading', { name: title }).closest('div.relative') as HTMLElement;
+// The introduction at the top of the page, found through its one h1.
+const hero = () => screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
+
+// A tile is the element that carries its hue.
+const card = (title: string) => screen.getByRole('heading', { name: title }).closest('[data-hue]') as HTMLElement;
 
 beforeEach(() => {
+  openCreateBoard.mockReset();
   mockedAuthService.getCurrentUser.mockReset().mockReturnValue(null);
   mockedBoardService.getAll.mockReset().mockResolvedValue(BOARDS);
   mockedBoardService.delete.mockReset().mockResolvedValue(undefined);
   mockedBoardService.restore.mockReset();
   mockedDashboardService.getStats.mockReset().mockResolvedValue(STATS);
   mockedColorService.getByType.mockReset().mockResolvedValue([]);
-  mockedColorService.getById.mockReset().mockResolvedValue({ _id: 'color-green', name: 'Green', value: '#10B981' });
+  mockedColorService.getById.mockReset().mockResolvedValue({ _id: 'color-green', name: 'Green', value: 'green' });
   mockedTemplateService.getAll.mockReset().mockResolvedValue([]);
 });
 
@@ -126,10 +137,12 @@ describe('BoardDashboard listing', () => {
     renderDashboard();
     await screen.findByRole('link', { name: 'Launch Plan' });
 
-    const bar = within(card('Launch Plan')).getByRole('progressbar');
+    const bar = within(card('Launch Plan')).getByRole('progressbar', { name: 'Progress of Launch Plan' });
     expect(bar).toHaveAttribute('aria-valuenow', '40');
     expect(bar).toHaveAttribute('aria-valuemin', '0');
     expect(bar).toHaveAttribute('aria-valuemax', '100');
+    // The figure is written beside the bar as well, for anybody who wants the number.
+    expect(within(card('Launch Plan')).getByText('40%')).toBeInTheDocument();
   });
 
   it('falls back to a placeholder title and description when the board has neither', async () => {
@@ -142,68 +155,192 @@ describe('BoardDashboard listing', () => {
   });
 });
 
-describe('BoardDashboard board colours', () => {
-  const PALETTE = [
-    { _id: 'color-green', name: 'Green', value: '#10B981' },
-    { _id: 'color-amber', name: 'Amber', value: '#F59E0B' },
-  ];
+describe('BoardDashboard board hues', () => {
+  it('draws every tile in the hue of its board, whichever of the six it is', async () => {
+    mockedBoardService.getAll.mockResolvedValue(
+      HUES.map(hue =>
+        makeBoard({ _id: `board-${hue}`, title: `A ${hue} board`, color: { _id: `c-${hue}`, name: hue, value: hue } })
+      )
+    );
 
-  beforeEach(() => {
-    mockedColorService.getByType.mockResolvedValue(PALETTE);
-    // Deliberately a different colour from the palette entry of the same id.
-    // Anything still resolving a board colour one request at a time paints
-    // red, so the assertions below say which of the two paths produced the
-    // colour rather than only that a colour arrived.
-    mockedColorService.getById.mockResolvedValue({ _id: 'color-green', name: 'Red', value: '#EF4444' });
+    renderDashboard();
+    await screen.findByRole('link', { name: 'A sky board' });
+
+    for (const hue of HUES) {
+      expect(card(`A ${hue} board`)).toHaveAttribute('data-hue', hue);
+    }
   });
 
-  it('reads the board palette once however many boards are listed', async () => {
+  it('fills the progress bar in the hue of its own tile', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+
+    // jsdom loads no stylesheet, so the class is what can be asserted. It is the
+    // hue's edge step, and the two tiles are two different hues.
+    expect(within(card('Launch Plan')).getByTestId('progress-fill')).toHaveClass('bg-lavender-edge');
+    expect(within(card('Hiring')).getByTestId('progress-fill')).toHaveClass('bg-green-edge');
+  });
+
+  it('asks for no palette at all, because the hue arrives with the board', async () => {
     renderDashboard();
     await screen.findByRole('link', { name: 'Hiring' });
 
-    await waitFor(() => expect(mockedColorService.getByType).toHaveBeenCalledWith('board'));
-    expect(mockedColorService.getByType).toHaveBeenCalledTimes(1);
+    expect(mockedColorService.getByType).not.toHaveBeenCalled();
     expect(mockedColorService.getById).not.toHaveBeenCalled();
   });
 
-  it('paints a board whose colour is an id with the palette entry of that id', async () => {
-    renderDashboard();
-    await screen.findByRole('link', { name: 'Hiring' });
-
-    await waitFor(() =>
-      expect(within(card('Hiring')).getByRole('progressbar')).toHaveStyle({ backgroundColor: '#10B981' })
-    );
-  });
-
-  it('keeps painting a board whose colour is already a hex value', async () => {
-    renderDashboard();
-    await screen.findByRole('link', { name: 'Launch Plan' });
-
-    expect(within(card('Launch Plan')).getByRole('progressbar')).toHaveStyle({ backgroundColor: '#3B82F6' });
-  });
-
-  it('falls back to the neutral colour when the palette has no entry for the id', async () => {
-    mockedBoardService.getAll.mockResolvedValue([makeBoard({ _id: 'board-odd', title: 'Odd', color: 'color-gone' })]);
+  it('paints a board whose colour is not a hue with the default one', async () => {
+    mockedBoardService.getAll.mockResolvedValue([
+      makeBoard({ _id: 'board-bare-id', title: 'Bare id', color: 'color-gone' }),
+      makeBoard({ _id: 'board-hex', title: 'Hex', color: { _id: 'c', name: 'Blue', value: '#0052CC' } }),
+    ]);
 
     renderDashboard();
-    await screen.findByRole('link', { name: 'Odd' });
+    await screen.findByRole('link', { name: 'Bare id' });
 
-    expect(within(card('Odd')).getByRole('progressbar')).toHaveStyle({ backgroundColor: '#64748B' });
+    expect(card('Bare id')).toHaveAttribute('data-hue', 'sky');
+    expect(card('Hex')).toHaveAttribute('data-hue', 'sky');
   });
 });
 
-describe('BoardDashboard totals', () => {
-  it('shows the four dashboard totals it was given', async () => {
+describe('BoardDashboard tile owner', () => {
+  it('shows the owner on the tile, named for assistive technology and coloured by their id', async () => {
     renderDashboard();
     await screen.findByRole('link', { name: 'Launch Plan' });
 
-    const totals = ['Total Boards', 'Team Members', 'Total Tasks', 'Avg Progress'];
-    totals.forEach(label => expect(screen.getByText(label)).toBeInTheDocument());
+    const tile = card('Launch Plan');
+    expect(within(tile).getByText('Owner: Ada Lovelace')).toBeInTheDocument();
+    expect(within(tile).getByText('AL').parentElement).toHaveClass(MID_BACKGROUND[hueFromSeed('user-1')]);
+  });
 
-    expect(screen.getByText('7')).toBeInTheDocument();
-    expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('34')).toBeInTheDocument();
-    expect(screen.getByText('58%')).toBeInTheDocument();
+  it('shows no owner when the board carries only an id', async () => {
+    mockedBoardService.getAll.mockResolvedValue([makeBoard({ _id: 'board-bare', title: 'Bare', createdBy: 'user-9' })]);
+
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Bare' });
+
+    expect(within(card('Bare')).queryByText(/^Owner:/)).not.toBeInTheDocument();
+  });
+});
+
+describe('BoardDashboard hero', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Only the clock is faked: the query client and user-event run on timers and
+  // would never settle under a fully faked one.
+  const at = (iso: string) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(iso));
+  };
+
+  it.each([
+    ['2026-10-09T05:00:00', 'Good morning, Ada.'],
+    ['2026-10-09T11:59:00', 'Good morning, Ada.'],
+    ['2026-10-09T12:00:00', 'Good afternoon, Ada.'],
+    ['2026-10-09T17:59:00', 'Good afternoon, Ada.'],
+    ['2026-10-09T18:00:00', 'Good evening, Ada.'],
+    ['2026-10-09T02:00:00', 'Good evening, Ada.'],
+  ])('at %s the page greets by the part of the day: %s', async (time, greeting) => {
+    mockedAuthService.getCurrentUser.mockReturnValue({
+      _id: 'user-1',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      avatar: '',
+    });
+    at(time);
+
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { level: 1, name: greeting })).toBeInTheDocument();
+  });
+
+  it('greets nobody by name when there is no session to read', async () => {
+    at('2026-10-09T09:00:00');
+
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Good morning.' })).toBeInTheDocument();
+  });
+
+  it('greets nobody by name when the stored session cannot be read', async () => {
+    mockedAuthService.getCurrentUser.mockImplementation(() => {
+      throw new Error('corrupt session');
+    });
+    at('2026-10-09T09:00:00');
+
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Good morning.' })).toBeInTheDocument();
+  });
+
+  it('writes the date as an eyebrow above the greeting', async () => {
+    at('2026-10-09T09:00:00');
+
+    renderDashboard();
+
+    expect(await screen.findByText('FRIDAY · OCTOBER 9')).toBeInTheDocument();
+  });
+
+  it('is the one level 1 heading on the page', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('opens the first board of the list from the hero', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+
+    const overview = within(hero());
+    expect(overview.getByRole('link', { name: 'Open Launch Plan' })).toHaveAttribute('href', '/board/board-launch');
+  });
+
+  it('shows the four totals it was given inside the hero', async () => {
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+
+    const overview = within(hero());
+    const figures: [string, string][] = [
+      ['Total Boards', '7'],
+      ['Team Members', '12'],
+      ['Total Tasks', '34'],
+      ['Avg Progress', '58%'],
+    ];
+    for (const [label, value] of figures) {
+      // The label is the term and the number its description, so a screen
+      // reader reads them as a pair.
+      expect(overview.getByText(label).nextElementSibling).toHaveTextContent(new RegExp(`^${value}$`));
+    }
+  });
+});
+
+describe('BoardDashboard board count and new board tile', () => {
+  it('says how many boards there are', async () => {
+    renderDashboard();
+
+    expect(await screen.findByText('2 boards')).toBeInTheDocument();
+  });
+
+  it('says "1 board" for one', async () => {
+    mockedBoardService.getAll.mockResolvedValue([BOARDS[0]]);
+
+    renderDashboard();
+
+    expect(await screen.findByText('1 board')).toBeInTheDocument();
+  });
+
+  it('ends the grid with a tile that opens the create board dialog', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+
+    const tile = screen.getByText('Fresh board, ready for take-off.').closest('button') as HTMLElement;
+    await user.click(tile);
+
+    expect(openCreateBoard).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -224,6 +361,9 @@ describe('BoardDashboard states with nothing to list', () => {
 
     expect(await screen.findByText('No boards yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Your First Board' })).toBeInTheDocument();
+    // The empty state is the way to start, so the tile that would repeat it is not drawn.
+    expect(screen.queryByText('Fresh board, ready for take-off.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Open / })).not.toBeInTheDocument();
   });
 
   it('says so and offers a reload when the boards cannot be read', async () => {
@@ -249,6 +389,18 @@ describe('BoardDashboard per board menu', () => {
 
     expect(screen.getByRole('button', { name: /Add Member/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Delete/ })).toBeInTheDocument();
+  });
+
+  it('says whether it is open on the button that opens it', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await screen.findByRole('link', { name: 'Launch Plan' });
+    const trigger = screen.getByRole('button', { name: 'Options for Launch Plan' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('is not offered on a board the viewer is only a member of, where the server refuses both actions', async () => {
@@ -281,7 +433,7 @@ describe('BoardDashboard per board menu', () => {
     const user = userEvent.setup();
     await openMenu(user, 'Launch Plan');
 
-    await user.click(screen.getByText('Manage and organize your project boards'));
+    await user.click(screen.getByRole('heading', { name: 'Your boards' }));
 
     await waitFor(() => expect(screen.queryByRole('button', { name: /Add Member/ })).not.toBeInTheDocument());
   });

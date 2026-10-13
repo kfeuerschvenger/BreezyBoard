@@ -28,11 +28,11 @@ export const DeleteBoardDialog = ({ board, isWorking = false, error = null, onCo
     description={
       <>
         <p>
-          <strong className="font-semibold text-gray-900">{board?.title}</strong> and all of its tasks will be removed
+          <strong className="font-semibold text-ink">{board?.title}</strong> and all of its tasks will be removed
           from your boards. You can undo this right after.
         </p>
         {error && (
-          <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p role="alert" className="mt-4 rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
             {error}
           </p>
         )}

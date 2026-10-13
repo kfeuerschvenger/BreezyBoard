@@ -13,6 +13,10 @@ export {
   useAddBoardMembers,
   useTemplates,
 } from './queries';
+export { boardHueOf, boardHueOptions } from './boardHue';
+export type { BoardHueOption } from './boardHue';
+export { eyebrowFor, greetingFor, partOfDay } from './greeting';
+export type { PartOfDay } from './greeting';
 export { BoardCard } from './components/BoardCard';
 export type { BoardCardProps } from './components/BoardCard';
 export { BoardCardMenu } from './components/BoardCardMenu';
@@ -28,6 +32,10 @@ export type { BoardFieldValues } from './boardForm';
 export type { BoardFormData } from './components/CreateBoardModal';
 export { TemplatePicker } from './components/TemplatePicker';
 export type { TemplatePickerProps } from './components/TemplatePicker';
+export { HomeHero } from './components/HomeHero';
+export type { HomeHeroProps } from './components/HomeHero';
+export { NewBoardTile } from './components/NewBoardTile';
+export type { NewBoardTileProps } from './components/NewBoardTile';
 export { BoardStats } from './components/BoardStats';
 export type { BoardStatsProps } from './components/BoardStats';
 export { useBoardDashboard } from './hooks/useBoardDashboard';

@@ -42,7 +42,7 @@ await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
 await page.waitForTimeout(3000);
 log('url after login:', page.url());
-log('dashboard visible:', (await page.locator('body').innerText()).includes('My Boards'));
+log('dashboard visible:', (await page.locator('body').innerText()).includes('Your boards'));
 
 // The typefaces are bundled into /assets/ and served from the application
 // origin, so the policy names no font host. This reads the computed families,

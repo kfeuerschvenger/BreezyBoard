@@ -48,7 +48,7 @@ const makeBoard = (id: string, title: string): Board =>
     _id: id,
     title,
     description: '',
-    color: '#3B82F6',
+    color: { _id: 'color-sky', name: 'Sky', value: 'sky' },
     columns: [],
     template: 't1',
     createdBy: 'u',

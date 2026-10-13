@@ -219,6 +219,7 @@
      the timing lives here and never in a class string. Every one of them is
      collapsed by the reduced motion rule at the end of this file. */
   --animate-bb-up: bbUp 0.35s var(--ease-standard) both;
+  --animate-bb-view: bbView 0.45s var(--ease-standard) both;
   --animate-bb-fade: bbFade 0.2s both;
   --animate-bb-in: bbIn 0.5s var(--ease-standard) both;
   --animate-bb-land: bbLand 0.55s var(--ease-standard);
@@ -240,6 +241,14 @@
     radial-gradient(800px 520px at 88% 12%, oklch(0.72 0.11 192 / 0.55), transparent 60%),
     radial-gradient(700px 520px at 0% 105%, oklch(0.74 0.13 38 / 0.4), transparent 60%),
     linear-gradient(165deg, #0f1b2d 0%, oklch(0.34 0.09 248) 52%, oklch(0.5 0.11 222) 100%);
+
+  /* The banner of the home page: a sand light at the top right over a navy that
+     lifts to a steel and a teal blue. The reference's three stops end at
+     lightness 0.74, where white text is 2.2:1; these end at 0.54, where it is
+     above 5:1, so the whole banner can carry white text at any width. */
+  --gradient-hero:
+    radial-gradient(500px 300px at 92% 0%, oklch(0.86 0.1 82 / 0.4), transparent 70%),
+    linear-gradient(118deg, oklch(0.34 0.1 250) 0%, oklch(0.46 0.11 228) 55%, oklch(0.54 0.1 205) 100%);
 
   /* The one word of the brand headline set in a warm gradient. */
   --gradient-wind-word: linear-gradient(90deg, oklch(0.88 0.12 82), oklch(0.78 0.14 38));

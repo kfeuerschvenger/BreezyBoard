@@ -1,16 +1,14 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { IconUsers } from '@tabler/icons-react';
-import { Icon } from '@/shared/ui';
 import { Link } from 'react-router-dom';
 import { resolveIcon } from '@/shared/lib/templateIcons';
+import { Avatar, Cover, Icon, ProgressBar } from '@/shared/ui';
 import type { Board } from '@/models';
+import { boardHueOf } from '../boardHue';
 import { BoardCardMenu } from './BoardCardMenu';
 
 export interface BoardCardProps {
   board: Board;
-  /** The hex value the board is painted with, already resolved. */
-  color: string;
   menuOpen: boolean;
   isDeleting: boolean;
   onToggleMenu: () => void;
@@ -38,22 +36,53 @@ const formatUpdated = (dateString?: string) => {
 const percentComplete = (board: Board): number => (typeof board.progress === 'number' ? board.progress : 0);
 
 /**
- * One board in the dashboard grid.
+ * The two wavy lines drawn over a tile's cover, stretched to whatever width
+ * the tile has. Decoration: the cover is hidden from assistive technology.
+ */
+const CoverWaves: React.FC = () => (
+  <svg viewBox="0 0 300 96" preserveAspectRatio="none" aria-hidden="true" className="absolute inset-0 size-full">
+    <path
+      d="M-10 58 C 60 30, 120 80, 190 50 S 280 26, 320 44"
+      fill="none"
+      stroke="white"
+      strokeOpacity={0.6}
+      strokeWidth={1.5}
+    />
+    <path
+      d="M-10 74 C 70 54, 140 96, 210 68 S 290 52, 320 62"
+      fill="none"
+      stroke="white"
+      strokeOpacity={0.35}
+      strokeWidth={1.2}
+    />
+  </svg>
+);
+
+/**
+ * One board in the grid on the home page: a cover in the board's hue, its name,
+ * its description, how far along it is and a few counts.
  *
- * The card is a container rather than a control. It used to be a
- * `role="button"` with a tabIndex and a key handler, wrapping the options
- * button and its menu, which is interactive content nested inside an
- * interactive element: invalid, and the reason two stopPropagation handlers
- * existed here at all.
+ * The tile is a container rather than a control. Its title is a real link whose
+ * hit area is stretched over the whole tile by a pseudo element, so a mouse
+ * keeps the large target and the keyboard gets one link per tile instead of a
+ * button holding buttons. The focus ring is the tile's own outline, drawn while
+ * the title link has keyboard focus, so it surrounds the whole tile and not the
+ * words of the title; it is why the tile does not clip its overflow, because
+ * the ring sits outside the edge. The cover clips its own corners. Everything
+ * else that can be clicked sits above the link on z-10.
  *
- * The title is a real link whose hit area is stretched over the whole card by
- * a pseudo element, so a mouse keeps the large target and the keyboard gets
- * one link per card instead of a button holding buttons. Everything else that
- * can be clicked sits above that link on z-10.
+ * The backdrop blur makes each tile a stacking context of its own, so a tile
+ * whose menu is open is lifted above the tiles after it, or the next row would
+ * paint over the menu.
+ *
+ * The cover carries the owner, the one person the data says every board has.
+ * The count in the footer is every member, owner included.
+ *
+ * The footer text is the tertiary colour on the tile's glass, which is the
+ * ground behind a white wash: 4.99:1 at the lowest.
  */
 export const BoardCard: React.FC<BoardCardProps> = ({
   board,
-  color,
   menuOpen,
   isDeleting,
   onToggleMenu,
@@ -61,94 +90,85 @@ export const BoardCard: React.FC<BoardCardProps> = ({
   onDelete,
   delay = 0,
 }) => {
+  const hue = boardHueOf(board.color);
   const template = typeof board.template === 'object' ? board.template : null;
   const TemplateIcon = resolveIcon(template?.iconName);
 
   const title = board.title || 'Untitled Board';
   const progress = percentComplete(board);
 
+  const owner = typeof board.createdBy === 'object' ? board.createdBy : null;
+  const ownerName = owner ? `${owner.firstName} ${owner.lastName}`.trim() : '';
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300 group overflow-visible relative"
+    <div
+      style={delay > 0 ? { animationDelay: `${delay}s` } : undefined}
+      data-hue={hue}
+      className="group relative flex animate-bb-up has-[[data-board-menu]]:z-20 has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-focus flex-col rounded-tile border border-glass-border bg-glass-strong shadow-tile backdrop-blur-[14px] transition-[translate,rotate,box-shadow] duration-300 ease-standard hover:-translate-y-1 hover:-rotate-[0.6deg] hover:shadow-tile-hover"
     >
-      <div className="p-6 border-b border-gray-100">
-        <div className="flex items-start justify-between mb-3">
+      {/* The owner sits beside the cover rather than inside it: the cover is hidden from assistive technology. */}
+      <div className="relative">
+        <Cover hue={hue} className="h-24 rounded-t-tile">
+          <CoverWaves />
+          <Icon as={TemplateIcon} size={22} className="absolute bottom-3 left-4 text-white" aria-hidden="true" />
+        </Cover>
+        {owner && (
+          <span className="absolute bottom-3 right-4 flex">
+            <Avatar name={ownerName} src={owner.avatar} seed={owner._id} size="sm" ring="surface" decorative />
+            <span className="sr-only">Owner: {ownerName}</span>
+          </span>
+        )}
+      </div>
+
+      {/*
+        Both actions in the menu are owner only on the server, so for anybody
+        else the menu would hold nothing that can succeed and is not rendered
+        at all. The role is the server's: a workspace admin arrives as an
+        owner, and a board without a role is treated as not owned rather than
+        guessed at.
+      */}
+      {board.viewerRole === 'owner' && (
+        <BoardCardMenu
+          boardTitle={title}
+          open={menuOpen}
+          isDeleting={isDeleting}
+          onToggle={onToggleMenu}
+          onAddMember={onAddMember}
+          onDelete={onDelete}
+        />
+      )}
+
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
+        <h3 className="break-words font-heading text-[17px] font-[650] tracking-[-0.01em] text-ink">
+          <Link
+            to={`/board/${board._id}`}
+            className="outline-none after:absolute after:inset-0 after:rounded-tile"
+          >
+            {title}
+          </Link>
+        </h3>
+
+        <p className="mt-1 line-clamp-2 min-h-10 text-[13px] leading-5 text-ink-secondary">
+          {board.description || 'No description'}
+        </p>
+
+        <div className="mt-3 flex items-center gap-3">
+          <ProgressBar value={progress} label={`Progress of ${title}`} hue={hue} size={6} />
+          <span className="font-mono text-[11.5px] text-ink-tertiary">{progress}%</span>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-ink-tertiary">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center p-1 rounded">
-              <Icon as={TemplateIcon} size={22} style={{ color }} aria-hidden="true" />
-            </div>
-            <h3 className="font-semibold text-gray-900 font-heading group-hover:text-blue-600 transition-colors">
-              <Link
-                to={`/board/${board._id}`}
-                className="after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-              >
-                {title}
-              </Link>
-            </h3>
-          </div>
-
-          {/*
-            Both actions in the menu are owner only on the server, so for
-            anybody else the menu would hold nothing that can succeed and is
-            not rendered at all. The role is the server's: a workspace admin
-            arrives as an owner, and a board without a role is treated as
-            not owned rather than guessed at.
-          */}
-          {board.viewerRole === 'owner' && (
-            <div className="flex items-center gap-2">
-              <BoardCardMenu
-                boardTitle={title}
-                open={menuOpen}
-                isDeleting={isDeleting}
-                onToggle={onToggleMenu}
-                onAddMember={onAddMember}
-                onDelete={onDelete}
-              />
-            </div>
-          )}
-        </div>
-
-        <p className="text-sm text-gray-600 font-body mb-4 min-h-[3rem]">{board.description || 'No description'}</p>
-
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500">Progress</span>
-            <span className="text-xs text-gray-700 font-medium">{progress}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="h-2 rounded-full transition-all duration-300"
-              style={{ backgroundColor: color, width: `${Math.min(100, Math.max(0, progress))}%` }}
-              aria-valuenow={progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              role="progressbar"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="p-6">
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 text-gray-600">
-              <div className="w-3 h-3 bg-gray-300 rounded" aria-hidden="true" />
-              <span>{typeof board.taskCount === 'number' ? board.taskCount : 0} tasks</span>
-            </div>
-            <div className="flex items-center gap-1 text-gray-600">
-              <Icon as={IconUsers} size={12} aria-hidden="true" />
+            <span>{typeof board.taskCount === 'number' ? board.taskCount : 0} tasks</span>
+            <span className="flex items-center gap-1">
+              <Icon as={IconUsers} size={13} aria-hidden="true" />
               <span>{typeof board.memberCount === 'number' ? board.memberCount : 0}</span>
-            </div>
+            </span>
           </div>
-          <div className="text-gray-500">
-            <span>Updated {formatUpdated(board.updatedAt || new Date().toISOString())}</span>
-          </div>
+          <span>Updated {formatUpdated(board.updatedAt || new Date().toISOString())}</span>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

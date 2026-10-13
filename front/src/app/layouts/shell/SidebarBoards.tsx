@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { IconPlus } from '@tabler/icons-react';
-import { useBoards } from '@/features/boards';
-import { Icon, IconButton, MID_BACKGROUND, hueFromSeed } from '@/shared/ui';
+import { boardHueOf, useBoards } from '@/features/boards';
+import { Icon, IconButton, MID_BACKGROUND } from '@/shared/ui';
 
 export interface SidebarBoardsProps {
   /** Opens the create board dialog. */
@@ -17,8 +17,8 @@ const ITEM_CLASSES =
  * Every board the person can open, each one a link, with the way to start a
  * new one beside the label.
  *
- * A board's dot takes its hue from its id, so the same board is the same
- * colour here, on the home page and anywhere else that draws it. The list
+ * A board's dot is the hue its owner chose for it, the same hue as the cover
+ * of its tile on the home page and anywhere else that draws it. The list
  * scrolls inside the sidebar: the logo above it and the controls below it stay
  * where they are however many boards there are.
  */
@@ -69,12 +69,10 @@ export const SidebarBoards = ({ onCreate, onNavigate }: SidebarBoardsProps) => {
                   }`
                 }
               >
-                {/* TODO(phase 6b, slice 5): the dot takes the hue the board's owner chose,
-                    one of the six design system hues. A hash of the id stands in until
-                    the board palette is those six hues, see docs/REVIVAL-PLAN.md 12.6b. */}
                 <span
                   aria-hidden="true"
-                  className={`size-3 shrink-0 rotate-12 rounded-dot ${MID_BACKGROUND[hueFromSeed(board._id)]}`}
+                  data-hue={boardHueOf(board.color)}
+                  className={`size-3 shrink-0 rotate-12 rounded-dot ${MID_BACKGROUND[boardHueOf(board.color)]}`}
                 />
                 <span className="truncate">{board.title}</span>
               </NavLink>
