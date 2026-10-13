@@ -158,17 +158,43 @@ function describePlacement(placement: Placement): string {
   return `${placement.columnTitle}, position ${placement.position} of ${placement.total}`;
 }
 
+/** The held card as an announcement event carries it: its id, and its box when dnd-kit has measured one. */
+export interface AnnouncedActive {
+  id: string | number;
+  rect?: { current?: { translated?: { top: number; height: number } | null } };
+}
+
+/**
+ * Where the held card would land, or null to let the hovered droppable say.
+ * The pointer's answer is geometric and the keyboard's is a step it has taken,
+ * and neither is a function of the hovered droppable alone.
+ */
+export type SlotResolver = (active: AnnouncedActive, over: { id: string | number }) => Slot | null;
+
 /**
  * What a screen reader is told as a card is carried. Every message names the
  * task and the column, never an id, and none of them is spoken for a drop on
  * nothing.
  */
-export function createAnnouncements(getSnapshot: () => BoardSnapshot) {
+export function createAnnouncements(getSnapshot: () => BoardSnapshot, resolveSlot?: SlotResolver) {
   const titleOf = (snapshot: BoardSnapshot, activeId: string) => findCard(snapshot, activeId)?.task.title ?? 'The task';
 
   const placementOfOver = (snapshot: BoardSnapshot, activeId: string, overId: string | undefined) => {
     const slot = overId === undefined ? null : slotOfOver(snapshot, activeId, overId);
     return slot ? placementOfSlot(snapshot, activeId, slot) : null;
+  };
+
+  // Where the card would land is what a drop does, and what a drop does is the
+  // resolver's answer when there is one: the hovered card names a slot only
+  // for the keyboard. A pointer lands where the held card's centre is, so the
+  // words and the gap have to be read off the same place.
+  const slotOfHover = (
+    snapshot: BoardSnapshot,
+    active: AnnouncedActive,
+    over: { id: string | number } | null,
+  ): Slot | null => {
+    if (!over) return null;
+    return resolveSlot?.(active, over) ?? slotOfOver(snapshot, String(active.id), String(over.id));
   };
 
   // dnd-kit reports the card as hovering itself the moment it is picked up,
@@ -189,23 +215,24 @@ export function createAnnouncements(getSnapshot: () => BoardSnapshot) {
         : `Picked up ${titleOf(snapshot, id)}.`;
     },
 
-    onDragOver({ active, over }: { active: { id: string | number }; over: { id: string | number } | null }) {
+    onDragOver({ active, over }: { active: AnnouncedActive; over: { id: string | number } | null }) {
       const id = String(active.id);
       const wasPending = pickupPending;
       pickupPending = false;
       if (wasPending && over && String(over.id) === id) return undefined;
 
       const snapshot = getSnapshot();
-      const placement = placementOfOver(snapshot, id, over ? String(over.id) : undefined);
+      const slot = slotOfHover(snapshot, active, over);
+      const placement = slot ? placementOfSlot(snapshot, id, slot) : null;
       return placement ? `${describePlacement(placement)}.` : `${titleOf(snapshot, id)} is not over a column.`;
     },
 
-    onDragEnd({ active, over }: { active: { id: string | number }; over: { id: string | number } | null }): string {
+    onDragEnd({ active, over }: { active: AnnouncedActive; over: { id: string | number } | null }): string {
       pickupPending = false;
       const snapshot = getSnapshot();
       const id = String(active.id);
       const title = titleOf(snapshot, id);
-      const slot = over ? slotOfOver(snapshot, id, String(over.id)) : null;
+      const slot = slotOfHover(snapshot, active, over);
       const placement = slot ? placementOfSlot(snapshot, id, slot) : null;
       if (!slot || !placement) return `${title} was dropped. It was not moved.`;
 
@@ -346,6 +373,14 @@ function revealInColumn(body: HTMLElement | null, card: HTMLElement | null) {
 export function createCollisionDetection(target: TargetRef): CollisionDetection {
   return args => {
     const keyboard = target.current;
-    return keyboard ? [{ id: keyboard.overId }] : closestCorners(args);
+    if (keyboard) return [{ id: keyboard.overId }];
+
+    // A keyboard drag has no pointer, and until its first arrow key it has not
+    // moved: the card is over its own place. Matching corners would answer with
+    // whichever card has come to stand there, because the held card takes no
+    // room while it is carried, and the pick up would be announced as a move.
+    if (args.pointerCoordinates === null) return [{ id: args.active.id }];
+
+    return closestCorners(args);
   };
 }

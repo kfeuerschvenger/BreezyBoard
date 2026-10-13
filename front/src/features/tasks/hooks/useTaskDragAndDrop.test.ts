@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragMoveEvent, DragStartEvent } from '@dnd-kit/core';
 import { TaskService } from '@/services';
 import type { Task } from '@/models';
 import { useTaskDragAndDrop } from './useTaskDragAndDrop';
@@ -295,5 +295,172 @@ describe('useTaskDragAndDrop when a move fails', () => {
     expect(cache.replace).toHaveBeenCalledTimes(1);
     expect(cache.replace).toHaveBeenCalledWith(expect.objectContaining({ _id: 'task-second' }));
     expect(cache.refetch).not.toHaveBeenCalled();
+  });
+});
+
+// A pointer drag turned into a slot from the held card's centre against the
+// cards of the column under it. jsdom has no layout, so the midpoints of the
+// column's cards are supplied and the held card's box is part of the event.
+describe('useTaskDragAndDrop where a held card would land', () => {
+  beforeEach(() => {
+    mockedTaskService.move.mockReset().mockImplementation(async (taskId: string, status: string) => ({
+      ...makeTask({ _id: taskId, status }),
+      order: 'a5',
+    }));
+  });
+
+  // The Done column holds one card, whose midpoint is at 50.
+  const measureMidpoints = vi.fn((columnId: string) => (columnId === DONE ? [50] : [20, 60]));
+
+  const renderMeasured = (cache: TaskCache = makeCache()) =>
+    renderHook(() => useTaskDragAndDrop({ tasks: TASKS, columns: COLUMNS, cache, measureMidpoints }));
+
+  const pointerMove = (taskId: string, overId: string, centre: number) =>
+    ({
+      active: { id: taskId, rect: { current: { initial: null, translated: { top: centre - 20, height: 40 } } } },
+      over: { id: overId },
+      activatorEvent: new MouseEvent('pointerdown'),
+    }) as unknown as DragMoveEvent;
+
+  const pointerEnd = (taskId: string, overId: string, centre: number) =>
+    pointerMove(taskId, overId, centre) as unknown as DragEndEvent;
+
+  it('opens the gap where the card was when it is picked up', () => {
+    const { result } = renderMeasured();
+
+    act(() => result.current.onDragStart(dragStart('task-second')));
+
+    expect(result.current.slot).toEqual({ columnId: TODO, index: 1 });
+  });
+
+  it('puts the gap after a card whose midpoint the held card has passed', () => {
+    const { result } = renderMeasured();
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragMove(pointerMove('task-first', 'task-done', 80)));
+
+    expect(result.current.slot).toEqual({ columnId: DONE, index: 1 });
+  });
+
+  it('puts the gap before a card whose midpoint the held card has not reached', () => {
+    const { result } = renderMeasured();
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragMove(pointerMove('task-first', 'task-done', 30)));
+
+    expect(result.current.slot).toEqual({ columnId: DONE, index: 0 });
+  });
+
+  it('keeps the held card out of its own column when it counts the places', () => {
+    const { result } = renderMeasured();
+
+    // Two cards in To Do, one of them held: one other card, so index 1 is the end.
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragMove(pointerMove('task-first', 'task-second', 500)));
+
+    expect(result.current.slot).toEqual({ columnId: TODO, index: 1 });
+    expect(measureMidpoints).toHaveBeenCalledWith(TODO, 'task-first');
+  });
+
+  it('lets go of the slot when the drag is cancelled', () => {
+    const { result } = renderMeasured();
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragCancel());
+
+    expect(result.current.slot).toBeNull();
+  });
+
+  // The drop must use the place the gap showed, not the card under the pointer.
+  it('names the neighbours the gap showed when it is released after a card', async () => {
+    const { result } = renderMeasured();
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    await act(async () => {
+      await result.current.onDragEnd(pointerEnd('task-first', 'task-done', 80));
+    });
+
+    const [, status, neighbours] = mockedTaskService.move.mock.calls[0];
+    expect(status).toBe(DONE);
+    expect(neighbours).toEqual({ afterId: 'task-done', beforeId: null });
+  });
+
+  it('names the neighbours the gap showed when it is released before a card', async () => {
+    const { result } = renderMeasured();
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    await act(async () => {
+      await result.current.onDragEnd(pointerEnd('task-first', 'task-done', 30));
+    });
+
+    const [, , neighbours] = mockedTaskService.move.mock.calls[0];
+    expect(neighbours).toEqual({ afterId: null, beforeId: 'task-done' });
+  });
+
+  it('sends nothing when the gap is where the card started', async () => {
+    const { result } = renderMeasured();
+
+    // The first of two cards, released above the midpoint of the other one.
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    await act(async () => {
+      await result.current.onDragEnd(pointerEnd('task-first', 'task-second', 5));
+    });
+
+    expect(mockedTaskService.move).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTaskDragAndDrop landing', () => {
+  beforeEach(() => {
+    mockedTaskService.move.mockReset().mockImplementation(async (taskId: string, status: string) => ({
+      ...makeTask({ _id: taskId, status }),
+      order: 'a5',
+    }));
+  });
+
+  const dropOnDone = async (result: { current: ReturnType<typeof useTaskDragAndDrop> }) => {
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    await act(async () => {
+      await result.current.onDragEnd(dragEnd(DONE));
+    });
+  };
+
+  it('marks the card that was dropped, so it can settle into place', async () => {
+    const { result } = renderDrag(makeCache());
+
+    await dropOnDone(result);
+
+    expect(result.current.landedId).toBe('task-first');
+  });
+
+  it('clears the mark when that card has finished, and only for that card', async () => {
+    const { result } = renderDrag(makeCache());
+    await dropOnDone(result);
+
+    act(() => result.current.onLandingEnd('task-second'));
+    expect(result.current.landedId).toBe('task-first');
+
+    act(() => result.current.onLandingEnd('task-first'));
+    expect(result.current.landedId).toBeNull();
+  });
+
+  it('marks nothing for a drag that was cancelled', () => {
+    const { result } = renderDrag(makeCache());
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragCancel());
+
+    expect(result.current.landedId).toBeNull();
+  });
+
+  it('marks nothing for a card released outside every column', async () => {
+    const { result } = renderDrag(makeCache());
+
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    await act(async () => {
+      await result.current.onDragEnd(dragEnd(null));
+    });
+
+    expect(result.current.landedId).toBeNull();
   });
 });
