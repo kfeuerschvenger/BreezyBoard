@@ -63,7 +63,7 @@ const fontReport = await page.evaluate(async () => {
   return {
     heading: heading ? getComputedStyle(heading).fontFamily : 'none',
     body: body ? getComputedStyle(body).fontFamily : 'none',
-    loaded: [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, '')),
+    loaded: [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replaceAll('"', '')),
   };
 });
 log('computed heading family:', fontReport.heading);

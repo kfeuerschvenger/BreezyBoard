@@ -59,7 +59,7 @@ const familyOf = async selector =>
 
 const leads = (family, name) =>
   (family.split(',')[0] ?? '')
-    .replace(/["']/g, '')
+    .replaceAll(/["']/g, '')
     .trim()
     .startsWith(name);
 
@@ -76,12 +76,12 @@ check('the mono face loads at 500', await faceLoads('500 12px "DM Mono"'), 'load
 // end up with the family rather than with whatever the browser defaults to.
 const utilityFamily = className =>
   page.evaluate(cls => {
-    const probe = document.createElement('span');
-    probe.className = cls;
-    probe.textContent = 'probe';
-    document.body.appendChild(probe);
-    const family = getComputedStyle(probe).fontFamily;
-    probe.remove();
+    const sample = document.createElement('span');
+    sample.className = cls;
+    sample.textContent = 'probe';
+    document.body.appendChild(sample);
+    const family = getComputedStyle(sample).fontFamily;
+    sample.remove();
     return family;
   }, className);
 
@@ -91,12 +91,12 @@ check('the font-body utility applies', leads(await utilityFamily('font-body'), '
 // `font-mono` utility to probe. The token itself is what a later class or
 // style reads, so the probe takes it through `var()`.
 const monoFamily = await page.evaluate(() => {
-  const probe = document.createElement('span');
-  probe.style.fontFamily = 'var(--font-mono)';
-  probe.textContent = 'probe';
-  document.body.appendChild(probe);
-  const family = getComputedStyle(probe).fontFamily;
-  probe.remove();
+  const sample = document.createElement('span');
+  sample.style.fontFamily = 'var(--font-mono)';
+  sample.textContent = 'probe';
+  document.body.appendChild(sample);
+  const family = getComputedStyle(sample).fontFamily;
+  sample.remove();
   return family;
 });
 check('the mono token resolves to DM Mono', leads(monoFamily, 'DM Mono'), true);
@@ -115,7 +115,7 @@ const basics = await page.evaluate(() => {
     ctx.fillRect(0, 0, 1, 1);
     return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).join(',');
   };
-  const token = name => root.getPropertyValue(name).replace(/\s/g, '');
+  const token = name => root.getPropertyValue(name).replaceAll(/\s/g, '');
   return {
     ground: paint(root.getPropertyValue('--color-ground').trim()),
     ink: paint(root.getPropertyValue('--color-ink').trim()),
@@ -421,9 +421,9 @@ log('\n--- the new primitives, rendered for real ---');
 // primitives are rendered with the same instances, the same stylesheet and the
 // same fonts as the application, with nothing added to the repository.
 const mountPrimitives = async (target, build, args = {}) => {
-  await target.evaluate(async ([source, args]) => {
+  await target.evaluate(async ([source, buildArgs]) => {
     const entry = await (await fetch('/src/main.tsx')).text();
-    const urlOf = name => entry.match(new RegExp(`/node_modules/[.]vite/deps/${name}[.]js[?]v=[a-f0-9]+`))?.[0];
+    const urlOf = name => new RegExp(`/node_modules/[.]vite/deps/${name}[.]js[?]v=[a-f0-9]+`).exec(entry)?.[0];
     const react = await import(urlOf('react'));
     const dom = await import(urlOf('react-dom_client'));
     const ui = await import('/src/shared/ui/index.ts');
@@ -439,7 +439,7 @@ const mountPrimitives = async (target, build, args = {}) => {
     window.__probeRoot = root;
     // eslint-disable-next-line no-new-func
     root.render(
-      new Function('ui', 'h', 'React', 'args', `return (${source})(ui, h, React, args)`)(ui, createElement, react.default ?? react, args)
+      new Function('ui', 'h', 'React', 'args', `return (${source})(ui, h, React, args)`)(ui, createElement, react.default ?? react, buildArgs)
     );
     // The render is scheduled, not synchronous: wait for the probe's first element.
     await new Promise((resolve, reject) => {
@@ -1053,7 +1053,7 @@ const windOfShell = () =>
   page.evaluate(() => {
     const layer = document.getElementById('app-sidebar').previousElementSibling;
     if (!layer || layer.getAttribute('aria-hidden') !== 'true') return null;
-    const probe = document.elementFromPoint(
+    const under = document.elementFromPoint(
       document.querySelector('#app-sidebar a[href="/"]').getBoundingClientRect().x + 10,
       document.querySelector('#app-sidebar a[href="/"]').getBoundingClientRect().y + 10
     );
@@ -1064,7 +1064,7 @@ const windOfShell = () =>
       pointerEvents: getComputedStyle(layer).pointerEvents,
       stroke: layer.querySelector('svg path').getAttribute('stroke'),
       // What is under the sidebar's own link is the link, not the wind.
-      linkOnTop: Boolean(probe?.closest('#app-sidebar')),
+      linkOnTop: Boolean(under?.closest('#app-sidebar')),
     };
   });
 
@@ -1087,8 +1087,8 @@ const chooseBreeze = async name => {
 };
 const breezeBox = sidebar.getByRole('radiogroup', { name: 'Breeze' });
 const boxGeometry = await breezeBox.evaluate(group => {
-  const frame = group.getBoundingClientRect();
-  const panel = group.closest('aside').getBoundingClientRect();
+  const groupBox = group.getBoundingClientRect();
+  const asideBox = group.closest('aside').getBoundingClientRect();
   return {
     labels: [...group.querySelectorAll('label')].map(label => {
       const box = label.getBoundingClientRect();
@@ -1096,9 +1096,9 @@ const boxGeometry = await breezeBox.evaluate(group => {
     }),
     insideFrame: [...group.querySelectorAll('label')].every(label => {
       const box = label.getBoundingClientRect();
-      return box.left >= frame.left - 0.5 && box.right <= frame.right + 0.5;
+      return box.left >= groupBox.left - 0.5 && box.right <= groupBox.right + 0.5;
     }),
-    insidePanel: frame.left >= panel.left && frame.right <= panel.right,
+    insidePanel: groupBox.left >= asideBox.left && groupBox.right <= asideBox.right,
     scrolls: group.scrollWidth > group.clientWidth,
   };
 });
@@ -1326,8 +1326,8 @@ const panel = await authPage.locator('aside').evaluate(el => {
     radius: style.borderTopLeftRadius,
     image: style.backgroundImage.startsWith('radial-gradient') ? 'gradient' : style.backgroundImage,
     left: box.left < form.left,
-    headlineSize: parseFloat(getComputedStyle(el.querySelector('p')).fontSize),
-    headlineFamily: getComputedStyle(el.querySelector('p')).fontFamily.split(',')[0].replace(/["']/g, ''),
+    headlineSize: Number.parseFloat(getComputedStyle(el.querySelector('p')).fontSize),
+    headlineFamily: getComputedStyle(el.querySelector('p')).fontFamily.split(',')[0].replaceAll(/["']/g, ''),
   };
 });
 check('the branding column is on screen beside the form', `${panel.display} ${panel.left}`, 'flex true');
@@ -1364,7 +1364,7 @@ const authWind = async stored => {
   await authMotionPage.reload();
   await authMotionPage.waitForSelector('form');
   return authMotionPage.locator('aside').evaluate(el => ({
-    level: el.getAttribute('data-breeze'),
+    level: el.dataset.breeze,
     streaks: el.querySelectorAll('.pointer-events-none svg path').length,
     floating: [...el.querySelectorAll('[class*="animate-bb-float"]')].map(card => getComputedStyle(card).animationName).join(' '),
     repeating: el.getAnimations({ subtree: true }).filter(a => a.effect.getTiming().iterations === Infinity).length,
@@ -1404,10 +1404,10 @@ for (const [label, selector, rgb, minimum] of textTargets) {
       const pixels = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
       const channel = c => ((c / 255) <= 0.04045 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4);
       const lum = (r, g, b) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-      const probe = new OffscreenCanvas(1, 1).getContext('2d');
-      probe.fillStyle = color;
-      probe.fillRect(0, 0, 1, 1);
-      const text = lum(...probe.getImageData(0, 0, 1, 1).data);
+      const single = new OffscreenCanvas(1, 1).getContext('2d');
+      single.fillStyle = color;
+      single.fillRect(0, 0, 1, 1);
+      const text = lum(...single.getImageData(0, 0, 1, 1).data);
       let lightest = 0;
       for (let i = 0; i < pixels.length; i += 4) lightest = Math.max(lightest, lum(pixels[i], pixels[i + 1], pixels[i + 2]));
       return Math.round(((text + 0.05) / (lightest + 0.05)) * 100) / 100;
@@ -1475,7 +1475,7 @@ const HUE_ANGLES = { sky: 232, teal: 192, green: 150, sand: 82, coral: 38, laven
 const homeAuth = { headers: { Authorization: `Bearer ${sessionToken}` } };
 const homePalette = (await (await page.request.get(`${API}/colors?type=board`, homeAuth)).json()).data;
 const homeTemplate = (await (await page.request.get(`${API}/templates`, homeAuth)).json()).data[0];
-check('the board palette is the six hues, by key', homePalette.map(entry => entry.value).sort().join(' '), Object.keys(HUE_ANGLES).sort().join(' '));
+check('the board palette is the six hues, by key', homePalette.map(entry => entry.value).sort((a, b) => a.localeCompare(b)).join(' '), Object.keys(HUE_ANGLES).sort((a, b) => a.localeCompare(b)).join(' '));
 for (const [hue] of Object.entries(HUE_ANGLES)) {
   const created = await page.request.post(`${API}/boards`, {
     ...homeAuth,
@@ -1558,7 +1558,7 @@ check('the hero has the hero radius and is at least 240 pixels tall', `${heroSty
 check('the hero paints a radial light over a linear gradient', `${heroStyle.backgroundImage.startsWith('radial-gradient')} ${heroStyle.backgroundImage.includes('linear-gradient')}`, 'true true');
 check('the hero casts the hero shadow', heroStyle.boxShadow.includes('0px 30px 60px -36px'), true);
 check('the hero text is white', await paintOf(homePage, heroStyle.color), '255,255,255');
-const heroStops = (await tokenValue(homePage, '--gradient-hero')).match(/linear-gradient\([^]*$/)[0].match(/oklch\([^)]*\)/g);
+const heroStops = /linear-gradient\([^]*$/.exec(await tokenValue(homePage, '--gradient-hero'))[0].match(/oklch\([^)]*\)/g);
 check('the hero gradient has three stops', heroStops?.length, 3);
 await reportPairs(homePage, [['white on the lightest stop of the hero gradient', '#ffffff', heroStops[2], 4.5]]);
 
@@ -1602,9 +1602,9 @@ await reportPairs(homePage, [
 // mid step of the same hue.
 const tileFor = hue => homePage.locator('main [data-hue]', { has: homePage.getByRole('heading', { name: `Home ${hue}` }) });
 for (const [hue, angle] of Object.entries(HUE_ANGLES)) {
-  const tile = tileFor(hue);
-  check(`the ${hue} tile carries its hue`, await tile.getAttribute('data-hue'), hue);
-  const cover = await tile.locator(':scope > div').first().locator(':scope > div').first().evaluate(el => {
+  const hueTile = tileFor(hue);
+  check(`the ${hue} tile carries its hue`, await hueTile.evaluate(el => el.dataset.hue), hue);
+  const cover = await hueTile.locator(':scope > div').first().locator(':scope > div').first().evaluate(el => {
     const style = getComputedStyle(el);
     return { image: style.backgroundImage, height: el.offsetHeight, radius: style.borderTopLeftRadius };
   });
@@ -1614,9 +1614,9 @@ for (const [hue, angle] of Object.entries(HUE_ANGLES)) {
     true
   );
   check(`the ${hue} cover is 96 pixels tall with rounded top corners`, `${cover.height} ${cover.radius}`, '96 22px');
-  const dot = await homePage.locator(`#app-sidebar a[href="${await tile.getByRole('link').first().getAttribute('href')}"] span[data-hue]`).evaluate(el => ({ hue: el.dataset.hue, color: getComputedStyle(el).backgroundColor }));
-  check(`the ${hue} sidebar dot is the mid step of the same hue`, `${dot.hue} ${await paintOf(homePage, dot.color)}`, `${hue} ${await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`))}`);
-  const fill = await tile.getByTestId('progress-fill').evaluate(el => getComputedStyle(el).backgroundColor);
+  const sidebarDot = await homePage.locator(`#app-sidebar a[href="${await hueTile.getByRole('link').first().getAttribute('href')}"] span[data-hue]`).evaluate(el => ({ hue: el.dataset.hue, color: getComputedStyle(el).backgroundColor }));
+  check(`the ${hue} sidebar dot is the mid step of the same hue`, `${sidebarDot.hue} ${await paintOf(homePage, sidebarDot.color)}`, `${hue} ${await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`))}`);
+  const fill = await hueTile.getByTestId('progress-fill').evaluate(el => getComputedStyle(el).backgroundColor);
   check(`the ${hue} progress fill is the edge step`, await paintOf(homePage, fill), await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-edge`)));
 }
 
@@ -1642,8 +1642,8 @@ await homePage.locator('main').getByRole('link', { name: 'Home sky', exact: true
 await homePage.keyboard.press('Shift+Tab');
 await homePage.keyboard.press('Tab');
 const tileRing = await homePage.evaluate(() => {
-  const tile = document.activeElement.closest('[data-hue]');
-  const style = getComputedStyle(tile);
+  const focusedTile = document.activeElement.closest('[data-hue]');
+  const style = getComputedStyle(focusedTile);
   return {
     onLink: document.activeElement.tagName,
     style: style.outlineStyle,
@@ -1722,7 +1722,7 @@ await homePage.keyboard.press('Escape');
 
 // How many tiles share a row at each width, from the rendered boxes.
 const tileColumns = () =>
-  homePage.evaluate(() => new Set([...document.querySelectorAll('main [data-hue]')].map(tile => Math.round(tile.getBoundingClientRect().left))).size);
+  homePage.evaluate(() => new Set([...document.querySelectorAll('main [data-hue]')].map(card => Math.round(card.getBoundingClientRect().left))).size);
 for (const [width, expected] of [[320, 1], [390, 1], [768, 2], [1024, 3], [1440, 4]]) {
   await homePage.setViewportSize({ width, height: 900 });
   await settled(homePage, { label: `the tiles to lay out at ${width}` });
@@ -1761,8 +1761,8 @@ await makeGateTask('Gate medium task', 1, { priority: 'medium', description: 'Wr
 await makeGateTask('Gate landed task', 3, { priority: 'low', checklist: [{ text: 'a', completed: true }] });
 const gateBoardUrl = `${FRONT}/board/${gateBoardData._id}`;
 
-const signIn = async context => {
-  const pg = await context.newPage();
+const signIn = async browserContext => {
+  const pg = await browserContext.newPage();
   await pg.goto(`${FRONT}/login`);
   await pg.locator('form').first().getByLabel('Email address', { exact: true }).fill(gateUser.email);
   await pg.locator('form').first().getByLabel('Password', { exact: true }).fill(gateUser.password);
@@ -1953,7 +1953,7 @@ const held = pg =>
     const litStyle = lit[0] && getComputedStyle(lit[0]);
     const overlay = [...document.querySelectorAll('[data-task-card][aria-hidden="true"]')][0];
     const overlayStyle = overlay && getComputedStyle(overlay);
-    const collapsed = [...document.querySelectorAll('[data-task-card]:not([aria-hidden])')].filter(card => card.offsetHeight === 0);
+    const noRoom = [...document.querySelectorAll('[data-task-card]:not([aria-hidden])')].filter(card => card.offsetHeight === 0);
     return {
       gap: gap && {
         height: Math.round(gap.getBoundingClientRect().height),
@@ -1968,7 +1968,7 @@ const held = pg =>
       litBackground: litStyle?.backgroundColor,
       litBorder: litStyle?.borderTopColor,
       overlay: overlay && { rotate: overlayStyle.rotate, scale: overlayStyle.scale, hidden: overlay.getAttribute('aria-hidden') },
-      collapsed: collapsed.map(card => card.querySelector('h3').textContent),
+      collapsed: noRoom.map(card => card.querySelector('h3').textContent),
     };
   });
 
@@ -2083,13 +2083,13 @@ const doneItem = await taskModal.getByRole('textbox', { name: 'Checklist item 1'
 check('a finished checklist item is struck through in the secondary ink', `${doneItem.decoration} ${await paintOf(boardPage, doneItem.color) === await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-secondary'))}`, 'line-through true');
 
 // Targets and rings, measured at rest.
-const targetSizes = await taskModal.evaluate(dialog => {
+const targetSizes = await taskModal.evaluate(modal => {
   const size = el => [Math.round(el.offsetWidth), Math.round(el.offsetHeight)].join('x');
   return {
-    close: size(dialog.querySelector('button[aria-label="Close"]')),
-    save: size(dialog.querySelector('button[type="submit"]')),
-    blow: size([...dialog.querySelectorAll('button')].find(b => /blow it away/i.test(b.textContent))),
-    owner: size(dialog.querySelector('[role="combobox"]')),
+    close: size(modal.querySelector('button[aria-label="Close"]')),
+    save: size(modal.querySelector('button[type="submit"]')),
+    blow: size([...modal.querySelectorAll('button')].find(b => /blow it away/i.test(b.textContent))),
+    owner: size(modal.querySelector('[role="combobox"]')),
   };
 });
 check('the close button is a 36 pixel disc', targetSizes.close, '36x36');
@@ -2097,15 +2097,15 @@ check('Done and Blow it away are 44 pixels tall', `${targetSizes.save.split('x')
 {
   // The footer is a "Blow it away" on the left and one dark "Done" on the right,
   // and nothing else: no Cancel, no Save.
-  const footer = await taskModal.evaluate(dialog => {
-    const done = dialog.querySelector('button[type="submit"]');
+  const footer = await taskModal.evaluate(modal => {
+    const done = modal.querySelector('button[type="submit"]');
     const row = done.parentElement;
     const buttons = [...row.querySelectorAll('button')];
     const blow = buttons.find(b => /blow it away/i.test(b.textContent));
     return {
       labels: buttons.map(b => b.textContent.trim()).join('|'),
       blowLeftOfDone: blow.getBoundingClientRect().right < done.getBoundingClientRect().left,
-      doneAtRight: Math.round(dialog.getBoundingClientRect().right - done.getBoundingClientRect().right),
+      doneAtRight: Math.round(modal.getBoundingClientRect().right - done.getBoundingClientRect().right),
       bg: getComputedStyle(done).backgroundColor,
       blowBg: getComputedStyle(blow).backgroundColor,
     };
@@ -2235,17 +2235,17 @@ await calmPage.goto(`${FRONT}/login`);
 await calmPage.waitForSelector('form');
 
 const collapsed = await calmPage.evaluate(() => {
-  const probe = document.createElement('div');
-  probe.style.transition = 'opacity 2s';
-  probe.style.animation = 'spin 3s linear infinite';
-  document.body.appendChild(probe);
-  const style = getComputedStyle(probe);
+  const sample = document.createElement('div');
+  sample.style.transition = 'opacity 2s';
+  sample.style.animation = 'spin 3s linear infinite';
+  document.body.appendChild(sample);
+  const style = getComputedStyle(sample);
   const out = {
     transition: Number.parseFloat(style.transitionDuration) * (style.transitionDuration.endsWith('ms') ? 1 : 1000),
     animation: Number.parseFloat(style.animationDuration) * (style.animationDuration.endsWith('ms') ? 1 : 1000),
     iterations: style.animationIterationCount,
   };
-  probe.remove();
+  sample.remove();
   return out;
 });
 check('a 2s transition collapses to under 1ms', collapsed.transition < 1, true);
@@ -2269,13 +2269,13 @@ const animationTokens = await calmPage.evaluate(() =>
     'bb-sway',
     'bb-toast',
   ].map(name => {
-    const probe = document.createElement('div');
-    probe.style.animation = `var(--animate-${name})`;
-    document.body.appendChild(probe);
-    const style = getComputedStyle(probe);
+    const sample = document.createElement('div');
+    sample.style.animation = `var(--animate-${name})`;
+    document.body.appendChild(sample);
+    const style = getComputedStyle(sample);
     const duration = Number.parseFloat(style.animationDuration) * (style.animationDuration.endsWith('ms') ? 1 : 1000);
     const out = [name, style.animationName, duration, style.animationIterationCount];
-    probe.remove();
+    sample.remove();
     return out;
   })
 );
@@ -2324,8 +2324,8 @@ log('\n--- the task modal: its entrance with motion on and reduced, and the laye
 // Under reduced motion the same initial values are there for that first frame
 // and the transform collapses to its rest value, not played over 350
 // milliseconds, so the series holds at most the initial transform and rest.
-const modalPage = async (reducedMotion, viewport) => {
-  const modalContext = await browser.newContext({ viewport, reducedMotion });
+const modalPage = async (reducedMotion, size) => {
+  const modalContext = await browser.newContext({ viewport: size, reducedMotion });
   const pg = await signIn(modalContext);
   await pg.goto(gateBoardUrl);
   await pg.getByRole('region', { name: 'Board columns' }).waitFor();
@@ -2342,7 +2342,7 @@ const sampleModalOpening = async pg => {
 
 /** The translation along y of a `matrix(...)`, and the scale along x. */
 const matrixOf = transform => {
-  const parts = transform.match(/matrix\(([^)]+)\)/)?.[1].split(',').map(Number);
+  const parts = /matrix\(([^)]+)\)/.exec(transform)?.[1].split(',').map(Number);
   return parts ? { scale: parts[0], ty: parts[5] } : { scale: 1, ty: 0 };
 };
 
@@ -2357,9 +2357,9 @@ const sampleLeaving = pg =>
   pg.evaluate(
     limit =>
       new Promise(resolve => {
-        const panel = document.querySelector('[role="dialog"]');
-        const wrapper = panel.parentElement;
-        const scrim = panel.previousElementSibling;
+        const leavingPanel = document.querySelector('[role="dialog"]');
+        const wrapper = leavingPanel.parentElement;
+        const scrim = leavingPanel.previousElementSibling;
         const box = document.querySelector('[data-task-card]').getBoundingClientRect();
         const read = () => {
           const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
@@ -2367,7 +2367,7 @@ const sampleLeaving = pg =>
             stillMounted: wrapper.isConnected,
             wrapper: getComputedStyle(wrapper).pointerEvents,
             scrim: getComputedStyle(scrim).pointerEvents,
-            panel: getComputedStyle(panel).pointerEvents,
+            panel: getComputedStyle(leavingPanel).pointerEvents,
             hitIsInsideWrapper: wrapper.contains(hit),
             hitIsTheCard: Boolean(hit?.closest('[data-task-card]')),
           };
@@ -2529,7 +2529,7 @@ for (const [mode, reducedMotion, breeze] of [
   await settled(pg, { label: 'the board to stop animating before a card is blown away' });
 
   const before = await columnTitles(pg);
-  const topId = await pg.locator('[data-task-card]', { hasText: top }).getAttribute('data-task-card');
+  const topId = await pg.locator('[data-task-card]', { hasText: top }).evaluate(card => card.dataset.taskCard);
   check(`${mode}: the card to be blown away is the one the server made`, topId, topCreated._id);
 
   await pg.getByRole('button', { name: top, exact: true }).click();
@@ -2549,11 +2549,11 @@ for (const [mode, reducedMotion, breeze] of [
   if (reducedMotion === 'reduce') {
     const seconds = Number.parseFloat(exit.first?.duration) * (String(exit.first?.duration).endsWith('ms') ? 0.001 : 1);
     check(`${mode}: the exit collapses to under a millisecond`, seconds < 0.001, true);
-    check(`${mode}: and still reports its end`, `${exit.ended?.name} ${exit.ended !== null && exit.ended.elapsed < 0.001}`, 'bbAway true');
+    check(`${mode}: and still reports its end`, `${exit.ended?.name} ${exit.ended?.elapsed < 0.001}`, 'bbAway true');
   } else {
     check(`${mode}: the exit is 460 milliseconds long`, exit.first?.duration, '0.46s');
     check(`${mode}: the picture lifts off and fades while it plays`, exit.frames.some(f => f.opacity < 1 && f.transform !== 'none'), true);
-    check(`${mode}: it runs the whole animation before it reports its end`, `${exit.ended?.name} ${exit.ended !== null && exit.ended.elapsed >= 0.45 && exit.ended.elapsed <= 0.47}`, 'bbAway true');
+    check(`${mode}: it runs the whole animation before it reports its end`, `${exit.ended?.name} ${exit.ended?.elapsed >= 0.45 && exit.ended?.elapsed <= 0.47}`, 'bbAway true');
     check(`${mode}: the Catch it toast is on screen while the card is still leaving`, exit.frames.some(f => f.toast), true);
   }
   // The picture leaves when its animation ends, however long the page took to
@@ -2572,7 +2572,7 @@ for (const [mode, reducedMotion, breeze] of [
   await pg.getByRole('button', { name: top, exact: true }).waitFor();
   const after = await columnTitles(pg);
   check(`${mode}: Catch it puts the card back in place`, after.join('|'), before.join('|'));
-  check(`${mode}: and it is the same card, with the same id`, await pg.locator('[data-task-card]', { hasText: top }).getAttribute('data-task-card'), topId);
+  check(`${mode}: and it is the same card, with the same id`, await pg.locator('[data-task-card]', { hasText: top }).evaluate(card => card.dataset.taskCard), topId);
   const stored = await page.request.get(`${API}/tasks/${topId}`, homeAuth);
   check(`${mode}: the server has the same task, with its own creation date`, `${stored.status()} ${(await stored.json()).data?.createdAt === topCreated.createdAt}`, '200 true');
   await exitContext.close();

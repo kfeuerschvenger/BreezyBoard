@@ -67,7 +67,7 @@ check(
 
 if (sawToastAt !== null) {
   const text = await toast.first().innerText();
-  log(`\n  toast text: ${JSON.stringify(text.replace(/\\n/g, ' / '))}`);
+  log(`\n  toast text: ${JSON.stringify(text.replaceAll(/\\n/g, ' / '))}`);
   const action = page.getByRole('button', { name: /stay signed in/i });
   const hasAction = await action.count();
   check('the warning carries an action', hasAction > 0);

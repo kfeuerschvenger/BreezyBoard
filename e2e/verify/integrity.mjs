@@ -14,10 +14,10 @@
 const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
 const log = (...a) => console.log(...a);
 
-const req = async (method, path, token, body) => {
+const req = async (method, path, bearer, body) => {
   const r = await fetch(API + path, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   return { status: r.status, body: await r.json().catch(() => null) };
@@ -165,7 +165,7 @@ check(
 // A neighbour that has moved since the client last looked is a conflict the
 // client can recover from by refetching, not a malformed request.
 await req('PATCH', `/tasks/${taskIds[0]}/move`, token, {
-  status: boardColumns[boardColumns.length - 1]._id,
+  status: boardColumns.at(-1)._id,
   afterId: null,
   beforeId: null,
 });

@@ -9,10 +9,10 @@ const check = (label, ok, detail = '') => {
   log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? '  :: ' + detail : ''}`);
 };
 
-const req = async (method, path, token, body) => {
+const req = async (method, path, bearer, body) => {
   const response = await fetch(API + path, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   return { status: response.status, body: await response.json().catch(() => ({})) };

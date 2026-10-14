@@ -7,13 +7,13 @@ const check = (label, ok, detail = '') => {
   log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? '  :: ' + detail : ''}`);
 };
 
-const call = async (base, path, token, opts = {}) => {
+const call = async (base, path, bearer, opts = {}) => {
   const res = await fetch(base + path, {
     method: opts.method ?? 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers ?? {}),
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+      ...opts.headers,
     },
     ...(opts.body ? { body: JSON.stringify(opts.body) } : {}),
   });
