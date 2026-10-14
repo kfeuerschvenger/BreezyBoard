@@ -117,6 +117,34 @@ describe('TaskDrawer submit gating', () => {
     await waitFor(() => expect(getSaveButton()).toBeEnabled());
   });
 
+  // A card made from a column composer has a title and an owner and no
+  // description. It has to open ready to save and save as it is.
+  it('opens a task that has no description ready to save, and saves it', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const titleOnly = {
+      _id: 'task-1',
+      boardId: 'board-1',
+      status: 'col-todo',
+      title: 'Pack the stove',
+      owner: MEMBERS[0],
+      color: '#3B82F6',
+    };
+    renderWithQuery(<TaskDrawer open task={titleOnly} onClose={vi.fn()} onSave={onSave} />);
+    await waitForColorsLoaded();
+
+    expect(getDescriptionInput()).not.toBeRequired();
+    expect(getDescriptionInput()).toHaveValue('');
+    await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+    await user.click(getSaveButton());
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ _id: 'task-1', title: 'Pack the stove', description: '' })),
+    );
+    expect(screen.queryByText('Description is required')).not.toBeInTheDocument();
+  });
+
   it('disables Save again after selecting an owner and then clearing it', async () => {
     const user = userEvent.setup();
     renderDrawer();

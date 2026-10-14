@@ -9,6 +9,7 @@ import { useColors } from '@/features/colors';
 import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
 import { IconPlus } from '@tabler/icons-react';
 import { Button, LoadingScreen, Icon } from '@/shared/ui';
+import { useAuth } from '@/hooks/useAuth';
 import { ShellAction } from '@/app/layouts/shell/ShellAction';
 import NotFound from './NotFound';
 
@@ -20,6 +21,7 @@ const Board = () => {
   // Changes each time something asks for the first column's composer.
   const [composerRequest, setComposerRequest] = useState(0);
 
+  const { user } = useAuth();
   const { board, columns, tasks, taskColors, cache, isLoading, error, notFound } = useBoardData(boardId);
   const { data: taskPalette } = useColors('task');
 
@@ -37,17 +39,24 @@ const Board = () => {
   const requestComposer = () => setComposerRequest(count => count + 1);
 
   /**
-   * Adds a card from a column's composer: a title and nothing else. The server
-   * needs a colour, so the first of the task palette is sent, as the task form
-   * preselects it. It rejects when the card could not be saved and the
-   * composer keeps what was typed.
+   * Adds a card from a column's composer: a title, and its author as the
+   * owner, since whoever types a card is the person who has it in hand. The
+   * description is optional and is left empty. The server needs a colour, so
+   * the first of the task palette is sent, as the task form preselects it. It
+   * rejects when the card could not be saved and the composer keeps what was
+   * typed.
    */
   const createTask = async (columnId: string, title: string): Promise<Task> => {
     if (!boardId) throw new Error('No board was specified in the address.');
     const color = taskPalette?.[0]?._id;
     if (!color) throw new Error('The task colours have not loaded.');
 
-    const created = await TaskService.create(boardId, { title, status: columnId, color });
+    const created = await TaskService.create(boardId, {
+      title,
+      status: columnId,
+      color,
+      ...(user && { owner: user._id }),
+    });
     cache.write([...(cache.read() ?? []), created]);
     return created;
   };

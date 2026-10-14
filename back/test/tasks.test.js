@@ -32,6 +32,49 @@ describe('tasks', () => {
     expect(res.body.data.boardId).toBe(board._id);
   });
 
+  // A card typed into a column composer is a title and its author, nothing
+  // else. The description is optional everywhere, so none is stored and none
+  // is invented.
+  test('create accepts a title and an owner with no description', async () => {
+    const res = await request(app)
+      .post(`/api/tasks/board/${board._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({
+        title: 'Pack the stove',
+        status: columns[0]._id.toString(),
+        color: colors.taskColor._id.toString(),
+        owner: owner.user._id,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.owner._id).toBe(owner.user._id);
+    expect(res.body.data.description).toBeUndefined();
+  });
+
+  test('a task with no description can be read, saved again and have a description cleared', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id, { title: 'Title only' });
+
+    const saved = await request(app)
+      .put(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ title: 'Title only, renamed', description: '' });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data.description).toBe('');
+
+    const written = await request(app)
+      .put(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ description: 'Now there is some' });
+    expect(written.body.data.description).toBe('Now there is some');
+
+    const cleared = await request(app)
+      .put(`/api/tasks/${task._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ description: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.description).toBe('');
+  });
+
   test('create refuses a status that is not a column of this board', async () => {
     const res = await request(app)
       .post(`/api/tasks/board/${board._id}`)

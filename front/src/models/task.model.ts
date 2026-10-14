@@ -3,7 +3,8 @@ import type { Color, User } from '@/models';
 export interface Task {
   _id: string;
   title: string;
-  description: string;
+  /** Optional: a task created from a column composer has only a title. */
+  description?: string;
   status: string;
   priority: 'low' | 'medium' | 'high';
   color: Color | string;
