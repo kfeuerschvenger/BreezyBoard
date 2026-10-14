@@ -14,6 +14,12 @@ vi.mock('@/services', () => ({
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
 }));
 
+// The page asks who is signed in, to make them the owner of a card they add,
+// and it is rendered here without an AuthProvider.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ isAuthenticated: true, loading: false, user: null }),
+}));
+
 const board: BoardModel = {
   _id: 'board-1',
   title: 'Launch Plan',
