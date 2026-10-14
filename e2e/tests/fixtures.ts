@@ -109,11 +109,21 @@ export async function addCard(page: Page, columnTitle: string, title: string): P
   await expect(page.getByRole('heading', { name: title, level: 3 })).toBeVisible();
 }
 
-/** Reads the count badge rendered next to a column title. */
+/**
+ * Reads the count badge rendered next to a column title, or -1 when the board
+ * has no such column.
+ *
+ * It reads the column's own header, never the page's text: a dialog that is
+ * still leaving can hold the same words (the create board dialog lists the
+ * template columns), and since a leaving dialog no longer catches the pointer
+ * it can still be on screen when the next step runs.
+ */
 export async function columnCount(page: Page, columnTitle: string): Promise<number> {
-  const text = await page.locator('body').innerText();
-  const escaped = columnTitle.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-  const match = new RegExp(String.raw`${escaped}\s+(\d+)`).exec(text);
+  const heading = page.getByRole('heading', { level: 2, name: columnTitle, exact: true });
+  if ((await heading.count()) === 0) return -1;
+
+  const text = await heading.first().locator('..').innerText();
+  const match = /(\d+)\s*$/.exec(text);
   return match ? Number(match[1]) : -1;
 }
 
