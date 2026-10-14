@@ -183,14 +183,16 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
     <div className="relative">
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Icon as={IconUser} size={16} className="text-gray-400" />
+          <Icon as={IconUser} size={16} className="text-ink-tertiary" />
         </div>
         <input
           type="text"
           value={searchTerm}
           onChange={event => handleInputChange(event.target.value)}
           placeholder="Search team members..."
-          className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className={`h-12 w-full rounded-field border-[1.5px] bg-surface pl-10 pr-11 text-[15px] text-ink transition-[border-color,box-shadow] duration-200 placeholder:text-ink-tertiary focus:border-focus focus:shadow-focus focus:outline-none ${
+            controlProps?.['aria-invalid'] ? 'border-danger' : 'border-line-control'
+          }`}
           role="combobox"
           aria-expanded={suggestions.length > 0}
           aria-controls={listboxId}
@@ -203,7 +205,7 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
           <button
             type="button"
             onClick={handleClear}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+            className="focus-ring absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center rounded-field text-ink-secondary hover:text-ink"
             aria-label="Clear selected user"
           >
             <Icon as={IconX} size={16} />
@@ -216,7 +218,7 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
           id={listboxId}
           role="listbox"
           aria-label="Matching team members"
-          className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+          className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-control border border-line-12 bg-surface shadow-tile-hover"
         >
           {suggestions.map((user, index) => (
             // The option carries the click handler and the role, and the
@@ -237,18 +239,24 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
               id={optionId(index)}
               role="option"
               aria-selected={index === activeIndex}
-              className={`p-3 cursor-pointer flex items-center gap-3 ${
-                index === activeIndex ? 'bg-blue-50' : 'hover:bg-gray-100'
+              className={`flex cursor-pointer items-center gap-3 p-3 ${
+                index === activeIndex ? 'bg-sky-tint' : 'hover:bg-line-06'
               }`}
               onClick={() => handleSelectUser(user)}
               onMouseEnter={() => setActiveIndex(index)}
             >
-              <Avatar name={`${user.firstName ?? ''} ${user.lastName ?? ''}`} src={user.avatar} size="sm" decorative />
+              <Avatar
+                name={`${user.firstName ?? ''} ${user.lastName ?? ''}`}
+                src={user.avatar}
+                seed={user._id}
+                size="sm"
+                decorative
+              />
               <div>
-                <p className="font-medium">
+                <p className="font-medium text-ink">
                   {user.firstName} {user.lastName}
                 </p>
-                <p className="text-sm text-gray-600">{user.email}</p>
+                <p className="text-sm text-ink-secondary">{user.email}</p>
               </div>
             </li>
           ))}
@@ -256,8 +264,8 @@ export const UserPicker: React.FC<UserPickerProps> = ({ value, onChange, members
       )}
 
       {(isFiltering || isFetchingOwner) && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-3">
-          <p className="text-gray-600 text-center">Searching users...</p>
+        <div className="absolute z-10 mt-1 w-full rounded-control border border-line-12 bg-surface p-3 shadow-tile-hover">
+          <p className="text-center text-ink-secondary">Searching users...</p>
         </div>
       )}
     </div>

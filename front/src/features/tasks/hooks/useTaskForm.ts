@@ -41,6 +41,8 @@ export interface UseTaskFormResult {
   submitError: string | null;
   setField: <K extends keyof TaskFormValues>(name: K, value: TaskFormValues[K]) => void;
   handleSubmit: (event: React.FormEvent) => void;
+  /** Removes the stored draft, for a task that is gone and has nothing left to be a draft of. */
+  discardDraft: () => void;
 }
 
 const EMPTY_VALUES: TaskFormValues = {
@@ -108,7 +110,7 @@ export function useTaskForm({
   const awaitingHydration = useRef(false);
 
   // Persists an in-progress edit across a reload or an accidental close.
-  // Gated to null while the drawer is closed so nothing is read or written
+  // Gated to null while the modal is closed so nothing is read or written
   // for a form nobody has open.
   const draftKey = open ? `task:${task?._id ?? 'new:' + (task?.boardId ?? 'unknown')}` : null;
   const draft = useDraft<TaskFormValues>(draftKey);
@@ -247,9 +249,11 @@ export function useTaskForm({
       };
 
       if (task && task._id) {
+        // A saved task keeps the column it is in now, which the form does not
+        // edit: it can have been moved from "Move to" while the form was open,
+        // and the copy this form was built from would put it back.
         payload._id = task._id;
         payload.boardId = task.boardId;
-        payload.status = task.status;
       } else if (task) {
         payload.boardId = task.boardId;
         payload.status = task.status;
@@ -267,7 +271,7 @@ export function useTaskForm({
     }
   };
 
-  return { values, errors, isValid, isSubmitting, submitError, setField, handleSubmit };
+  return { values, errors, isValid, isSubmitting, submitError, setField, handleSubmit, discardDraft: draft.clear };
 }
 
 export default useTaskForm;

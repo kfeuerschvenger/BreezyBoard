@@ -51,7 +51,7 @@ const CENTER_PANEL = 'mx-4 max-h-[85dvh] rounded-modal';
 
 // A sheet spans the screen and has square lower corners, so it sits flush
 // against the bottom edge. Its footer pads for the home indicator through
-// `safe-area-inset-bottom`, as the drawer's did.
+// `safe-area-inset-bottom`, so its last button clears the bar.
 const SHEET_PANEL = 'mx-0 max-h-[90dvh] rounded-t-modal rounded-b-none md:mx-4 md:max-h-[85dvh] md:rounded-modal';
 
 export interface ModalCloseProps {

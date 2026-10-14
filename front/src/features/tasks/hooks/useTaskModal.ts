@@ -4,7 +4,7 @@ import { useColors } from '@/features/colors';
 import { useTaskForm } from './useTaskForm';
 import type { TaskColorOption, UseTaskFormResult } from './useTaskForm';
 
-export interface UseTaskDrawerOptions {
+export interface UseTaskModalOptions {
   open: boolean;
   task: Partial<Task> | null;
   onSave: (task: Partial<Task>) => Promise<void>;
@@ -12,7 +12,7 @@ export interface UseTaskDrawerOptions {
   onSaved: () => void;
 }
 
-export interface UseTaskDrawerResult extends UseTaskFormResult {
+export interface UseTaskModalResult extends UseTaskFormResult {
   colors: TaskColorOption[];
   members: UserModel[];
   isLoadingColors: boolean;
@@ -25,15 +25,15 @@ const NO_COLORS: TaskColorOption[] = [];
 const NO_MEMBERS: UserModel[] = [];
 
 /**
- * Everything the task drawer needs, in one call: the two reference lists it
+ * Everything the task modal needs, in one call: the two reference lists it
  * reads and the form state machine they feed.
  *
- * It exists so the drawer itself is composition and nothing else. The lint
+ * It exists so the modal itself is composition and nothing else. The lint
  * rule that keeps components off the network is the same argument one level
  * up: which lists the form needs, and how they are keyed, is a question about
  * the feature rather than about the markup.
  */
-export function useTaskDrawer({ open, task, onSave, onSaved }: UseTaskDrawerOptions): UseTaskDrawerResult {
+export function useTaskModal({ open, task, onSave, onSaved }: UseTaskModalOptions): UseTaskModalResult {
   const { data: colors = NO_COLORS, isPending: isLoadingColors } = useColors('task');
   const { data: members = NO_MEMBERS } = useBoardMembers(task?.boardId);
 
@@ -42,4 +42,4 @@ export function useTaskDrawer({ open, task, onSave, onSaved }: UseTaskDrawerOpti
   return { ...form, colors, members, isLoadingColors };
 }
 
-export default useTaskDrawer;
+export default useTaskModal;

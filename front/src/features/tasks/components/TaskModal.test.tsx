@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
-import TaskDrawer from './TaskDrawer';
+import TaskModal from './TaskModal';
 import { ColorService, UserService } from '@/services';
 import type { Color, User } from '@/models';
 
-// TaskDrawer is the highest value target here: a year-long regression made
+// TaskModal is the highest value target here: a year-long regression made
 // task creation impossible because the submit gate counted error object
 // keys instead of error values. Selecting an owner cleared the owner error
 // by writing `undefined` over the existing key, which kept the key around,
@@ -18,9 +18,9 @@ vi.mock('@/services', () => ({
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
 }));
 
-// TaskDrawer now autosaves a draft to localStorage as the user types (see the
+// TaskModal now autosaves a draft to localStorage as the user types (see the
 // draft-persistence describe block below). Without this, a draft written by
-// one test would leak into the next test that opens the drawer for the same
+// one test would leak into the next test that opens the modal for the same
 // task/boardId and get restored, silently changing that test's starting form
 // state.
 afterEach(() => {
@@ -44,7 +44,7 @@ const MEMBERS: User[] = [
 // neither label carries an htmlFor/id pointing at its input, and neither
 // input has an aria-label either, so the input has no accessible name at
 // all. getByRole with a name would fail here; placeholder text is the only
-// reliable query. This is an accessibility gap in TaskDrawer worth fixing.
+// reliable query. This is an accessibility gap in TaskModal worth fixing.
 const getTitleInput = () => screen.getByPlaceholderText('Enter task title');
 const getDescriptionInput = () => screen.getByPlaceholderText('Enter task description');
 const getSaveButton = () => screen.getByRole('button', { name: 'Save Changes' });
@@ -63,9 +63,9 @@ const waitForColorsLoaded = async () => {
   return swatch;
 };
 
-const renderDrawer = (onSave = vi.fn()) => {
+const renderModal = (onSave = vi.fn()) => {
   const onClose = vi.fn();
-  renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+  renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
   return { onSave, onClose };
 };
 
@@ -78,15 +78,15 @@ const selectOwner = async (user: ReturnType<typeof userEvent.setup>, name: strin
   await user.click(await screen.findByText('Ada Lovelace', {}, { timeout: 15_000 }));
 };
 
-describe('TaskDrawer submit gating', () => {
+describe('TaskModal submit gating', () => {
   beforeEach(() => {
     mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
     mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
     mockedUserService.getById.mockReset();
   });
 
-  it('disables Save when the drawer opens with an empty form', async () => {
-    renderDrawer();
+  it('disables Save when the modal opens with an empty form', async () => {
+    renderModal();
 
     await waitForColorsLoaded();
 
@@ -95,7 +95,7 @@ describe('TaskDrawer submit gating', () => {
 
   it('enables Save once title, description, owner and color are all provided', async () => {
     const user = userEvent.setup();
-    renderDrawer();
+    renderModal();
     await waitForColorsLoaded();
 
     await user.type(getTitleInput(), 'Ship the release notes');
@@ -110,7 +110,7 @@ describe('TaskDrawer submit gating', () => {
     // it fails.
     await selectOwner(user, 'Ada');
 
-    // The owner selection triggers two chained state updates (TaskDrawer's
+    // The owner selection triggers two chained state updates (TaskModal's
     // formData/errors, then UserSearchInput's own effect reacting to the
     // new `value` prop); waitFor absorbs that extra render tick instead of
     // asserting against a single, possibly-stale, render.
@@ -130,7 +130,7 @@ describe('TaskDrawer submit gating', () => {
       owner: MEMBERS[0],
       color: '#3B82F6',
     };
-    renderWithQuery(<TaskDrawer open task={titleOnly} onClose={vi.fn()} onSave={onSave} />);
+    renderWithQuery(<TaskModal open task={titleOnly} onClose={vi.fn()} onSave={onSave} />);
     await waitForColorsLoaded();
 
     expect(getDescriptionInput()).not.toBeRequired();
@@ -147,7 +147,7 @@ describe('TaskDrawer submit gating', () => {
 
   it('disables Save again after selecting an owner and then clearing it', async () => {
     const user = userEvent.setup();
-    renderDrawer();
+    renderModal();
     await waitForColorsLoaded();
 
     await user.type(getTitleInput(), 'Ship the release notes');
@@ -161,10 +161,10 @@ describe('TaskDrawer submit gating', () => {
     await waitFor(() => expect(getSaveButton()).toBeDisabled());
   });
 
-  it('shows an error message and keeps the drawer open when onSave rejects', async () => {
+  it('shows an error message and keeps the modal open when onSave rejects', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockRejectedValue(new Error('network down'));
-    const { onClose } = renderDrawer(onSave);
+    const { onClose } = renderModal(onSave);
     await waitForColorsLoaded();
 
     await user.type(getTitleInput(), 'Ship the release notes');
@@ -183,7 +183,7 @@ describe('TaskDrawer submit gating', () => {
 });
 
 
-describe('TaskDrawer form state versus the async color fetch', () => {
+describe('TaskModal form state versus the async color fetch', () => {
   beforeEach(() => {
     mockedColorService.getByType.mockReset();
     mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
@@ -203,7 +203,7 @@ describe('TaskDrawer form state versus the async color fetch', () => {
     );
 
     const user = userEvent.setup();
-    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
 
     // Let the mount effects settle. The colors request is still pending on
     // purpose: this test types into the form before it resolves.
@@ -233,7 +233,7 @@ describe('TaskDrawer form state versus the async color fetch', () => {
     );
 
     renderWithQuery(
-      <TaskDrawer
+      <TaskModal
         open
         task={{ _id: 'task-1', boardId: 'board-1', title: 'Existing', description: 'Existing', color: '#EF4444' }}
         onClose={vi.fn()}
@@ -255,7 +255,7 @@ describe('TaskDrawer form state versus the async color fetch', () => {
   });
 });
 
-describe('TaskDrawer draft persistence', () => {
+describe('TaskModal draft persistence', () => {
   beforeEach(() => {
     window.localStorage.clear();
     mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
@@ -281,7 +281,7 @@ describe('TaskDrawer draft persistence', () => {
       })
     );
 
-    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     expect(getTitleInput()).toHaveValue('Draft title');
@@ -292,7 +292,7 @@ describe('TaskDrawer draft persistence', () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
-    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
     await waitForColorsLoaded();
 
     await user.type(getTitleInput(), 'Ship the release notes');
@@ -312,7 +312,7 @@ describe('TaskDrawer draft persistence', () => {
   });
 });
 
-describe('TaskDrawer owner suggestions, by keyboard alone', () => {
+describe('TaskModal owner suggestions, by keyboard alone', () => {
   beforeEach(() => {
     mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
     mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
@@ -324,7 +324,7 @@ describe('TaskDrawer owner suggestions, by keyboard alone', () => {
   // near-identical list in AddMemberModal already did this correctly, which
   // is usually the sign that the pattern was known and this one was missed.
   const openSuggestions = async (user: ReturnType<typeof userEvent.setup>, query = 'Ada') => {
-    renderDrawer();
+    renderModal();
     await waitForColorsLoaded();
 
     const combobox = screen.getByLabelText(/Owner/);
@@ -411,7 +411,7 @@ describe('TaskDrawer owner suggestions, by keyboard alone', () => {
 // Choosing the title is the only decision the shell keeps after that split,
 // and nothing pinned it, so the split could have dropped it and left every
 // other test in this file green.
-describe('TaskDrawer title', () => {
+describe('TaskModal title', () => {
   beforeEach(() => {
     window.localStorage.clear();
     mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
@@ -423,14 +423,14 @@ describe('TaskDrawer title', () => {
   // which is both what assistive technology announces and the thing section
   // 10.2 records as having been missing here.
   it('announces a task with no id as a creation', async () => {
-    renderWithQuery(<TaskDrawer open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
 
     expect(await screen.findByRole('dialog', { name: 'Create New Task' })).toBeInTheDocument();
   });
 
   it('announces a task that already exists as an edit', async () => {
     renderWithQuery(
-      <TaskDrawer
+      <TaskModal
         open
         task={{ _id: 'task-1', boardId: 'board-1', title: 'Existing' }}
         onClose={vi.fn()}
@@ -442,7 +442,7 @@ describe('TaskDrawer title', () => {
   });
 });
 
-describe('TaskDrawer reference data fetching', () => {
+describe('TaskModal reference data fetching', () => {
   beforeEach(() => {
     window.localStorage.clear();
     mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
@@ -451,16 +451,16 @@ describe('TaskDrawer reference data fetching', () => {
   });
 
   // The palette of task colours is the same list for every task in the
-  // product. Refetching it each time the drawer is pointed at a different
+  // product. Refetching it each time the modal is pointed at a different
   // task is a request that can never return anything new, and on a board
   // being worked through task by task it is one such request per open.
   it('fetches the task colours once across two tasks', async () => {
     const { rerender } = renderWithQuery(
-      <TaskDrawer open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
+      <TaskModal open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
     );
     await waitForColorsLoaded();
 
-    rerender(<TaskDrawer open task={{ _id: 'task-2', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    rerender(<TaskModal open task={{ _id: 'task-2', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     expect(mockedColorService.getByType).toHaveBeenCalledTimes(1);
@@ -470,11 +470,11 @@ describe('TaskDrawer reference data fetching', () => {
   // so moving between two tasks of that board asks for a list already held.
   it('fetches the board members once across two tasks of the same board', async () => {
     const { rerender } = renderWithQuery(
-      <TaskDrawer open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
+      <TaskModal open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
     );
     await waitForColorsLoaded();
 
-    rerender(<TaskDrawer open task={{ _id: 'task-2', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    rerender(<TaskModal open task={{ _id: 'task-2', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     expect(mockedUserService.getBoardMembers).toHaveBeenCalledTimes(1);
@@ -483,13 +483,13 @@ describe('TaskDrawer reference data fetching', () => {
 
   // The counterpart, so the test above cannot be satisfied by never fetching
   // again at all: a different board is a different list and must be asked for.
-  it('fetches the members again when the drawer moves to another board', async () => {
+  it('fetches the members again when the modal moves to another board', async () => {
     const { rerender } = renderWithQuery(
-      <TaskDrawer open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
+      <TaskModal open task={{ _id: 'task-1', boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />
     );
     await waitForColorsLoaded();
 
-    rerender(<TaskDrawer open task={{ _id: 'task-2', boardId: 'board-2' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    rerender(<TaskModal open task={{ _id: 'task-2', boardId: 'board-2' }} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     await waitFor(() => expect(mockedUserService.getBoardMembers).toHaveBeenCalledWith('board-2'));
@@ -499,9 +499,168 @@ describe('TaskDrawer reference data fetching', () => {
   // A task with no board yet has no member list to ask for, and asking would
   // be a request with an undefined id in the query string.
   it('asks for no members at all when the task has no board', async () => {
-    renderWithQuery(<TaskDrawer open task={{}} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskModal open task={{}} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     expect(mockedUserService.getBoardMembers).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskModal on a task that exists', () => {
+  const COLUMNS = [
+    { id: 'col-todo', title: 'To Do' },
+    { id: 'col-doing', title: 'In motion' },
+    { id: 'col-done', title: 'Landed' },
+  ];
+
+  const EXISTING = {
+    _id: 'task-1',
+    boardId: 'board-1',
+    status: 'col-todo',
+    title: 'Pack the stove',
+    description: 'Before the trek.',
+    owner: MEMBERS[0],
+    color: '#3B82F6',
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    mockedColorService.getByType.mockReset().mockResolvedValue(COLORS);
+    mockedUserService.getBoardMembers.mockReset().mockResolvedValue(MEMBERS);
+    mockedUserService.getById.mockReset();
+  });
+
+  const renderExisting = (props: Partial<React.ComponentProps<typeof TaskModal>> = {}) => {
+    const handlers = { onClose: vi.fn(), onSave: vi.fn().mockResolvedValue(undefined), onMove: vi.fn(), onDelete: vi.fn() };
+    handlers.onDelete.mockResolvedValue(undefined);
+    renderWithQuery(
+      <TaskModal
+        open
+        task={EXISTING}
+        boardTitle="Launch Plan"
+        hue="teal"
+        columns={COLUMNS}
+        columnId="col-doing"
+        {...handlers}
+        {...props}
+      />,
+    );
+    return handlers;
+  };
+
+  describe('the header strip', () => {
+    it('says where the task is, and keeps a named close button out of the decoration', async () => {
+      const { onClose } = renderExisting();
+      await waitForColorsLoaded();
+
+      const dialog = screen.getByRole('dialog', { name: 'Edit Task' });
+      expect(within(dialog).getByText('Launch Plan · In motion')).toBeInTheDocument();
+      expect(within(dialog).getByRole('heading', { name: 'Edit Task', level: 2 })).toBeInTheDocument();
+
+      await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Close' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    // The gradient behind the strip is hidden from assistive technology, and
+    // hiding a parent hides everything inside it, so a control placed in it
+    // would be gone from the tree while still on screen.
+    it('does not hide the close button from assistive technology', async () => {
+      renderExisting();
+      await waitForColorsLoaded();
+
+      const close = screen.getByRole('button', { name: 'Close' });
+      expect(close.closest('[aria-hidden="true"]')).toBeNull();
+    });
+  });
+
+  describe('Move to', () => {
+    it('lists every column with the current one pressed', async () => {
+      renderExisting();
+      await waitForColorsLoaded();
+
+      const group = screen.getByRole('group', { name: /move to/i });
+      const buttons = within(group).getAllByRole('button');
+
+      expect(buttons.map(button => button.textContent)).toEqual(['To Do', 'In motion', 'Landed']);
+      expect(buttons.map(button => button.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false']);
+    });
+
+    it('moves at once to the column that was pressed, and not to the one it is already in', async () => {
+      const user = userEvent.setup();
+      const { onMove } = renderExisting();
+      await waitForColorsLoaded();
+
+      await user.click(screen.getByRole('button', { name: 'In motion' }));
+      expect(onMove).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('button', { name: 'Landed' }));
+      expect(onMove).toHaveBeenCalledWith({ id: 'col-done', title: 'Landed' });
+    });
+
+    it('is not drawn when the modal is not told the board columns', async () => {
+      renderExisting({ columns: undefined, columnId: undefined, onMove: undefined });
+      await waitForColorsLoaded();
+
+      expect(screen.queryByRole('group', { name: /move to/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('saving', () => {
+    // A task moved from "Move to" while the form was open would be put back by
+    // a save that still carried the column it was opened in.
+    it('does not send the column it was opened in', async () => {
+      const user = userEvent.setup();
+      const { onSave } = renderExisting();
+      await waitForColorsLoaded();
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(getSaveButton());
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0]).toMatchObject({ _id: 'task-1', title: 'Pack the stove' });
+      expect(onSave.mock.calls[0][0]).not.toHaveProperty('status');
+    });
+  });
+
+  describe('Blow it away', () => {
+    it('deletes the task, drops its draft and closes', async () => {
+      const user = userEvent.setup();
+      const { onDelete, onClose } = renderExisting();
+      await waitForColorsLoaded();
+      await user.type(getTitleInput(), ' twice');
+      await waitFor(() => expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).not.toBeNull());
+
+      await user.click(screen.getByRole('button', { name: 'Blow it away' }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ _id: 'task-1' }));
+      expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).toBeNull();
+    });
+
+    it('says so and stays open, holding the draft, when the delete fails', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { onClose, onDelete } = renderExisting();
+      onDelete.mockRejectedValue(new Error('refused'));
+      await waitForColorsLoaded();
+      await user.type(getTitleInput(), ' twice');
+
+      await user.click(screen.getByRole('button', { name: 'Blow it away' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(within(alert).getByText(/could not be blown away/i)).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(getTitleInput()).toHaveValue('Pack the stove twice');
+      expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).not.toBeNull();
+    });
+
+    it('is not offered for a task that does not exist yet', async () => {
+      renderWithQuery(
+        <TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} onDelete={vi.fn()} />,
+      );
+      await waitForColorsLoaded();
+
+      expect(screen.queryByRole('button', { name: 'Blow it away' })).not.toBeInTheDocument();
+    });
   });
 });

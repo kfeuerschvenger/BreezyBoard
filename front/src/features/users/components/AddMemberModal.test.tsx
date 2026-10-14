@@ -230,7 +230,7 @@ describe('AddMemberModal selecting', () => {
     expect(screen.getByRole('button', { name: /^Add Member/ })).toBeDisabled();
   });
 
-  it('is operable by keyboard alone, which the near-identical list in the drawer was not', async () => {
+  it('is operable by keyboard alone, which a list of divs with click handlers is not', async () => {
     const user = userEvent.setup();
     renderModal();
     await screen.findByText('Ada Lovelace');

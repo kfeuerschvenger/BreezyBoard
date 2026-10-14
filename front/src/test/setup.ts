@@ -18,7 +18,7 @@ afterEach(() => {
   cleanup();
 });
 
-// motion is used across the app (TaskDrawer, Board, Column, TaskCard,
+// motion is used across the app (TaskModal, Board, Column, TaskCard,
 // UserAvatar, and more) purely for enter/exit transitions. Under jsdom there
 // is no real layout or paint, so those transitions either no-op or keep an
 // "exiting" element mounted until a requestAnimationFrame-driven animation

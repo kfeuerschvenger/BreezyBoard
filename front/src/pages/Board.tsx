@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Task } from '@/models';
 import { TaskService } from '@/services';
@@ -6,7 +6,8 @@ import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
 import { BoardHeader, boardHueOf } from '@/features/boards';
 import { useColors } from '@/features/colors';
-import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
+import { BoardColumns, TaskModal, useBoardData, useDeleteTaskWithUndo, useTaskDragAndDrop } from '@/features/tasks';
+import type { MoveTarget } from '@/features/tasks';
 import { IconPlus } from '@tabler/icons-react';
 import { Button, LoadingScreen, Icon } from '@/shared/ui';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,7 +17,10 @@ import NotFound from './NotFound';
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  // The task as it was when it was opened. The form is built from this copy
+  // and keeps it for as long as the modal is open, and while it leaves after
+  // a delete, when the task is no longer on the board to be read from.
   const [selectedTask, setSelectedTask] = useState<Partial<Task> | null>(null);
   // Changes each time something asks for the first column's composer.
   const [composerRequest, setComposerRequest] = useState(0);
@@ -31,9 +35,35 @@ const Board = () => {
     cache,
   });
 
+  const { deleteTask } = useDeleteTaskWithUndo({ cache });
+
   const openTask = (task: Partial<Task>) => {
     setSelectedTask(task);
-    setDrawerOpen(true);
+    setModalOpen(true);
+  };
+
+  // What the board holds for the open task now. A "Move to" inside the modal
+  // changes its column on the board, and the copy the form was built from
+  // does not follow.
+  const liveTask = selectedTask?._id ? tasks.find(task => task._id === selectedTask._id) : undefined;
+  const moveTargets = useMemo<MoveTarget[]>(() => columns.map(({ id, title }) => ({ id, title })), [columns]);
+
+  /**
+   * Moves the open task to the foot of a column from inside the modal. It goes
+   * through the board's own mover, so it shares the request guard with a drag,
+   * and says the result in the board's live region. It does not use
+   * `moveToColumn`, which also asks for focus on the card's menu: the focus
+   * belongs to the modal for as long as it is open.
+   */
+  const moveOpenTask = async (target: MoveTarget) => {
+    if (!liveTask) return;
+    const outcome = await drag.mover.move(liveTask, target.id);
+    if (outcome === 'moved') drag.mover.announce(`Moved ${liveTask.title} to ${target.title}.`);
+    if (outcome === 'failed') drag.mover.announce(`Could not move ${liveTask.title} to ${target.title}.`);
+  };
+
+  const deleteOpenTask = async () => {
+    if (liveTask) await deleteTask(liveTask);
   };
 
   const requestComposer = () => setComposerRequest(count => count + 1);
@@ -70,13 +100,13 @@ const Board = () => {
   };
 
   /**
-   * Deliberately does not catch. The drawer reports a failed save and keeps
+   * Deliberately does not catch. The modal reports a failed save and keeps
    * itself open holding the draft, and it can only do that if the failure
-   * reaches it. A catch here returns normally, which tells the drawer the
+   * reaches it. A catch here returns normally, which tells the modal the
    * save succeeded, so it clears the draft and closes over work that was
    * never written. That is finding P4-9.
    *
-   * Closing on success is the drawer's job too, through onSaved.
+   * Closing on success is the modal's job too, through onSaved.
    */
   const saveTask = async (taskData: Partial<Task>) => {
     if (!boardId) throw new Error('No board was specified in the address.');
@@ -183,7 +213,18 @@ const Board = () => {
         onRequestComposer={requestComposer}
       />
 
-      <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />
+      <TaskModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        task={selectedTask}
+        onSave={saveTask}
+        boardTitle={board.title}
+        hue={boardHueOf(board.color)}
+        columns={moveTargets}
+        columnId={liveTask?.status ?? selectedTask?.status}
+        onMove={moveOpenTask}
+        onDelete={deleteOpenTask}
+      />
     </div>
   );
 };

@@ -5,7 +5,6 @@ import { axe } from 'vitest-axe';
 import {
   Avatar,
   Button,
-  Drawer,
   EmptyState,
   Field,
   IconButton,
@@ -13,6 +12,7 @@ import {
   LoadingScreen,
   PasswordInput,
   Modal,
+  ModalClose,
   StatTile,
   SwatchPicker,
   Textarea,
@@ -193,15 +193,27 @@ describe('Modal', () => {
   });
 });
 
-describe('Drawer', () => {
-  it('is a labelled dialog with no violations', async () => {
+describe('Modal as a sheet with its own header', () => {
+  it('is a labelled dialog with no violations, and the close button is still named', async () => {
     render(
-      <Drawer open onClose={() => {}} title="Edit task">
+      <Modal
+        open
+        onClose={() => {}}
+        title="Edit task"
+        placement="sheet"
+        header={
+          <div>
+            <h2 className="sr-only">Edit task</h2>
+            <ModalClose onClose={() => {}} />
+          </div>
+        }
+      >
         <Field label="Title">{props => <Input {...props} />}</Field>
-      </Drawer>
+      </Modal>
     );
 
     expect(screen.getByRole('dialog')).toHaveAccessibleName('Edit task');
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
     await noViolations(document.body);
   });
 
@@ -210,9 +222,9 @@ describe('Drawer', () => {
     let closed = 0;
 
     render(
-      <Drawer open onClose={() => (closed += 1)} title="Edit task">
+      <Modal open onClose={() => (closed += 1)} title="Edit task" placement="sheet">
         <p>Body</p>
-      </Drawer>
+      </Modal>
     );
 
     await user.keyboard('{Escape}');
