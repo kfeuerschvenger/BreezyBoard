@@ -21,6 +21,8 @@ export { BoardCard } from './components/BoardCard';
 export type { BoardCardProps } from './components/BoardCard';
 export { BoardCardMenu } from './components/BoardCardMenu';
 export type { BoardCardMenuProps } from './components/BoardCardMenu';
+export { BoardHeader } from './components/BoardHeader';
+export type { BoardHeaderProps } from './components/BoardHeader';
 export { BoardActions } from './components/BoardActions';
 export type { BoardActionsProps } from './components/BoardActions';
 export { default as CreateBoardModal } from './components/CreateBoardModal';

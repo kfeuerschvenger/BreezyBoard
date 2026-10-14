@@ -1,18 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
-import TaskCard from './TaskCard';
-import { ColorService } from '@/services';
+import TaskCard, { TaskCardOverlay } from './TaskCard';
+import { BreezeContext } from '@/features/breeze/breezeContext';
+import type { BreezeContextValue } from '@/features/breeze/breezeContext';
+import { swayAnimation, swayOf } from '@/features/breeze';
+import { hueFromSeed, MID_BACKGROUND } from '@/shared/ui';
 import type { Task } from '@/models';
-
-// Characterization, written against the card as it stands before section
-// 12.5 takes its colour fetching and its priority map away.
-vi.mock('@/services', () => ({
-  ColorService: { getById: vi.fn(), getByType: vi.fn() },
-}));
-
-const mockedColorService = vi.mocked(ColorService);
 
 const makeTask = (overrides: Partial<Task>): Task => ({
   _id: 'task-1',
@@ -28,46 +24,59 @@ const makeTask = (overrides: Partial<Task>): Task => ({
   ...overrides,
 });
 
+type CardProps = Omit<React.ComponentProps<typeof TaskCard>, 'task'>;
+
 // useSortable needs both contexts above it. Without them the card renders,
 // but the drag attributes it is asserted on below are never applied.
-const renderCard = (task: Task, props: { color?: string; onClick?: () => void; isDragging?: boolean } = {}) =>
+const renderCard = (task: Task, props: CardProps = {}) =>
   render(
     <DndContext>
       <SortableContext items={[task._id]}>
         <TaskCard task={task} {...props} />
       </SortableContext>
-    </DndContext>
+    </DndContext>,
   );
 
 const card = () => screen.getByRole('article');
 
-beforeEach(() => {
-  mockedColorService.getById.mockReset().mockResolvedValue({ _id: 'color-red', name: 'Red', value: '#EF4444' });
-});
+// After a pick up, dnd-kit's pointer sensor keeps a capturing click listener on
+// the document for 50 milliseconds to swallow the click that ends the drag. A
+// test that sends a click straight after one that picked a card up would have
+// it swallowed and pass for the wrong reason.
+const clickListenerGone = () => new Promise(resolve => setTimeout(resolve, 80));
+
+const ADA = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
 
 describe('TaskCard rendering', () => {
   it('shows the task and names itself by its title', () => {
     renderCard(makeTask({}));
 
     expect(screen.getByRole('heading', { name: 'Write the release notes' })).toBeInTheDocument();
-    expect(screen.getByText('For this cycle.')).toBeInTheDocument();
     expect(card()).toHaveAccessibleName('Write the release notes');
   });
 
-  it('leaves the description out entirely when there is none', () => {
-    renderCard(makeTask({ description: '' }));
+  // The design's card is a title, a few facts and a person. The description is
+  // read by opening the task.
+  it('does not print the description', () => {
+    renderCard(makeTask({ description: 'For this cycle.' }));
 
     expect(screen.queryByText('For this cycle.')).not.toBeInTheDocument();
   });
 
-  it('names the owner when the task carries a populated one', () => {
-    renderCard(
-      makeTask({
-        owner: { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' },
-      })
-    );
+  it('names the owner for assistive technology and draws their avatar', () => {
+    renderCard(makeTask({ owner: ADA }));
 
-    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+    expect(within(card()).getByText('Owner: Ada Lovelace')).toBeInTheDocument();
+    expect(within(card()).getByText('AL')).toBeInTheDocument();
+  });
+
+  // The fill follows the id, so a renamed person keeps the colour they have
+  // been seen in on every screen.
+  it('seeds the avatar with the owner id, not the name', () => {
+    renderCard(makeTask({ owner: ADA }));
+
+    const avatar = within(card()).getByText('AL').parentElement as HTMLElement;
+    expect(avatar).toHaveClass(MID_BACKGROUND[hueFromSeed(ADA._id)]);
   });
 
   // An owner held as a bare id cannot be named without a lookup the card does
@@ -76,46 +85,51 @@ describe('TaskCard rendering', () => {
     renderCard(makeTask({ owner: 'user-ada' }));
 
     expect(within(card()).queryByText(/user-ada/)).not.toBeInTheDocument();
+    expect(within(card()).queryByText(/Owner:/)).not.toBeInTheDocument();
   });
 });
 
-describe('TaskCard checklist progress', () => {
-  it('counts what is done out of the total', () => {
-    renderCard(
-      makeTask({
-        checklist: [
-          { text: 'One', completed: true },
-          { text: 'Two', completed: true },
-          { text: 'Three', completed: false },
-        ],
-      })
-    );
+describe('TaskCard checklist', () => {
+  const checklist = (done: number, total: number) =>
+    Array.from({ length: total }, (_, index) => ({ text: `Item ${index}`, completed: index < done }));
 
-    expect(screen.getByText('2/3 completed')).toBeInTheDocument();
-    expect(screen.getByText('67%')).toBeInTheDocument();
+  it('counts what is done out of the total, and says what the figures are', () => {
+    renderCard(makeTask({ checklist: checklist(2, 3) }));
+
+    expect(screen.getByText('2/3')).toBeInTheDocument();
+    expect(card()).toHaveTextContent('2/3 checklist items completed');
   });
 
-  it('shows no progress at all for a task with no checklist', () => {
+  it('shows nothing at all for a task with no checklist', () => {
     renderCard(makeTask({ checklist: [] }));
 
-    expect(screen.queryByText(/completed/)).not.toBeInTheDocument();
+    expect(card().querySelector('[data-checklist-progress]')).toBeNull();
+  });
+
+  // The green is a second cue, the figures are the first: 3/3 reads as done
+  // to a person who cannot tell the greens apart.
+  it('draws a finished checklist in green and an unfinished one in the secondary text', () => {
+    const { unmount } = renderCard(makeTask({ checklist: checklist(3, 3) }));
+    expect(card().querySelector('[data-checklist-progress]')).toHaveClass('text-green-deep');
+    unmount();
+
+    renderCard(makeTask({ checklist: checklist(2, 3) }));
+    expect(card().querySelector('[data-checklist-progress]')).toHaveClass('text-ink-secondary');
+    expect(card().querySelector('[data-checklist-progress]')).not.toHaveClass('text-green-deep');
   });
 });
 
 describe('TaskCard priority', () => {
   it.each([
-    ['low', 'bg-green-100'],
-    ['medium', 'bg-yellow-100'],
-    ['high', 'bg-red-100'],
-  ] as const)('tints the %s badge with its own colour', (priority, expectedClass) => {
+    ['low', 'green'],
+    ['medium', 'sand'],
+    ['high', 'coral'],
+  ] as const)('draws the %s chip in the %s hue', (priority, hue) => {
     renderCard(makeTask({ priority }));
 
-    // Found by class because the badge is hidden from assistive technology,
-    // which P4-3 records as a defect: the priority is real information and
-    // this is the only place a task shows it.
-    const badge = card().querySelector(`.${expectedClass}`);
-    expect(badge).not.toBeNull();
-    expect(badge).toHaveTextContent(priority);
+    const chip = within(card()).getByText(new RegExp(priority, 'i')).closest('span.rounded-pill') as HTMLElement;
+    expect(chip).toHaveClass(`bg-${hue}-tint`);
+    expect(chip).toHaveClass(`text-${hue}-deep`);
   });
 
   // P4-3 recorded the whole badge as aria-hidden, which hid real information
@@ -123,53 +137,146 @@ describe('TaskCard priority', () => {
   // priority, so hiding it left the card saying nothing about it at all.
   //
   // Asserted on the attribute and on the text, because a plain text query
-  // reads the DOM and finds the content either way. Only role queries consult
-  // the accessibility tree, and a badge has no role to query.
+  // reads the DOM and finds the content either way.
   it('announces the priority instead of hiding it (P4-3)', () => {
     renderCard(makeTask({ priority: 'high' }));
 
-    const badge = card().querySelector('.bg-red-100');
-    expect(badge).not.toHaveAttribute('aria-hidden');
-    // "high" on its own is a word with no subject. The prefix is carried for
-    // assistive technology only, so the badge still reads as one word.
-    expect(badge).toHaveTextContent('Priority: high');
+    const chip = within(card()).getByText('High').closest('span.rounded-pill') as HTMLElement;
+    expect(chip).not.toHaveAttribute('aria-hidden');
+    // "High" on its own is a word with no subject. The prefix is carried for
+    // assistive technology only, so the chip still reads as one word.
+    expect(chip).toHaveTextContent('Priority: High');
   });
 
-  it('keeps the icon out of it, since the word beside it already says so', () => {
-    renderCard(makeTask({ priority: 'high' }));
+  // The API constrains this field, so a value outside the three is a bug
+  // somewhere else. The word and the hue are normalised together, because the
+  // hue is what anybody scanning a board reads and the two have to agree.
+  it('falls back to the least urgent, in both the word and the hue', () => {
+    renderCard(makeTask({ priority: 'urgent' as never }));
 
-    expect(card().querySelector('.bg-red-100 svg')).toHaveAttribute('aria-hidden', 'true');
+    const chip = within(card()).getByText('Low').closest('span.rounded-pill') as HTMLElement;
+    expect(chip).toHaveClass('bg-green-tint');
+    expect(chip).toHaveTextContent('Priority: Low');
   });
 });
 
 describe('TaskCard colour', () => {
-  const withChecklist = (color: string | undefined) =>
-    makeTask({ color: color as never, checklist: [{ text: 'One', completed: true }] });
+  it('draws the colour it was handed as a dot, hidden from assistive technology', () => {
+    renderCard(makeTask({}), { color: '#10B981' });
 
-  it('paints the progress bar with the colour it was handed', () => {
-    renderCard(withChecklist('#3B82F6'), { color: '#10B981' });
-
-    expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#10B981' });
+    const dot = card().querySelector('[data-task-colour]');
+    expect(dot).toHaveStyle({ backgroundColor: '#10B981' });
+    expect(dot).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('falls back to the neutral when it was handed none', () => {
-    renderCard(withChecklist('#3B82F6'));
+    renderCard(makeTask({}));
 
-    expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#64748B' });
+    expect(card().querySelector('[data-task-colour]')).toHaveStyle({ backgroundColor: '#64748B' });
+  });
+});
+
+describe('TaskCard in the last column', () => {
+  it('draws a check and mutes the title', () => {
+    renderCard(makeTask({}), { done: true });
+
+    const title = screen.getByRole('button', { name: 'Write the release notes' });
+    expect(title).toHaveClass('text-ink-secondary');
+    expect(card().querySelector('svg.text-success')).not.toBeNull();
   });
 
-  // The card used to resolve its own colour, which cost a request for any
-  // task whose colour was stored as an id. A board of thirty tasks asked the
-  // colour endpoint thirty times for parts of a list served whole at
-  // /colors?type=task. Whoever renders the board reads it once now.
-  it('asks the colour endpoint for nothing', async () => {
-    renderCard(withChecklist('color-red'), { color: '#EF4444' });
+  it('draws neither on a card that has not landed', () => {
+    renderCard(makeTask({}));
 
-    await waitFor(() =>
-      expect(card().querySelector('[style*="background-color"]')).toHaveStyle({ backgroundColor: '#EF4444' })
-    );
-    expect(mockedColorService.getById).not.toHaveBeenCalled();
-    expect(mockedColorService.getByType).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Write the release notes' })).toHaveClass('text-ink');
+    expect(card().querySelector('svg.text-success')).toBeNull();
+  });
+});
+
+describe('TaskCard opening', () => {
+  // The card is not itself a control. The keyboard opens the task through its
+  // title, which is a real button, and the mouse through the card around it.
+  it('opens from the title button with the keyboard', async () => {
+    const onClick = vi.fn();
+    renderCard(makeTask({}), { onClick });
+
+    screen.getByRole('button', { name: 'Write the release notes' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens once when the mouse presses the title, not once for the button and once for the card', async () => {
+    const onClick = vi.fn();
+    renderCard(makeTask({}), { onClick });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Write the release notes' }));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens from the card around the title', async () => {
+    const onClick = vi.fn();
+    renderCard(makeTask({ checklist: [{ text: 'One', completed: true }] }), { onClick });
+
+    await userEvent.click(screen.getByText('1/1'));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not open when the drag handle is pressed', async () => {
+    const onClick = vi.fn();
+    renderCard(makeTask({}), { onClick });
+
+    await userEvent.click(screen.getByLabelText('Drag handle'));
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  // dnd-kit swallows the click that follows a pick up, which is why the test
+  // above cannot tell whether the card guards against it itself. A click that
+  // reaches the handle some other way, a keyboard activation fires one, is sent
+  // here directly, and the card must still not treat it as opening the task.
+  it('does not open for a click that reaches the handle without a pointer', async () => {
+    const onClick = vi.fn();
+    renderCard(makeTask({}), { onClick });
+    await clickListenerGone();
+
+    fireEvent.click(screen.getByLabelText('Drag handle'));
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not open for a click that reaches the Move to button without a pointer', async () => {
+    const onClick = vi.fn();
+    renderCard(makeTask({}), {
+      onClick,
+      onMove: vi.fn(),
+      moveTargets: [{ id: 'col-todo', title: 'To Do' }],
+    });
+    await clickListenerGone();
+
+    fireEvent.click(screen.getByRole('button', { name: /move write the release notes/i }));
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  // The menu's popup is rendered in a portal, and React lets a click inside it
+  // bubble to the card that owns the menu. The popup stops it at its own edge.
+  it('does not open when a column is chosen in its Move to menu', async () => {
+    const onClick = vi.fn();
+    const onMove = vi.fn();
+    const moveTargets = [
+      { id: 'col-todo', title: 'To Do' },
+      { id: 'col-done', title: 'Done' },
+    ];
+    renderCard(makeTask({}), { onClick, moveTargets, onMove });
+
+    await userEvent.click(screen.getByRole('button', { name: /move write the release notes/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Done' }));
+
+    expect(onMove).toHaveBeenCalledWith(expect.objectContaining({ _id: 'task-1' }), moveTargets[1]);
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
 
@@ -196,20 +303,129 @@ describe('TaskCard drag handle', () => {
   });
 });
 
-describe('TaskCard priority it does not recognise', () => {
-  // The API constrains this field, so a value outside the three is a bug
-  // somewhere else. The card still has to draw something rather than render
-  // an unstyled badge or fall over.
-  // The word and the colour are normalised together rather than the raw
-  // value being printed in a colour that means something else. A badge
-  // reading "urgent" in the green that means low is a worse answer than one
-  // reading "low": the colour is what anybody scanning a board actually
-  // reads, so the two have to agree.
-  it('falls back to the least urgent, in both the word and the colour', () => {
-    renderCard(makeTask({ priority: 'urgent' as never }));
+describe('TaskCard held in the air', () => {
+  // Collapsed and not removed: the keyboard sensor listens on the card and
+  // focus has to still be on its handle when the card is put down.
+  it('stays in the document with its handle, and takes no room', () => {
+    renderCard(makeTask({}), { held: true });
 
-    const badge = card().querySelector('.bg-green-100');
-    expect(badge).not.toBeNull();
-    expect(badge).toHaveTextContent('Priority: low');
+    expect(screen.getByLabelText('Drag handle')).toBeInTheDocument();
+    expect(card()).toHaveClass('h-0');
+    expect(card()).toHaveClass('overflow-hidden');
+  });
+
+  // A box cannot be shorter than its padding, so a padded card collapsed with
+  // h-0 would still be 24 pixels tall. jsdom has no layout, so the class is
+  // what can be pinned here; the height is measured in a browser.
+  it('carries no padding while it is collapsed', () => {
+    renderCard(makeTask({}), { held: true });
+
+    expect(card().className).not.toMatch(/\bp[xy]?-\d/);
+  });
+});
+
+describe('TaskCard arriving', () => {
+  it.each([
+    ['landed', 'animate-bb-land'],
+    ['fresh', 'animate-bb-in'],
+  ] as const)('plays the %s animation', (entrance, animation) => {
+    renderCard(makeTask({}), { entrance });
+
+    expect(card()).toHaveClass(animation);
+  });
+
+  it('tells its owner when its own animation has ended, and not when one inside it has', () => {
+    const onEntranceEnd = vi.fn();
+    renderCard(makeTask({}), { entrance: 'landed', onEntranceEnd });
+
+    // jsdom has no AnimationEvent, so the testing library's helper would send
+    // a bare event; the plain event is what React is listening for.
+    act(() => {
+      card().querySelector('h3')!.dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+    expect(onEntranceEnd).not.toHaveBeenCalled();
+
+    act(() => {
+      card().dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+    expect(onEntranceEnd).toHaveBeenCalledWith('task-1');
+  });
+
+  it('plays nothing it was not asked to', () => {
+    renderCard(makeTask({}));
+
+    expect(card().className).not.toMatch(/animate-bb-(land|in)/);
+  });
+});
+
+describe('TaskCard in gusty weather', () => {
+  const gusty = { level: 'gusty', stored: 'gusty', reducedBySystem: false } as unknown as BreezeContextValue;
+
+  const renderIn = (value: BreezeContextValue, props: CardProps = {}) =>
+    render(
+      <BreezeContext.Provider value={value}>
+        <DndContext>
+          <SortableContext items={['task-1']}>
+            <TaskCard task={makeTask({})} {...props} />
+          </SortableContext>
+        </DndContext>
+      </BreezeContext.Provider>,
+    );
+
+  // The phase is the card's own: two cards that stand first in their columns
+  // would be in step if it were its position, and a card that is moved would
+  // change its rhythm.
+  it('sways to a rhythm of its own, whatever its place in a column', () => {
+    const { unmount } = renderIn(gusty);
+    const first = card().style.animation;
+    unmount();
+
+    render(
+      <BreezeContext.Provider value={gusty}>
+        <DndContext>
+          <SortableContext items={['task-2']}>
+            <TaskCard task={makeTask({ _id: 'task-2' })} />
+          </SortableContext>
+        </DndContext>
+      </BreezeContext.Provider>,
+    );
+    const second = card().style.animation;
+
+    expect(first).toContain('bbSway');
+    expect(second).toContain('bbSway');
+    expect(first).not.toBe(second);
+    expect(first).toBe(swayAnimation(swayOf('task-1')));
+  });
+
+  it('does not sway at any other level', () => {
+    renderIn({ level: 'breezy', stored: 'breezy', reducedBySystem: false } as unknown as BreezeContextValue);
+
+    expect(card().style.animation).toBe('');
+  });
+
+  // The system asking for less motion holds the level at still, so a card
+  // that would sway at the stored Gusty does not.
+  it('does not sway when the system asks for reduced motion', () => {
+    renderIn({ level: 'still', stored: 'gusty', reducedBySystem: true } as unknown as BreezeContextValue);
+
+    expect(card().style.animation).toBe('');
+  });
+
+  // One animation property, four purposes, one winner.
+  it('plays its arrival instead of swaying', () => {
+    renderIn(gusty, { entrance: 'landed' });
+
+    expect(card().style.animation).toBe('');
+    expect(card()).toHaveClass('animate-bb-land');
+  });
+});
+
+describe('TaskCardOverlay', () => {
+  it('is hidden from assistive technology and carries no control', () => {
+    render(<TaskCardOverlay task={makeTask({})} />);
+
+    const overlay = screen.getByRole('article', { hidden: true });
+    expect(overlay).toHaveAttribute('aria-hidden', 'true');
+    expect(within(overlay).queryByRole('button', { hidden: true })).toBeNull();
   });
 });

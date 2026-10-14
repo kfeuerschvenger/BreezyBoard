@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BoardColumns } from './BoardColumns';
 import type { Task } from '@/models';
@@ -51,7 +51,7 @@ const makeDrag = (mover: UseTaskMoverResult = makeMover()) =>
 
 const drag = makeDrag();
 
-const renderColumns = (tasks: Task[], onAddTask = () => {}, dragProps: UseTaskDragAndDropResult = drag) =>
+const renderColumns = (tasks: Task[], onRequestComposer = () => {}, dragProps: UseTaskDragAndDropResult = drag) =>
   render(
     <BoardColumns
       columns={columns}
@@ -59,7 +59,8 @@ const renderColumns = (tasks: Task[], onAddTask = () => {}, dragProps: UseTaskDr
       drag={dragProps}
       taskColors={new Map()}
       onTaskClick={() => {}}
-      onAddTask={onAddTask}
+      onCreateTask={async () => task}
+      onRequestComposer={onRequestComposer}
     />,
   );
 
@@ -83,11 +84,11 @@ describe('BoardColumns', () => {
     expect(screen.getByRole('region', { name: 'Board columns' })).toHaveAttribute('tabindex', '0');
   });
 
-  it('puts a task in the column its status names and hints in the others', () => {
+  it('puts a task in the column its status names and says "Still air" in the others', () => {
     renderColumns([task]);
 
     expect(screen.getByText('Write the spec')).toBeInTheDocument();
-    expect(screen.getAllByText(/no tasks here yet/i)).toHaveLength(2);
+    expect(screen.getAllByText('Still air')).toHaveLength(2);
   });
 
   it('keeps the existing message when the board has no columns', () => {
@@ -98,7 +99,8 @@ describe('BoardColumns', () => {
         drag={drag}
         taskColors={new Map()}
         onTaskClick={() => {}}
-        onAddTask={() => {}}
+        onCreateTask={async () => task}
+      onRequestComposer={() => {}}
       />,
     );
 
@@ -110,26 +112,26 @@ describe('BoardColumns', () => {
     it('shows only while the board has no task at all, with the columns still beneath it', () => {
       renderColumns([]);
 
-      expect(screen.getByRole('heading', { name: /no tasks yet/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Add task' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /a fresh board/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Add your first card' })).toBeInTheDocument();
       expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toContain('Backlog');
-      expect(screen.getAllByText(/no tasks here yet/i)).toHaveLength(3);
+      expect(screen.getAllByText('Still air')).toHaveLength(3);
     });
 
     it('is gone once the board has a task', () => {
       renderColumns([task]);
 
-      expect(screen.queryByRole('heading', { name: /no tasks yet/i })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Add task' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /a fresh board/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add your first card' })).not.toBeInTheDocument();
     });
 
-    it('starts a new task when its button is pressed', async () => {
-      const onAddTask = vi.fn();
-      renderColumns([], onAddTask);
+    it('asks for the first composer when its button is pressed', async () => {
+      const onRequestComposer = vi.fn();
+      renderColumns([], onRequestComposer);
 
-      await userEvent.click(screen.getByRole('button', { name: 'Add task' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add your first card' }));
 
-      expect(onAddTask).toHaveBeenCalledTimes(1);
+      expect(onRequestComposer).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -164,7 +166,8 @@ describe('BoardColumns', () => {
           drag={drag}
           taskColors={new Map()}
           onTaskClick={onTaskClick}
-          onAddTask={() => {}}
+          onCreateTask={async () => task}
+      onRequestComposer={() => {}}
         />,
       );
 
@@ -186,7 +189,8 @@ describe('BoardColumns', () => {
           drag={makeDrag(makeMover({ announcement: 'Moved Write the spec to Done.' }))}
           taskColors={new Map()}
           onTaskClick={() => {}}
-          onAddTask={() => {}}
+          onCreateTask={async () => task}
+      onRequestComposer={() => {}}
         />,
       );
 
@@ -205,7 +209,8 @@ describe('BoardColumns', () => {
           drag={makeDrag(makeMover({ focusRequest: { taskId: 't1', target: 'move-trigger', nonce: 1 } }))}
           taskColors={new Map()}
           onTaskClick={() => {}}
-          onAddTask={() => {}}
+          onCreateTask={async () => task}
+      onRequestComposer={() => {}}
         />,
       );
 
@@ -227,7 +232,8 @@ describe('BoardColumns', () => {
           }
           taskColors={new Map()}
           onTaskClick={() => {}}
-          onAddTask={() => {}}
+          onCreateTask={async () => task}
+      onRequestComposer={() => {}}
         />,
       );
 
@@ -244,11 +250,164 @@ describe('BoardColumns', () => {
           drag={makeDrag(makeMover({ focusRequest: { taskId: 't1', target: 'drag-handle', nonce: 1 } }))}
           taskColors={new Map()}
           onTaskClick={() => {}}
-          onAddTask={() => {}}
+          onCreateTask={async () => task}
+      onRequestComposer={() => {}}
         />,
       );
 
       await waitFor(() => expect(screen.getByRole('button', { name: 'Drag handle' })).toHaveFocus());
     });
+  });
+});
+
+describe('BoardColumns, a card in the air', () => {
+  const other: Task = { ...task, _id: 't2', title: 'Plan the route', order: 'a1' };
+
+  const dragWith = (extra: Record<string, unknown>) =>
+    ({ ...makeDrag(), ...extra }) as unknown as UseTaskDragAndDropResult;
+
+  const gapPlaces = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('[data-column-body]')).map(body =>
+      Array.from(body.querySelectorAll<HTMLElement>('[data-task-card], [data-drop-gap]')).map(element =>
+        element.matches('[data-drop-gap]') ? 'gap' : (element.dataset.taskCard as string),
+      ),
+    );
+
+  it('draws the gap in the column of the slot and lights that column and no other', () => {
+    renderColumns([task, other], () => {}, dragWith({ slot: { columnId: 'col-c', index: 0 } }));
+
+    expect(gapPlaces()).toEqual([[], ['t1', 't2'], ['gap']]);
+    const lit = Array.from(document.querySelectorAll('[data-highlighted]')).map(column => column.querySelector('h2')?.textContent);
+    expect(lit).toEqual(['Done']);
+  });
+
+  it('collapses the card that is held, wherever the gap is', () => {
+    renderColumns([task, other], () => {}, dragWith({ activeTask: task, slot: { columnId: 'col-b', index: 0 } }));
+
+    expect(document.querySelector('[data-task-card="t1"]')).toHaveClass('h-0');
+    expect(document.querySelector('[data-task-card="t2"]')).not.toHaveClass('h-0');
+  });
+
+  it('lights no column and opens no gap when nothing is held', () => {
+    renderColumns([task]);
+
+    expect(document.querySelector('[data-drop-gap]')).toBeNull();
+    expect(document.querySelector('[data-highlighted]')).toBeNull();
+  });
+});
+
+describe('BoardColumns, landing', () => {
+  const dragWith = (extra: Record<string, unknown>) =>
+    ({ ...makeDrag(), ...extra }) as unknown as UseTaskDragAndDropResult;
+
+  it('settles the card that was just dropped, and only that one', () => {
+    const other: Task = { ...task, _id: 't2', title: 'Plan the route', order: 'a1' };
+    renderColumns([task, other], () => {}, dragWith({ landedId: 't2' }));
+
+    expect(document.querySelector('[data-task-card="t2"]')).toHaveClass('animate-bb-land');
+    expect(document.querySelector('[data-task-card="t1"]')).not.toHaveClass('animate-bb-land');
+  });
+
+  it('tells the drag hook when the card has finished settling', () => {
+    const onLandingEnd = vi.fn();
+    renderColumns([task], () => {}, dragWith({ landedId: 't1', onLandingEnd }));
+
+    act(() => {
+      document.querySelector('[data-task-card="t1"]')!.dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+
+    expect(onLandingEnd).toHaveBeenCalledWith('t1');
+  });
+});
+
+describe('BoardColumns, adding a card from a column', () => {
+  const renderWith = (onCreateTask: (columnId: string, title: string) => Promise<Task>, composerRequest = 0) =>
+    render(
+      <BoardColumns
+        columns={columns}
+        tasks={[task]}
+        drag={drag}
+        taskColors={new Map()}
+        onTaskClick={() => {}}
+        onCreateTask={onCreateTask}
+        composerRequest={composerRequest}
+        onRequestComposer={() => {}}
+      />,
+    );
+
+  it('gives every column its own composer', () => {
+    renderWith(async () => task);
+
+    expect(screen.getByRole('button', { name: 'Add a card to Backlog' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a card to Doing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a card to Done' })).toBeInTheDocument();
+  });
+
+  it('hands the column and the title to the page', async () => {
+    const onCreateTask = vi.fn().mockResolvedValue({ ...task, _id: 'new' });
+    renderWith(onCreateTask);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card to Doing' }));
+    await userEvent.type(screen.getByRole('textbox', { name: /new card in Doing/i }), 'Pack the stove{Enter}');
+
+    expect(onCreateTask).toHaveBeenCalledWith('col-b', 'Pack the stove');
+  });
+
+  it('opens the first column composer, and only that one, when asked from outside', () => {
+    renderWith(async () => task, 1);
+
+    expect(screen.getByRole('textbox', { name: /new card in Backlog/i })).toHaveFocus();
+    expect(screen.queryByRole('textbox', { name: /new card in Doing/i })).not.toBeInTheDocument();
+  });
+
+  it('plays the arrival of the card it was given back, until that card is done arriving', async () => {
+    const created = { ...task, _id: 'new', title: 'Pack the stove' };
+    const onCreateTask = vi.fn().mockResolvedValue(created);
+    const { rerender } = renderWith(onCreateTask);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add a card to Backlog' }));
+    await userEvent.type(screen.getByRole('textbox'), 'Pack the stove{Enter}');
+    await waitFor(() => expect(onCreateTask).toHaveBeenCalled());
+
+    // The page writes the card into the cache, which is what puts it on screen.
+    rerender(
+      <BoardColumns
+        columns={columns}
+        tasks={[task, created]}
+        drag={drag}
+        taskColors={new Map()}
+        onTaskClick={() => {}}
+        onCreateTask={onCreateTask}
+        onRequestComposer={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(document.querySelector('[data-task-card="new"]')).toHaveClass('animate-bb-in'));
+
+    act(() => {
+      document.querySelector('[data-task-card="new"]')!.dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+    expect(document.querySelector('[data-task-card="new"]')).not.toHaveClass('animate-bb-in');
+  });
+});
+
+describe('BoardColumns, the last column', () => {
+  it('is the one with the highest order, whatever order the columns arrive in', () => {
+    render(
+      <BoardColumns
+        columns={[columns[2], columns[0], columns[1]]}
+        tasks={[]}
+        drag={drag}
+        taskColors={new Map()}
+        onTaskClick={() => {}}
+        onCreateTask={async () => task}
+        onRequestComposer={() => {}}
+      />,
+    );
+
+    const withIcon = Array.from(document.querySelectorAll('[data-column]')).filter(column =>
+      column.querySelector('h2 ~ svg.text-green-deep'),
+    );
+    expect(withIcon.map(column => column.querySelector('h2')?.textContent)).toEqual(['Done']);
   });
 });

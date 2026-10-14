@@ -119,8 +119,8 @@ describe('Board page rendering', () => {
 
     // The count badge next to the heading is the only other place task
     // counts are exposed; use it to confirm Done really is empty.
-    expect(todoHeading.nextElementSibling).toHaveTextContent('1');
-    expect(doneHeading.nextElementSibling).toHaveTextContent('0');
+    expect(within(todoColumn.firstElementChild as HTMLElement).getByText('1')).toBeInTheDocument();
+    expect(within(doneColumn.firstElementChild as HTMLElement).getByText('0')).toBeInTheDocument();
   });
 
   it('pins current behavior (finding P2-9): a task with a status matching no column renders in no column, and the board still renders', async () => {
@@ -197,10 +197,11 @@ describe('Board page rendering', () => {
   });
 });
 
-describe('Board page saving a task', () => {
+describe('Board page adding and saving a task', () => {
   const COLORS: Color[] = [{ _id: 'color-blue', name: 'Blue', value: '#3B82F6' }];
+  const ADA: User = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
   const MEMBERS: User[] = [
-    { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' },
+    ADA,
     { _id: 'user-grace', firstName: 'Grace', lastName: 'Hopper', email: 'grace@example.com', avatar: '' },
   ];
 
@@ -219,60 +220,161 @@ describe('Board page saving a task', () => {
     window.localStorage.clear();
   });
 
-  /** Opens the drawer through Add Task and fills it to the point of being submittable. */
-  const fillNewTask = async (user: ReturnType<typeof userEvent.setup>) => {
-    renderBoard();
-    await screen.findByRole('heading', { name: 'To Do' });
+  describe('from a column composer', () => {
+    const typeInto = async (user: ReturnType<typeof userEvent.setup>, column: string, title: string) => {
+      await user.click(await screen.findByRole('button', { name: `Add a card to ${column}` }));
+      await user.type(
+        screen.getByRole('textbox', { name: new RegExp(`new card in ${column}`, 'i') }),
+        `${title}{Enter}`,
+      );
+    };
 
-    await user.click(screen.getByRole('button', { name: /Add Task/ }));
-    await screen.findByRole('dialog');
-    // The colour arrives from the column the task is created in, so only the
-    // three remaining required fields have to be filled here.
-    await screen.findByRole('radio', { name: 'Blue' });
+    it('creates a card from its title alone, in that column, with the first task colour', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.create.mockResolvedValue(
+        makeTask({ _id: 'task-new', title: 'Pack the stove', status: 'col-done' }),
+      );
+      renderBoard();
 
-    const title = screen.getByPlaceholderText('Enter task title');
-    await user.clear(title);
-    await user.type(title, 'Write the release notes');
-    await user.type(screen.getByPlaceholderText('Enter task description'), 'For this cycle.');
+      await typeInto(user, 'Done', 'Pack the stove');
 
-    await user.type(screen.getByLabelText(/Owner/), 'Ada');
-    await user.click(await screen.findByText('Ada Lovelace', {}, { timeout: 15_000 }));
+      await waitFor(() =>
+        expect(mockedTaskService.create).toHaveBeenCalledWith(BOARD_ID, {
+          title: 'Pack the stove',
+          status: 'col-done',
+          color: 'color-blue',
+        }),
+      );
+    });
 
-    const save = screen.getByRole('button', { name: 'Save Changes' });
-    await waitFor(() => expect(save).toBeEnabled());
-    return save;
-  };
+    it('puts the new card in its column at once, without a refetch', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.create.mockResolvedValue(
+        makeTask({ _id: 'task-new', title: 'Pack the stove', status: 'col-todo', order: 'a1' }),
+      );
+      renderBoard();
 
-  it('creates the task and closes the drawer when the server accepts it', async () => {
-    const user = userEvent.setup();
-    mockedTaskService.create.mockResolvedValue(
-      makeTask({ _id: 'task-new', title: 'Write the release notes', status: 'col-todo' })
-    );
+      await typeInto(user, 'To Do', 'Pack the stove');
 
-    const save = await fillNewTask(user);
-    await user.click(save);
+      const heading = await screen.findByRole('heading', { name: 'To Do' });
+      const column = heading.parentElement?.parentElement as HTMLElement;
+      expect(await within(column).findByRole('button', { name: 'Pack the stove' })).toBeInTheDocument();
+      expect(mockedTaskService.getByBoard).toHaveBeenCalledTimes(1);
+    });
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(mockedTaskService.create).toHaveBeenCalledWith(BOARD_ID, expect.objectContaining({ title: 'Write the release notes' }));
+    it('keeps what was typed and says so when the server refuses the card', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.create.mockRejectedValue(new Error('refused'));
+      renderBoard();
+
+      await typeInto(user, 'To Do', 'Pack the stove');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('The card could not be added');
+      expect(screen.getByRole('textbox', { name: /new card in To Do/i })).toHaveValue('Pack the stove');
+      expect(screen.queryByRole('button', { name: 'Pack the stove' })).not.toBeInTheDocument();
+    });
+
+    // The server requires a colour. Without the palette there is nothing valid
+    // to send, and a request that is bound to be refused is not sent.
+    it('does not send a card it cannot colour, and says so', async () => {
+      const user = userEvent.setup();
+      mockedColorService.getByType.mockResolvedValue([]);
+      renderBoard();
+
+      await typeInto(user, 'To Do', 'Pack the stove');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('The card could not be added');
+      expect(mockedTaskService.create).not.toHaveBeenCalled();
+    });
+
+    it('opens the first column composer from the header button', async () => {
+      const user = userEvent.setup();
+      renderBoard();
+      await screen.findByRole('heading', { name: 'To Do' });
+
+      await user.click(screen.getByRole('button', { name: 'Add card' }));
+
+      expect(await screen.findByRole('textbox', { name: /new card in To Do/i })).toHaveFocus();
+    });
+
+    it('opens it from the empty board banner as well', async () => {
+      const user = userEvent.setup();
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Add your first card' }));
+
+      expect(await screen.findByRole('textbox', { name: /new card in To Do/i })).toHaveFocus();
+    });
   });
 
-  // The drawer knows how to report a failed save and is tested doing it. It
-  // can only do so if the failure reaches it, and the page's save handler
-  // catches everything and returns normally, so the drawer is told the save
-  // succeeded: it clears the draft and closes. The work is gone and nothing
-  // was ever written.
-  it('keeps the drawer open and says so when the server refuses the task', async () => {
-    const user = userEvent.setup();
-    mockedTaskService.create.mockRejectedValue(new Error('refused'));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+  describe('through the drawer, for a card that exists', () => {
+    const existing = makeTask({
+      _id: 'task-1',
+      title: 'Write the spec',
+      description: 'For this cycle.',
+      owner: ADA,
+    });
 
-    const save = await fillNewTask(user);
-    await user.click(save);
+    /** Opens the card from its title and changes the title, which is all a valid card needs to be saved. */
+    const editTitle = async (user: ReturnType<typeof userEvent.setup>) => {
+      mockedTaskService.getByBoard.mockResolvedValue([existing]);
+      renderBoard();
 
-    const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter task title')).toHaveValue('Write the release notes');
+      await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+      await screen.findByRole('dialog');
+      await screen.findByRole('radio', { name: 'Blue' });
+
+      const title = screen.getByPlaceholderText('Enter task title');
+      await user.clear(title);
+      await user.type(title, 'Write the release notes');
+
+      const save = screen.getByRole('button', { name: 'Save Changes' });
+      await waitFor(() => expect(save).toBeEnabled());
+      return save;
+    };
+
+    it('opens for editing, and not for creating, when a card is pressed', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.getByBoard.mockResolvedValue([existing]);
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+
+      expect(await screen.findByRole('dialog', { name: 'Edit Task' })).toBeInTheDocument();
+    });
+
+    it('saves the edit and closes the drawer when the server accepts it', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.update.mockResolvedValue({ ...existing, title: 'Write the release notes' });
+
+      const save = await editTitle(user);
+      await user.click(save);
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(mockedTaskService.update).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({ title: 'Write the release notes' }),
+      );
+      expect(await screen.findByRole('button', { name: 'Write the release notes' })).toBeInTheDocument();
+    });
+
+    // The drawer knows how to report a failed save and is tested doing it. It
+    // can only do so if the failure reaches it, and a page handler that catches
+    // everything and returns normally tells it the save succeeded: it clears
+    // the draft and closes, and the work is gone with nothing ever written.
+    it('keeps the drawer open and says so when the server refuses the edit', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.update.mockRejectedValue(new Error('refused'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const save = await editTitle(user);
+      await user.click(save);
+
+      const alert = await screen.findByRole('alert');
+      expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Enter task title')).toHaveValue('Write the release notes');
+    });
   });
 });
 

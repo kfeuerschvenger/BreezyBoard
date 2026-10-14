@@ -97,6 +97,18 @@ export async function seedBoard(page: Page, token: string, columns: string[][]):
   return board._id as string;
 }
 
+/**
+ * Adds a card the way a person does: open the column's composer, type the
+ * title, press Enter. Returns once the card is on the board.
+ */
+export async function addCard(page: Page, columnTitle: string, title: string): Promise<void> {
+  await page.getByRole('button', { name: `Add a card to ${columnTitle}` }).click();
+  const field = page.getByRole('textbox', { name: new RegExp(`new card in ${columnTitle}`, 'i') });
+  await field.fill(title);
+  await field.press('Enter');
+  await expect(page.getByRole('heading', { name: title, level: 3 })).toBeVisible();
+}
+
 /** Reads the count badge rendered next to a column title. */
 export async function columnCount(page: Page, columnTitle: string): Promise<number> {
   const text = await page.locator('body').innerText();

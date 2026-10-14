@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, logInThroughTheUi, columnCount, seedBoard, waitUntilSettled } from './fixtures';
+import { test, expect, addCard, logInThroughTheUi, columnCount, seedBoard, waitUntilSettled } from './fixtures';
 
 /**
  * The product's core loop. This single spec covers the two defects that were
@@ -35,43 +35,22 @@ test.describe('board core loop', () => {
       expect(await columnCount(page, 'Backlog')).toBe(0);
     });
 
-    await test.step('create a task through the drawer', async () => {
-      await page.getByRole('button', { name: /add task/i }).first().click();
-
-      const save = page.getByRole('button', { name: /save changes/i });
-      await expect(save, 'the drawer opens with an incomplete form').toBeDisabled();
-
-      await page.getByPlaceholder('Enter task title').fill('Core loop task');
-      await page.getByPlaceholder('Enter task description').fill('Created by the end to end suite');
-      // The radio itself is sr-only, so what a person clicks is the label
-      // wrapping it, which is the visible swatch. Targeting the input
-      // directly asks Playwright to click a one pixel clipped element and it
-      // correctly refuses.
-      await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
-      await page.getByPlaceholder('Search team members...').fill(authedUser.firstName);
-      await page.getByText(authedUser.email).last().click();
-
-      // Regression guard for the defect where clearing an error left an
-      // undefined value under an existing key and locked the form forever.
-      await expect(save, 'submit must enable once every required field is filled').toBeEnabled();
-      await save.click();
-
-      await expect(page.getByText('Core loop task')).toBeVisible();
+    await test.step('create a card from its column composer', async () => {
+      await addCard(page, 'Backlog', 'Core loop task');
       expect(await columnCount(page, 'Backlog')).toBe(1);
     });
 
     await test.step('drag the task into another column', async () => {
       const handle = page.locator('[role="article"]').first().locator('[aria-label="Drag handle"]');
       await expect(handle).toBeVisible();
-      // The card rises into place on a spring (opacity and y), and the drawer
-      // that created it is still leaving. A press while either is in flight lands
-      // off the handle, which reads as a text selection instead of a drag.
+      // The card arrives with a keyframe (opacity and a slide from the left). A
+      // press while it is in flight lands off the handle, which reads as a text
+      // selection instead of a drag.
       //
       // Two readings of the handle's box a moment apart cannot tell when the card
       // has stopped: the animation starts late when the renderer stalls on the
       // card's first frame, so both readings see the starting position and agree.
-      // The card's own state can: the spring ends with its transform cleared.
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      // The card's own state can: the animation ends with its transform cleared.
       await waitUntilSettled(page.locator('[role="article"]').first());
 
       const from = await handle.boundingBox();
@@ -144,14 +123,7 @@ test.describe('board core loop', () => {
     await page.getByRole('button', { name: /^create board$/i }).last().click();
     await page.getByText(boardName).first().click();
 
-    await page.getByRole('button', { name: /add task/i }).first().click();
-    await page.getByPlaceholder('Enter task title').fill('Keyboard task');
-    await page.getByPlaceholder('Enter task description').fill('Reachable without a mouse');
-    await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
-    await page.getByPlaceholder('Search team members...').fill(authedUser.firstName);
-    await page.getByText(authedUser.email).last().click();
-    await page.getByRole('button', { name: /save changes/i }).click();
-    await expect(page.getByText('Keyboard task')).toBeVisible();
+    await addCard(page, 'Backlog', 'Keyboard task');
 
     const handle = page.locator('[role="article"]').first().locator('[aria-label="Drag handle"]');
     await handle.focus();
@@ -198,17 +170,7 @@ test.describe('board core loop', () => {
       .click();
     await page.getByText(boardName).first().click();
 
-    await page
-      .getByRole('button', { name: /add task/i })
-      .first()
-      .click();
-    await page.getByPlaceholder('Enter task title').fill('Menu task');
-    await page.getByPlaceholder('Enter task description').fill('Moved without a pointer');
-    await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
-    await page.getByPlaceholder('Search team members...').fill(authedUser.firstName);
-    await page.getByText(authedUser.email).last().click();
-    await page.getByRole('button', { name: /save changes/i }).click();
-    await expect(page.getByText('Menu task')).toBeVisible();
+    await addCard(page, 'Backlog', 'Menu task');
 
     const trigger = page.getByRole('button', {
       name: 'Move Menu task to another column',
@@ -314,6 +276,19 @@ test.describe('board core loop', () => {
 
     const dndAnnouncement = (page: Page) => page.locator('[id^="DndLiveRegion"]');
 
+    // Picks a card up and returns once the sensor is listening for the arrows.
+    //
+    // The keyboard sensor adds its key listener one task after the key that
+    // picks a card up, so that key is not read as the first move, and the
+    // announcement can already be on screen by then. A person cannot press that
+    // fast. A script can, so it queues a task of its own behind the sensor's:
+    // timers with the same delay run in the order they were set.
+    const pickUp = async (page: Page, key: 'Space' | 'Enter', announcement: string) => {
+      await page.keyboard.press(key);
+      await expect(dndAnnouncement(page)).toHaveText(announcement);
+      await page.evaluate(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
+    };
+
     const startOn = async (page: Page, boardId: string, title: string) => {
       await page.goto(`/board/${boardId}`);
       await expect(page.getByRole('heading', { name: title, level: 3 })).toBeVisible();
@@ -335,8 +310,7 @@ test.describe('board core loop', () => {
       await startOn(page, boardId, 'A1');
 
       await handleOf(page, 'A1').focus();
-      await page.keyboard.press('Enter');
-      await expect(dndAnnouncement(page)).toHaveText('Picked up A1. Backlog, position 1 of 3.');
+      await pickUp(page, 'Enter', 'Picked up A1. Backlog, position 1 of 3.');
 
       await page.keyboard.press('ArrowRight');
       await expect(dndAnnouncement(page)).toHaveText('Up Next, position 1 of 3.');
@@ -372,12 +346,11 @@ test.describe('board core loop', () => {
       await startOn(page, boardId, 'A1');
 
       await handleOf(page, 'A1').focus();
-      await page.keyboard.press('Space');
       // The sensor starts listening for the arrows one task after the key that
       // picks the card up, so an arrow sent in the same instant is lost. A
       // person cannot press that fast, and waiting for the announcement is what
       // they would do.
-      await expect(dndAnnouncement(page)).toHaveText('Picked up A1. Backlog, position 1 of 2.');
+      await pickUp(page, 'Space', 'Picked up A1. Backlog, position 1 of 2.');
       // Each arrow is measured from where the previous one left the card, which
       // is known once it has been announced.
       await page.keyboard.press('ArrowRight');
@@ -407,9 +380,8 @@ test.describe('board core loop', () => {
       const before = await columnsOf(page);
 
       await handleOf(page, 'A2').focus();
-      await page.keyboard.press('Space');
       // See the test above: the arrows are heard from one task after the pick up.
-      await expect(dndAnnouncement(page)).toHaveText('Picked up A2. Backlog, position 2 of 3.');
+      await pickUp(page, 'Space', 'Picked up A2. Backlog, position 2 of 3.');
       await page.keyboard.press('ArrowRight');
       await expect(dndAnnouncement(page)).toHaveText(/^Up Next, position \d of 2\.$/);
       await page.keyboard.press('ArrowRight');
@@ -437,7 +409,7 @@ test.describe('board core loop', () => {
 
       const row = page.getByRole('region', { name: 'Board columns' });
       await handleOf(page, 'A1').focus();
-      await page.keyboard.press('Space');
+      await pickUp(page, 'Space', 'Picked up A1. Backlog, position 1 of 2.');
 
       let previous = await row.evaluate(element => element.scrollLeft);
       for (const title of ['Up Next', 'In Progress', 'Done']) {

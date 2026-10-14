@@ -57,6 +57,10 @@
   --color-glass: rgb(255 255 255 / 0.62);
   --color-glass-strong: rgb(255 255 255 / 0.82);
   --color-glass-border: rgb(255 255 255 / 0.85);
+  /* A board column is lighter than the sidebar so the cards on it read as the
+     nearer layer, and the empty board banner sits between the two. */
+  --color-glass-column: rgb(255 255 255 / 0.5);
+  --color-glass-banner: rgb(255 255 255 / 0.72);
 
   /* Borders and dividers, one navy at rising opacity. */
   --color-line-05: rgb(15 27 45 / 0.05);
@@ -220,15 +224,23 @@
      collapsed by the reduced motion rule at the end of this file. */
   --animate-bb-up: bbUp 0.35s var(--ease-standard) both;
   --animate-bb-view: bbView 0.45s var(--ease-standard) both;
+  /* The board page's entrance. It does not fill forwards: a transform that an
+     animation still holds, even one that ends at none, makes the element the
+     containing block of its fixed descendants, and the drag overlay is one, so
+     it would be placed by the page and not by the viewport. */
+  --animate-bb-view-once: bbView 0.45s var(--ease-standard) backwards;
   --animate-bb-fade: bbFade 0.2s both;
   --animate-bb-in: bbIn 0.5s var(--ease-standard) both;
   --animate-bb-land: bbLand 0.55s var(--ease-standard);
   --animate-bb-away: bbAway 0.46s var(--ease-exit) forwards;
   --animate-bb-pop: bbPop 0.35s both;
   --animate-bb-gap: bbGap 0.18s both;
+  --animate-bb-composer: bbUp 0.22s var(--ease-standard) both;
+  --animate-bb-hero: bbUp 0.45s var(--ease-standard) 0.1s both;
   --animate-bb-spin: bbSpin 0.8s linear infinite;
   --animate-bb-shake: bbShake 0.45s;
   --animate-bb-sway: bbSway 4s ease-in-out infinite;
+  --animate-bb-sway-slow: bbSway 3s ease-in-out infinite;
   --animate-bb-toast: bbToast 0.45s var(--ease-standard) both;
   /* The two floating cards on the auth screen drift on different periods and
      out of phase, so they never move together. */

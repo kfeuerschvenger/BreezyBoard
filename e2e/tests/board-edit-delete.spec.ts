@@ -36,9 +36,9 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('heading', { level: 1, name: 'Renamed on the board page' })).toBeVisible();
 
-    // The back button is a client side navigation, so what the dashboard shows
-    // here is what the cache holds, not what a fresh load would fetch.
-    await page.getByRole('button', { name: 'Go back' }).click();
+    // The sidebar's Home link is a client side navigation, so what the dashboard
+    // shows here is what the cache holds, not what a fresh load would fetch.
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
     await expect(page.getByRole('main').getByRole('link', { name: 'Renamed on the board page', exact: true })).toBeVisible();
     await expect(page.getByText('A new description')).toBeVisible();
     // The sidebar names the board from the same cache.
