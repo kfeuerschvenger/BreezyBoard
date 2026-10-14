@@ -46,5 +46,7 @@ export { useDeleteBoardWithUndo } from './hooks/useDeleteBoardWithUndo';
 export type { BoardToDelete, UseDeleteBoardWithUndoResult } from './hooks/useDeleteBoardWithUndo';
 export { DeleteBoardDialog } from './components/DeleteBoardDialog';
 export type { DeleteBoardDialogProps } from './components/DeleteBoardDialog';
+export { useAddMembersFlow } from './hooks/useAddMembersFlow';
+export type { AddMembersDialogProps, AddMembersTarget, UseAddMembersFlowResult } from './hooks/useAddMembersFlow';
 export { useBoardMenu } from './hooks/useBoardMenu';
 export type { UseBoardMenuResult } from './hooks/useBoardMenu';

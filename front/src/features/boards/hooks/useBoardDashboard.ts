@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { Board, DashboardStats, User } from '@/models';
-import { useAddBoardMembers, useBoards, useDashboardStats } from '../queries';
+import type { Board, DashboardStats } from '@/models';
+import { useBoards, useDashboardStats } from '../queries';
 import { useDeleteBoardWithUndo } from './useDeleteBoardWithUndo';
 import type { BoardToDelete } from './useDeleteBoardWithUndo';
 
@@ -13,7 +13,6 @@ export interface UseBoardDashboardResult {
   isDeleting: (boardId: string) => boolean;
   /** Each write answers whether it landed, so the caller knows to close its form. */
   deleteBoard: (board: BoardToDelete) => Promise<boolean>;
-  addMembers: (boardId: string, members: User[]) => Promise<boolean>;
 }
 
 const NO_BOARDS: Board[] = [];
@@ -26,14 +25,14 @@ const NO_STATS: DashboardStats = {
 };
 
 /**
- * Everything the dashboard reads and everything it writes.
+ * Everything the dashboard reads and the write it owns.
  *
- * The two writes share a shape worth keeping in one place: report the
- * failure, say whether it landed, and let the cache decide what the lists
- * look like afterwards. Neither touches a list directly, because each
- * mutation already invalidates the two keys it affects. Creating a board is
- * not here: the dialog that does it is the shell's, opened from the sidebar
- * as well as from this page.
+ * The write reports its failure, says whether it landed, and lets the cache
+ * decide what the lists look like afterwards, because the mutation already
+ * invalidates the keys it affects. Creating a board is not here: the dialog
+ * that does it is the shell's, opened from the sidebar as well as from this
+ * page. Adding members is not here either: `useAddMembersFlow` serves this
+ * page and the board page alike.
  */
 export function useBoardDashboard(): UseBoardDashboardResult {
   // Only failures the page causes itself. A failed read is reported by the
@@ -44,7 +43,6 @@ export function useBoardDashboard(): UseBoardDashboardResult {
   const statsQuery = useDashboardStats();
 
   const boardDeletion = useDeleteBoardWithUndo();
-  const addMembersMutation = useAddBoardMembers();
 
   const run = async (action: () => Promise<unknown>, failure: string, logAs: string): Promise<boolean> => {
     try {
@@ -73,13 +71,6 @@ export function useBoardDashboard(): UseBoardDashboardResult {
 
     deleteBoard: board =>
       run(() => boardDeletion.deleteBoard(board), 'Failed to delete board. Please try again.', 'Error deleting board:'),
-
-    addMembers: (boardId, members) =>
-      run(
-        () => addMembersMutation.mutateAsync({ boardId, memberIds: members.map(member => member._id) }),
-        'Failed to add members. Please try again.',
-        'Error adding members:'
-      ),
   };
 }
 

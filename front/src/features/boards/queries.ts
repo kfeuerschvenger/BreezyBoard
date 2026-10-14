@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BoardService, DashboardService, TemplateService } from '@/services';
+import { userKeys } from '@/features/users';
 import type { Board } from '@/models';
 
 /**
@@ -142,7 +143,26 @@ export const useDeleteBoard = () => {
 /** Brings back a soft deleted board; the list and the totals count it again. */
 export const useRestoreBoard = () => useBoardMutation((boardId: string) => BoardService.restore(boardId));
 
-export const useAddBoardMembers = () =>
-  useBoardMutation(({ boardId, memberIds }: { boardId: string; memberIds: string[] }) =>
-    BoardService.addMembers(boardId, memberIds)
-  );
+/**
+ * Besides the list and the totals, adding people changes the board page's own
+ * read, which carries the member count, and the list of people a task on that
+ * board can be given to. Both are held for thirty seconds, so without their
+ * invalidation a person added from the board page would be missing from the
+ * task form's owner picker until the cache aged out.
+ */
+export const useAddBoardMembers = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ boardId, memberIds }: { boardId: string; memberIds: string[] }) =>
+      BoardService.addMembers(boardId, memberIds),
+    onSuccess: async (_result, { boardId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: boardKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: boardKeys.stats() }),
+        queryClient.invalidateQueries({ queryKey: boardKeys.detail(boardId) }),
+        queryClient.invalidateQueries({ queryKey: userKeys.boardMembers(boardId) }),
+      ]);
+    },
+  });
+};

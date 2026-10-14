@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { IconDots, IconPencil, IconTrash } from '@tabler/icons-react';
+import { IconDots, IconPencil, IconTrash, IconUserPlus } from '@tabler/icons-react';
 import type { Board } from '@/models';
+import { AddMemberModal } from '@/features/users';
 import { Menu, MenuItem, Icon } from '@/shared/ui';
+import { useAddMembersFlow } from '../hooks/useAddMembersFlow';
 import { useDeleteBoardWithUndo } from '../hooks/useDeleteBoardWithUndo';
 import { useUpdateBoard } from '../queries';
 import { DeleteBoardDialog } from './DeleteBoardDialog';
@@ -29,6 +31,7 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const updateBoard = useUpdateBoard();
   const { deleteBoard } = useDeleteBoardWithUndo();
+  const addMembers = useAddMembersFlow();
 
   if (board.viewerRole !== 'owner') return null;
 
@@ -70,6 +73,11 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
           <span>Edit board</span>
         </MenuItem>
 
+        <MenuItem onSelect={() => addMembers.open(board)}>
+          <Icon as={IconUserPlus} size={16} className="text-ink-tertiary" aria-hidden="true" />
+          <span>Add members</span>
+        </MenuItem>
+
         <MenuItem
           onSelect={() => {
             setDeleteError(null);
@@ -81,6 +89,8 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
           <span>Delete board</span>
         </MenuItem>
       </Menu>
+
+      <AddMemberModal {...addMembers.dialogProps} />
 
       <DeleteBoardDialog
         board={confirmingDelete ? board : null}
