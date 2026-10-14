@@ -30,12 +30,12 @@ export const until = async (target, label, predicate, arg, timeout = WAIT_MS) =>
 export const poll = async (label, read, accept, timeout = WAIT_MS) => {
   const started = Date.now();
   let value = await read();
-  while (!accept(value)) {
+  while (!accept(value)) { // NOSONAR javascript:S9382 sequential on purpose: a poll reads, waits, reads again, and the next read depends on the last answer
     if (Date.now() - started > timeout) {
       throw new Error(`Timed out after ${timeout} ms waiting for ${label}; last value ${JSON.stringify(value)}`);
     }
-    await new Promise(resolve => setTimeout(resolve, 50));
-    value = await read();
+    await new Promise(resolve => setTimeout(resolve, 50)); // NOSONAR javascript:S9382
+    value = await read(); // NOSONAR javascript:S9382
   }
   return value;
 };

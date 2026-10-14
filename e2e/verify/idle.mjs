@@ -52,8 +52,8 @@ const waitAndReport = async seconds => {
 };
 
 let sawToastAt = null;
-for (let i = 0; i < 8; i++) {
-  const state = await waitAndReport(5);
+for (let i = 0; i < 8; i++) { // NOSONAR javascript:S9382 sequential on purpose: each pass is five more seconds of idleness, in order
+  const state = await waitAndReport(5); // NOSONAR javascript:S9382
   if (state.visible && sawToastAt === null) sawToastAt = state.elapsed;
 }
 
@@ -99,9 +99,9 @@ if (mode === 'extend') {
   check('the session survived past the original expiry', stillIn, `url ${page.url()}`);
 } else {
   log('\n--- letting it run out ---');
-  for (let i = 0; i < 16; i++) {
-    await waitAndReport(5);
-    const out = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('Your boards');
+  for (let i = 0; i < 16; i++) { // NOSONAR javascript:S9382 sequential on purpose: each pass is five more seconds of idleness, in order
+    await waitAndReport(5); // NOSONAR javascript:S9382
+    const out = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('Your boards'); // NOSONAR javascript:S9382
     if (out) break;
   }
   const signedOut = page.url().includes('/login') || !(await page.locator('body').innerText()).includes('Your boards');

@@ -410,7 +410,7 @@ check('the close glyph turns a quarter on hover', (await styleOf(closeButton.loc
 await page.mouse.move(2, 2);
 
 await page.keyboard.press('Escape');
-await probeDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
+await probeDialog.waitFor({ state: 'detached', timeout: WAIT_MS }).catch(() => {});
 
 log('\n--- the new primitives, rendered for real ---');
 
@@ -426,7 +426,7 @@ const mountPrimitives = async (target, build, args = {}) => {
     const urlOf = name => new RegExp(`/node_modules/[.]vite/deps/${name}[.]js[?]v=[a-f0-9]+`).exec(entry)?.[0];
     const react = await import(urlOf('react'));
     const dom = await import(urlOf('react-dom_client'));
-    const ui = await import('/src/shared/ui/index.ts');
+    const ui = await import('/src/shared/ui/index.ts'); // NOSONAR javascript:S6859 a URL served by the Vite dev server inside the page, not a filesystem path, so it carries the extension
     const createElement = react.createElement ?? react.default.createElement;
     const createRoot = dom.createRoot ?? dom.default.createRoot;
 
@@ -439,7 +439,7 @@ const mountPrimitives = async (target, build, args = {}) => {
     window.__probeRoot = root;
     // eslint-disable-next-line no-new-func
     root.render(
-      new Function('ui', 'h', 'React', 'args', `return (${source})(ui, h, React, args)`)(ui, createElement, react.default ?? react, buildArgs)
+      new Function('ui', 'h', 'React', 'args', `return (${source})(ui, h, React, args)`)(ui, createElement, react.default ?? react, buildArgs) // NOSONAR javascript:S1523 evaluates only the probe source this script wrote, inside the verify page, never anything read from the application or from the network
     );
     // The render is scheduled, not synchronous: wait for the probe's first element.
     await new Promise((resolve, reject) => {
@@ -492,11 +492,11 @@ await mountPrimitives(page, (ui, h) =>
     h(ui.Chip, { hue: 'neutral' }, 'Chip neutral')
   )
 );
-for (const hue of ['sky', 'teal', 'green', 'sand', 'coral', 'lavender']) {
-  const painted = await probeText(page, `Chip ${hue}`, ['color', 'backgroundColor', 'borderTopLeftRadius', 'fontSize']);
-  check(`the ${hue} chip text is its deep step`, await paintOf(page, painted.color), await paintOf(page, await tokenValue(page, `--color-${hue}-deep`)));
-  check(`the ${hue} chip fill is its tint`, await paintOf(page, painted.backgroundColor), await paintOf(page, await tokenValue(page, `--color-${hue}-tint`)));
-  await reportPairs(page, [[`the ${hue} chip text on its fill`, painted.color, painted.backgroundColor, 4.5]]);
+for (const hue of ['sky', 'teal', 'green', 'sand', 'coral', 'lavender']) { // NOSONAR javascript:S9382 sequential on purpose: the probes share one page, and the checks are logged in order
+  const painted = await probeText(page, `Chip ${hue}`, ['color', 'backgroundColor', 'borderTopLeftRadius', 'fontSize']); // NOSONAR javascript:S9382
+  check(`the ${hue} chip text is its deep step`, await paintOf(page, painted.color), await paintOf(page, await tokenValue(page, `--color-${hue}-deep`))); // NOSONAR javascript:S9382
+  check(`the ${hue} chip fill is its tint`, await paintOf(page, painted.backgroundColor), await paintOf(page, await tokenValue(page, `--color-${hue}-tint`))); // NOSONAR javascript:S9382
+  await reportPairs(page, [[`the ${hue} chip text on its fill`, painted.color, painted.backgroundColor, 4.5]]); // NOSONAR javascript:S9382
 }
 const neutralChip = await probeText(page, 'Chip neutral', ['color', 'backgroundColor']);
 await reportPairs(page, [['the neutral chip text on its fill', neutralChip.color, neutralChip.backgroundColor, 4.5]]);
@@ -636,8 +636,8 @@ check(
 check('the fill animates its width', sixFill.transitionProperty.includes('width'), true);
 const gradientFill = await probe(page, '[aria-label="Probe eight"] div', ['backgroundImage']);
 check('a gradient fill is a linear gradient', gradientFill.backgroundImage.startsWith('linear-gradient'), true);
-for (const hue of ['sky', 'teal', 'green', 'sand', 'coral', 'lavender']) {
-  await reportPairs(page, [
+for (const hue of ['sky', 'teal', 'green', 'sand', 'coral', 'lavender']) { // NOSONAR javascript:S9382 sequential on purpose: one shared page, and the checks are logged in order
+  await reportPairs(page, [ // NOSONAR javascript:S9382
     [`the ${hue} progress fill on its track over white`, `--color-${hue}-edge`, 'rgb(15 27 45 / 0.07)', 3],
     [`the ${hue} progress fill on its track over the ground`, `--color-${hue}-edge`, 'rgb(243 246 249)', 3],
   ]);
@@ -686,22 +686,22 @@ await mountPrimitives(page, (ui, h) =>
     h(ui.Avatar, { name: 'Ada Lovelace', size: 'xl' })
   )
 );
-for (const hue of HUE_NAMES) {
+for (const hue of HUE_NAMES) { // NOSONAR javascript:S9382 sequential on purpose: the probes share one page, and the checks are logged in order
   const avatar = page.locator(`#probe-host [aria-label="Av ${hue}"]`);
-  const painted = await styleOf(avatar, ['backgroundColor', 'color']);
-  const initials = await styleOf(avatar.locator('span'), ['fontSize', 'fontWeight']);
+  const painted = await styleOf(avatar, ['backgroundColor', 'color']); // NOSONAR javascript:S9382
+  const initials = await styleOf(avatar.locator('span'), ['fontSize', 'fontWeight']); // NOSONAR javascript:S9382
   check(
     `the ${hue} avatar is filled with the mid step`,
-    await paintOf(page, painted.backgroundColor),
-    await paintOf(page, await tokenValue(page, `--color-${hue}-mid`))
+    await paintOf(page, painted.backgroundColor), // NOSONAR javascript:S9382
+    await paintOf(page, await tokenValue(page, `--color-${hue}-mid`)) // NOSONAR javascript:S9382
   );
-  check(`the ${hue} avatar initials are ink`, await paintOf(page, painted.color), await paintOf(page, await tokenValue(page, '--color-ink')));
+  check(`the ${hue} avatar initials are ink`, await paintOf(page, painted.color), await paintOf(page, await tokenValue(page, '--color-ink'))); // NOSONAR javascript:S9382
   check(`the ${hue} avatar initials are 10 pixels and bold`, `${initials.fontSize} ${initials.fontWeight}`, '10px 700');
-  await reportPairs(page, [[`avatar initials on the ${hue} mid fill`, painted.color, painted.backgroundColor, 4.5]]);
+  await reportPairs(page, [[`avatar initials on the ${hue} mid fill`, painted.color, painted.backgroundColor, 4.5]]); // NOSONAR javascript:S9382
 }
 const avatarSizes = [];
-for (const name of ['Av sky', 'Ada Lovelace']) {
-  for (const box of await page.locator(`#probe-host [aria-label="${name}"]`).evaluateAll(els => els.map(el => `${el.offsetWidth}`))) {
+for (const name of ['Av sky', 'Ada Lovelace']) { // NOSONAR javascript:S9382 sequential on purpose: the sizes are listed in the order of the probes on one page
+  for (const box of await page.locator(`#probe-host [aria-label="${name}"]`).evaluateAll(els => els.map(el => `${el.offsetWidth}`))) { // NOSONAR javascript:S9382
     avatarSizes.push(box);
   }
 }
@@ -753,8 +753,8 @@ const swatchRing = await styleOf(swatch('sky'), ['outlineStyle', 'outlineWidth',
 check('the swatch whose radio has the keyboard draws the focus ring', `${swatchRing.outlineStyle} ${swatchRing.outlineWidth} ${swatchRing.outlineOffset}`, 'solid 2px 2px');
 await page.keyboard.press('ArrowRight');
 check('the right arrow chooses the next swatch', await page.locator('#probe-host input:checked').evaluate(radio => radio.value), 'coral');
-for (const hue of HUE_NAMES) {
-  await reportPairs(page, [
+for (const hue of HUE_NAMES) { // NOSONAR javascript:S9382 sequential on purpose: one shared page, and the checks are logged in order
+  await reportPairs(page, [ // NOSONAR javascript:S9382
     [`the ${hue} swatch outline on white`, `--color-${hue}-edge`, '--color-surface', 3],
     [`the ${hue} swatch outline on the ground`, `--color-${hue}-edge`, '--color-ground', 3],
   ]);
@@ -1039,9 +1039,9 @@ for (const [label, locator, token] of [
   ['a board name', boardLink.locator('span.truncate'), '--color-ink-secondary'],
   ['the author line', sidebar.getByText(/Kevin Feuerschvenger$/), '--color-ink-tertiary'],
   ['a legal link', sidebar.getByRole('button', { name: 'Privacy policy' }), '--color-ink-secondary'],
-]) {
-  const behind = await worstBackdrop(locator);
-  await reportPairs(page, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
+]) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the shared page's text colour and puts it back, so the elements cannot be photographed at once
+  const behind = await worstBackdrop(locator); // NOSONAR javascript:S9382
+  await reportPairs(page, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]); // NOSONAR javascript:S9382
 }
 
 log('\n--- the Breeze control and the wind over the shell ---');
@@ -1285,9 +1285,9 @@ await reportPairs(page, [
 ]);
 // The toast is first in the tab order, so Tab walks onto its controls.
 let reached = false;
-for (let press = 0; press < 6 && !reached; press += 1) {
-  await page.keyboard.press('Tab');
-  reached = await undo.evaluate(el => el === document.activeElement);
+for (let press = 0; press < 6 && !reached; press += 1) { // NOSONAR javascript:S9382 sequential on purpose: each Tab moves focus on from where the last one left it
+  await page.keyboard.press('Tab'); // NOSONAR javascript:S9382
+  reached = await undo.evaluate(el => el === document.activeElement); // NOSONAR javascript:S9382
 }
 check('the keyboard reaches the toast action', reached, true);
 const toastRing = await styleOf(undo, ['outlineStyle', 'outlineWidth', 'outlineColor']);
@@ -1392,10 +1392,10 @@ const textTargets = [
   // The warm gradient word: its darker, coral end is the worst case.
   ['the headline word, at its coral end', 'aside p:nth-of-type(1) span', 'oklch(0.78 0.14 38)', 3],
 ];
-for (const [label, selector, rgb, minimum] of textTargets) {
-  const clip = await authPage.locator(selector).first().boundingBox();
-  const png = (await authPage.screenshot({ clip })).toString('base64');
-  const worst = await authPage.evaluate(
+for (const [label, selector, rgb, minimum] of textTargets) { // NOSONAR javascript:S9382 sequential on purpose: the glyphs were made transparent on one shared page, and each screenshot reads it
+  const clip = await authPage.locator(selector).first().boundingBox(); // NOSONAR javascript:S9382
+  const png = (await authPage.screenshot({ clip })).toString('base64'); // NOSONAR javascript:S9382
+  const worst = await authPage.evaluate( // NOSONAR javascript:S9382
     async ([data, color]) => {
       const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
       const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -1476,8 +1476,8 @@ const homeAuth = { headers: { Authorization: `Bearer ${sessionToken}` } };
 const homePalette = (await (await page.request.get(`${API}/colors?type=board`, homeAuth)).json()).data;
 const homeTemplate = (await (await page.request.get(`${API}/templates`, homeAuth)).json()).data[0];
 check('the board palette is the six hues, by key', homePalette.map(entry => entry.value).sort((a, b) => a.localeCompare(b)).join(' '), Object.keys(HUE_ANGLES).sort((a, b) => a.localeCompare(b)).join(' '));
-for (const [hue] of Object.entries(HUE_ANGLES)) {
-  const created = await page.request.post(`${API}/boards`, {
+for (const [hue] of Object.entries(HUE_ANGLES)) { // NOSONAR javascript:S9382 sequential on purpose: the boards are listed by creation order, and the home page reads that order
+  const created = await page.request.post(`${API}/boards`, { // NOSONAR javascript:S9382
     ...homeAuth,
     data: {
       title: `Home ${hue}`,
@@ -1578,13 +1578,13 @@ const heroTargets = [
   ['a total label', 'main header dt', 4.5],
   ['a total figure', 'main header dd', 3],
 ];
-for (const width of [1440, 1024, 768, 390, 320]) {
-  await homePage.setViewportSize({ width, height: 900 });
-  await settled(homePage, { label: `the home page to lay out at ${width}` });
-  for (const [label, selector, minimum] of heroTargets) {
-    for (const [index, handle] of (await homePage.locator(selector).all()).entries()) {
-      const behind = await extremeBehind(homePage, handle, 'lightest');
-      await reportPairs(homePage, [[`${label}${index > 0 ? ` ${index + 1}` : ''} at ${width} on the lightest pixel behind it (${behind})`, '#ffffff', `rgb(${behind})`, minimum]]);
+for (const width of [1440, 1024, 768, 390, 320]) { // NOSONAR javascript:S9382 sequential on purpose: one shared page whose viewport is resized for each width, so the widths cannot overlap
+  await homePage.setViewportSize({ width, height: 900 }); // NOSONAR javascript:S9382
+  await settled(homePage, { label: `the home page to lay out at ${width}` }); // NOSONAR javascript:S9382
+  for (const [label, selector, minimum] of heroTargets) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the shared page's text colour and puts it back
+    for (const [index, handle] of (await homePage.locator(selector).all()).entries()) { // NOSONAR javascript:S9382
+      const behind = await extremeBehind(homePage, handle, 'lightest'); // NOSONAR javascript:S9382
+      await reportPairs(homePage, [[`${label}${index > 0 ? ` ${index + 1}` : ''} at ${width} on the lightest pixel behind it (${behind})`, '#ffffff', `rgb(${behind})`, minimum]]); // NOSONAR javascript:S9382
     }
   }
 }
@@ -1601,10 +1601,10 @@ await reportPairs(homePage, [
 // the token layer declares, and the dot beside the board in the sidebar is the
 // mid step of the same hue.
 const tileFor = hue => homePage.locator('main [data-hue]', { has: homePage.getByRole('heading', { name: `Home ${hue}` }) });
-for (const [hue, angle] of Object.entries(HUE_ANGLES)) {
+for (const [hue, angle] of Object.entries(HUE_ANGLES)) { // NOSONAR javascript:S9382 sequential on purpose: one shared page, and the checks are logged in order
   const hueTile = tileFor(hue);
-  check(`the ${hue} tile carries its hue`, await hueTile.evaluate(el => el.dataset.hue), hue);
-  const cover = await hueTile.locator(':scope > div').first().locator(':scope > div').first().evaluate(el => {
+  check(`the ${hue} tile carries its hue`, await hueTile.evaluate(el => el.dataset.hue), hue); // NOSONAR javascript:S9382
+  const cover = await hueTile.locator(':scope > div').first().locator(':scope > div').first().evaluate(el => { // NOSONAR javascript:S9382
     const style = getComputedStyle(el);
     return { image: style.backgroundImage, height: el.offsetHeight, radius: style.borderTopLeftRadius };
   });
@@ -1614,10 +1614,10 @@ for (const [hue, angle] of Object.entries(HUE_ANGLES)) {
     true
   );
   check(`the ${hue} cover is 96 pixels tall with rounded top corners`, `${cover.height} ${cover.radius}`, '96 22px');
-  const sidebarDot = await homePage.locator(`#app-sidebar a[href="${await hueTile.getByRole('link').first().getAttribute('href')}"] span[data-hue]`).evaluate(el => ({ hue: el.dataset.hue, color: getComputedStyle(el).backgroundColor }));
-  check(`the ${hue} sidebar dot is the mid step of the same hue`, `${sidebarDot.hue} ${await paintOf(homePage, sidebarDot.color)}`, `${hue} ${await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`))}`);
-  const fill = await hueTile.getByTestId('progress-fill').evaluate(el => getComputedStyle(el).backgroundColor);
-  check(`the ${hue} progress fill is the edge step`, await paintOf(homePage, fill), await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-edge`)));
+  const sidebarDot = await homePage.locator(`#app-sidebar a[href="${await hueTile.getByRole('link').first().getAttribute('href')}"] span[data-hue]`).evaluate(el => ({ hue: el.dataset.hue, color: getComputedStyle(el).backgroundColor })); // NOSONAR javascript:S9382
+  check(`the ${hue} sidebar dot is the mid step of the same hue`, `${sidebarDot.hue} ${await paintOf(homePage, sidebarDot.color)}`, `${hue} ${await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`))}`); // NOSONAR javascript:S9382
+  const fill = await hueTile.getByTestId('progress-fill').evaluate(el => getComputedStyle(el).backgroundColor); // NOSONAR javascript:S9382
+  check(`the ${hue} progress fill is the edge step`, await paintOf(homePage, fill), await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-edge`))); // NOSONAR javascript:S9382
 }
 
 const sampleTile = tileFor('sky');
@@ -1674,9 +1674,9 @@ for (const [label, locator, token, minimum] of [
   ['the updated date', sampleTile.getByText(/^Updated /), '--color-ink-tertiary', 4.5],
   ['the boards count', homePage.getByText(/^\d+ boards$/), '--color-ink-tertiary', 4.5],
   ['the Your boards heading', homePage.getByRole('heading', { name: 'Your boards' }), '--color-ink', 4.5],
-]) {
-  const behind = await extremeBehind(homePage, locator, 'darkest');
-  await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, minimum]]);
+]) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the shared page's text colour and puts it back
+  const behind = await extremeBehind(homePage, locator, 'darkest'); // NOSONAR javascript:S9382
+  await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, minimum]]); // NOSONAR javascript:S9382
 }
 await reportPairs(homePage, [
   ...Object.keys(HUE_ANGLES).map(hue => [`the owner initials on the ${hue} avatar fill`, '--color-ink', `--color-${hue}-mid`, 4.5]),
@@ -1692,9 +1692,9 @@ check('the new board tile is at least 196 pixels tall', Number.parseFloat(newSty
 for (const [label, locator, token] of [
   ['the new board title', newTile.getByText('New board', { exact: true }), '--color-ink'],
   ['the new board line', newTile.getByText('Fresh board, ready for take-off.'), '--color-ink-secondary'],
-]) {
-  const behind = await extremeBehind(homePage, locator, 'darkest');
-  await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
+]) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the shared page's text colour and puts it back
+  const behind = await extremeBehind(homePage, locator, 'darkest'); // NOSONAR javascript:S9382
+  await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]); // NOSONAR javascript:S9382
 }
 await newTile.hover();
 await settled(homePage, { label: 'the hovered new board tile to finish rising' });
@@ -1714,20 +1714,20 @@ check('the hues are offered in their own order', (await swatches.evaluateAll(rad
 check('the first hue is the one chosen for a new board', await swatches.first().isChecked(), true);
 const swatchFills = await swatches.evaluateAll(radios => radios.map(r => getComputedStyle(r.labels[0].querySelector('span')).backgroundColor));
 const midFills = [];
-for (const hue of Object.keys(HUE_ANGLES)) midFills.push(await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`)));
+for (const hue of Object.keys(HUE_ANGLES)) midFills.push(await paintOf(homePage, await tokenValue(homePage, `--color-${hue}-mid`))); // NOSONAR javascript:S9382 sequential on purpose: the colours are listed in hue order and compared with the swatches in that order
 const paintedSwatches = [];
-for (const fill of swatchFills) paintedSwatches.push(await paintOf(homePage, fill));
+for (const fill of swatchFills) paintedSwatches.push(await paintOf(homePage, fill)); // NOSONAR javascript:S9382 sequential on purpose: the colours are listed in swatch order
 check('each swatch is filled with the mid step of its hue', paintedSwatches.join(' '), midFills.join(' '));
 await homePage.keyboard.press('Escape');
 
 // How many tiles share a row at each width, from the rendered boxes.
 const tileColumns = () =>
   homePage.evaluate(() => new Set([...document.querySelectorAll('main [data-hue]')].map(card => Math.round(card.getBoundingClientRect().left))).size);
-for (const [width, expected] of [[320, 1], [390, 1], [768, 2], [1024, 3], [1440, 4]]) {
-  await homePage.setViewportSize({ width, height: 900 });
-  await settled(homePage, { label: `the tiles to lay out at ${width}` });
-  check(`at ${width} the tiles share ${expected} column${expected > 1 ? 's' : ''}`, await tileColumns(), expected);
-  check(`at ${width} the page does not scroll sideways`, await homePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+for (const [width, expected] of [[320, 1], [390, 1], [768, 2], [1024, 3], [1440, 4]]) { // NOSONAR javascript:S9382 sequential on purpose: one shared page whose viewport is resized for each width, so the widths cannot overlap
+  await homePage.setViewportSize({ width, height: 900 }); // NOSONAR javascript:S9382
+  await settled(homePage, { label: `the tiles to lay out at ${width}` }); // NOSONAR javascript:S9382
+  check(`at ${width} the tiles share ${expected} column${expected > 1 ? 's' : ''}`, await tileColumns(), expected); // NOSONAR javascript:S9382
+  check(`at ${width} the page does not scroll sideways`, await homePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true); // NOSONAR javascript:S9382
 }
 await homeContext.close();
 
@@ -1822,9 +1822,9 @@ for (const [label, locator, token] of [
   ['the composer button', boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }), '--color-ink-secondary'],
   ['the breadcrumb link to Home', boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Home' }), '--color-ink-secondary'],
   ['the breadcrumb link to Boards', boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Boards' }), '--color-ink-secondary'],
-]) {
-  const behind = await extremeBehind(boardPage, locator, 'darkest');
-  await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
+]) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the shared page's text colour and puts it back
+  const behind = await extremeBehind(boardPage, locator, 'darkest'); // NOSONAR javascript:S9382
+  await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]); // NOSONAR javascript:S9382
 }
 
 // The cards are white, so their text is measured as pairs.
@@ -1868,10 +1868,10 @@ check('the description text is not on the page', await boardPage.getByText('Writ
 // The breadcrumb's two links, Home and Boards: each with a keyboard focus ring
 // and a target of at least 24 pixels, leaving the board's own name as text.
 const crumbNav = boardPage.getByRole('navigation', { name: 'Breadcrumb' });
-for (const name of ['Home', 'Boards']) {
+for (const name of ['Home', 'Boards']) { // NOSONAR javascript:S9382 sequential on purpose: one keyboard, and each link is focused and left in turn
   const crumb = crumbNav.getByRole('link', { name });
-  check(`the breadcrumb link to ${name} is 32 pixels tall at a desktop width, above the 24 pixel minimum`, await crumb.evaluate(el => Math.round(el.getBoundingClientRect().height)), 32);
-  check(`a keyboard focused breadcrumb link to ${name} draws a 2px outline offset by 2px`, await (async () => {
+  check(`the breadcrumb link to ${name} is 32 pixels tall at a desktop width, above the 24 pixel minimum`, await crumb.evaluate(el => Math.round(el.getBoundingClientRect().height)), 32); // NOSONAR javascript:S9382
+  check(`a keyboard focused breadcrumb link to ${name} draws a 2px outline offset by 2px`, await (async () => { // NOSONAR javascript:S9382
     await crumb.focus();
     await boardPage.keyboard.press('Shift+Tab');
     await boardPage.keyboard.press('Tab');
@@ -1929,9 +1929,9 @@ const carry = async (pg, title, toColumn) => {
   // The copy that follows the pointer is what says the card is in the air; the
   // announcement is replaced as soon as the card moves.
   await pg.locator('[data-task-card][aria-hidden="true"]').waitFor({ state: 'attached' });
-  for (let step = 1; step <= 25; step += 1) {
-    await pg.mouse.move(from.x + (target.x + 150 - from.x) * (step / 25), from.y + (target.y + 220 - from.y) * (step / 25), { steps: 2 });
-    await pg.waitForTimeout(25); // NOSONAR javascript:S2925 paces the pointer, dnd-kit coalesces a burst of moves
+  for (let step = 1; step <= 25; step += 1) { // NOSONAR javascript:S9382 sequential on purpose: one pointer, and each move is the next point of the path
+    await pg.mouse.move(from.x + (target.x + 150 - from.x) * (step / 25), from.y + (target.y + 220 - from.y) * (step / 25), { steps: 2 }); // NOSONAR javascript:S9382
+    await pg.waitForTimeout(25); // NOSONAR javascript:S2925 javascript:S9382 paces the pointer, dnd-kit coalesces a burst of moves
   }
   // Held until the target column is the one lit: the card is over it, which is
   // what a person waits for before letting go. A column that never lights is
@@ -2044,9 +2044,9 @@ check('the pill is 13 pixels, 600, on white glass at 82 percent', `${placeStyle.
 for (const [label, locator, token, minimum] of [
   ['the place pill text', place.locator('span').last(), '--color-ink', 4.5],
   ['the close glyph', taskModal.getByRole('button', { name: 'Close' }), '--color-ink-secondary', 3],
-]) {
-  const behind = await extremeBehind(boardPage, locator, 'darkest');
-  await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, minimum]]);
+]) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the shared page's text colour and puts it back
+  const behind = await extremeBehind(boardPage, locator, 'darkest'); // NOSONAR javascript:S9382
+  await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, minimum]]); // NOSONAR javascript:S9382
 }
 
 await reportPairs(boardPage, [
@@ -2295,7 +2295,7 @@ check('a dialog opens under reduced motion', await dialog.isVisible(), true);
 check('under reduced motion the panel does not travel or scale', distinctMidTransforms(calmOpening) <= 1, true);
 check('under reduced motion the panel still fades in', calmOpening[0].opacity < 1, true);
 await calmPage.keyboard.press('Escape');
-await dialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
+await dialog.waitFor({ state: 'detached', timeout: WAIT_MS }).catch(() => {});
 check('the dialog unmounts after its exit under reduced motion', await dialog.count(), 0);
 
 await calm.close();
@@ -2310,7 +2310,7 @@ await normalDialog.waitFor({ state: 'visible' });
 check('with motion on the panel rises and scales in', isIdentity(normalOpening[0].transform), false);
 check('with motion on the panel fades in', normalOpening[0].opacity < 1, true);
 await normalPage.keyboard.press('Escape');
-await normalDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
+await normalDialog.waitFor({ state: 'detached', timeout: WAIT_MS }).catch(() => {});
 check('the dialog unmounts after its exit with motion on', await normalDialog.count(), 0);
 await normal.close();
 
@@ -2388,47 +2388,47 @@ const sampleLeaving = pg =>
     WAIT_MS
   );
 
-for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) {
-  const { pg, modalContext } = await modalPage(reducedMotion, { width: 1440, height: 900 });
-  const frames = await sampleModalOpening(pg);
+for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) { // NOSONAR javascript:S9382 sequential on purpose: each pass is a page of its own that is closed before the next one opens, and the checks are logged in order
+  const { pg, modalContext } = await modalPage(reducedMotion, { width: 1440, height: 900 }); // NOSONAR javascript:S9382
+  const frames = await sampleModalOpening(pg); // NOSONAR javascript:S9382
   const opening = frames[0];
-  await pg.getByRole('dialog').waitFor({ state: 'visible' });
+  await pg.getByRole('dialog').waitFor({ state: 'visible' }); // NOSONAR javascript:S9382
   check(`${mode}, at 1440: the modal fades in, starting transparent`, opening.opacity < 1, true);
   if (reducedMotion === 'no-preference') {
     check(`${mode}, at 1440: the modal starts raised and scaled down`, isIdentity(opening.transform), false);
   } else {
     check(`${mode}, at 1440: the modal comes to rest without travelling`, distinctMidTransforms(frames) <= 1, true);
   }
-  await settled(pg, { within: '[role="dialog"]', label: 'the modal to finish opening at 1440' });
-  const leaving = await sampleLeaving(pg);
+  await settled(pg, { within: '[role="dialog"]', label: 'the modal to finish opening at 1440' }); // NOSONAR javascript:S9382
+  const leaving = await sampleLeaving(pg); // NOSONAR javascript:S9382
   check(`${mode}, at 1440: it is still mounted while it leaves`, leaving.stillMounted, true);
   check(`${mode}, at 1440: while it leaves the wrapper, the scrim and the panel take no pointer`, `${leaving.wrapper} ${leaving.scrim} ${leaving.panel}`, 'none none none');
   check(`${mode}, at 1440: while it leaves a press lands on the card behind it`, `${leaving.hitIsInsideWrapper} ${leaving.hitIsTheCard}`, 'false true');
-  await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: 2000 });
-  check(`${mode}, at 1440: the dialog unmounts after its exit`, await pg.getByRole('dialog').count(), 0);
-  await modalContext.close();
+  await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: WAIT_MS }); // NOSONAR javascript:S9382
+  check(`${mode}, at 1440: the dialog unmounts after its exit`, await pg.getByRole('dialog').count(), 0); // NOSONAR javascript:S9382
+  await modalContext.close(); // NOSONAR javascript:S9382
 }
 
-for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) {
-  const { pg, modalContext } = await modalPage(reducedMotion, { width: 390, height: 844 });
-  const frames = await sampleModalOpening(pg);
-  await pg.getByRole('dialog').waitFor({ state: 'visible' });
+for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) { // NOSONAR javascript:S9382 sequential on purpose: each pass is a page of its own that is closed before the next one opens, and the checks are logged in order
+  const { pg, modalContext } = await modalPage(reducedMotion, { width: 390, height: 844 }); // NOSONAR javascript:S9382
+  const frames = await sampleModalOpening(pg); // NOSONAR javascript:S9382
+  await pg.getByRole('dialog').waitFor({ state: 'visible' }); // NOSONAR javascript:S9382
   const { scale, ty } = matrixOf(frames[0].transform);
   if (reducedMotion === 'no-preference') {
     check(`${mode}, at 390: the sheet starts below the bottom edge and does not scale`, `${ty > 0} ${scale}`, 'true 1');
   } else {
     check(`${mode}, at 390: the sheet comes to rest without travelling`, distinctMidTransforms(frames) <= 1, true);
   }
-  await settled(pg, { within: '[role="dialog"]', label: 'the sheet to finish opening at 390' });
-  const atRest = await pg.getByRole('dialog').evaluate(el => {
+  await settled(pg, { within: '[role="dialog"]', label: 'the sheet to finish opening at 390' }); // NOSONAR javascript:S9382
+  const atRest = await pg.getByRole('dialog').evaluate(el => { // NOSONAR javascript:S9382
     const box = el.getBoundingClientRect();
     return { bottom: Math.round(box.bottom), height: Math.round(innerHeight) };
   });
   check(`${mode}, at 390: the sheet comes to rest against the bottom edge`, atRest.bottom, atRest.height);
-  const leaving = await sampleLeaving(pg);
+  const leaving = await sampleLeaving(pg); // NOSONAR javascript:S9382
   check(`${mode}, at 390: while the sheet leaves it takes no pointer`, `${leaving.stillMounted} ${leaving.wrapper} ${leaving.scrim} ${leaving.panel}`, 'true none none none');
-  await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: 2000 });
-  await modalContext.close();
+  await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: WAIT_MS }); // NOSONAR javascript:S9382
+  await modalContext.close(); // NOSONAR javascript:S9382
 }
 
 log('\n--- the blown away exit: with motion on, at Still, and under reduced motion ---');
@@ -2513,32 +2513,32 @@ for (const [mode, reducedMotion, breeze] of [
   ['motion on', 'no-preference', 'breezy'],
   ['at Still', 'no-preference', 'still'],
   ['reduced motion', 'reduce', 'breezy'],
-]) {
+]) { // NOSONAR javascript:S9382 sequential on purpose: the passes change the stored Breeze level of one account, and the cards are made in order on one board
   exitRun += 1;
-  await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze } });
+  await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze } }); // NOSONAR javascript:S9382
   const top = `Away top ${exitRun}`;
   const below = `Away below ${exitRun}`;
-  const topCreated = (await (await makeGateTask(top, 0)).json()).data;
-  await makeGateTask(below, 0);
+  const topCreated = (await (await makeGateTask(top, 0)).json()).data; // NOSONAR javascript:S9382
+  await makeGateTask(below, 0); // NOSONAR javascript:S9382
 
-  const exitContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion });
-  const pg = await signIn(exitContext);
-  await pg.goto(gateBoardUrl);
-  await pg.getByRole('region', { name: 'Board columns' }).waitFor();
-  await pg.getByRole('button', { name: below, exact: true }).waitFor();
-  await settled(pg, { label: 'the board to stop animating before a card is blown away' });
+  const exitContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion }); // NOSONAR javascript:S9382
+  const pg = await signIn(exitContext); // NOSONAR javascript:S9382
+  await pg.goto(gateBoardUrl); // NOSONAR javascript:S9382
+  await pg.getByRole('region', { name: 'Board columns' }).waitFor(); // NOSONAR javascript:S9382
+  await pg.getByRole('button', { name: below, exact: true }).waitFor(); // NOSONAR javascript:S9382
+  await settled(pg, { label: 'the board to stop animating before a card is blown away' }); // NOSONAR javascript:S9382
 
-  const before = await columnTitles(pg);
-  const topId = await pg.locator('[data-task-card]', { hasText: top }).evaluate(card => card.dataset.taskCard);
+  const before = await columnTitles(pg); // NOSONAR javascript:S9382
+  const topId = await pg.locator('[data-task-card]', { hasText: top }).evaluate(card => card.dataset.taskCard); // NOSONAR javascript:S9382
   check(`${mode}: the card to be blown away is the one the server made`, topId, topCreated._id);
 
-  await pg.getByRole('button', { name: top, exact: true }).click();
+  await pg.getByRole('button', { name: top, exact: true }).click(); // NOSONAR javascript:S9382
   const exitDialog = pg.getByRole('dialog', { name: 'Edit Task' });
-  await exitDialog.waitFor();
-  await settled(pg, { within: '[role="dialog"]', label: 'the task modal to finish opening before the card is blown away' });
-  await armExitRecorder(pg, below);
-  await exitDialog.getByRole('button', { name: 'Blow it away' }).click();
-  const exit = await pg.evaluate(() => window.__exit);
+  await exitDialog.waitFor(); // NOSONAR javascript:S9382
+  await settled(pg, { within: '[role="dialog"]', label: 'the task modal to finish opening before the card is blown away' }); // NOSONAR javascript:S9382
+  await armExitRecorder(pg, below); // NOSONAR javascript:S9382
+  await exitDialog.getByRole('button', { name: 'Blow it away' }).click(); // NOSONAR javascript:S9382
+  const exit = await pg.evaluate(() => window.__exit); // NOSONAR javascript:S9382
 
   check(`${mode}: a picture of the card plays bbAway`, exit.first?.name, 'bbAway');
   check(`${mode}: the picture takes no pointer, is hidden from assistive technology, inert and has no control`, `${exit.first?.pointer} ${exit.first?.ariaHidden} ${exit.first?.inert} ${exit.first?.controls}`, 'none true true 0');
@@ -2566,16 +2566,16 @@ for (const [mode, reducedMotion, breeze] of [
   }
   check(`${mode}: the card below does not move while the picture plays`, stayed, true);
   check(`${mode}: it closes the gap once the picture is gone`, closed, true);
-  check(`${mode}: the board does not hold the card any more`, await pg.locator('[data-task-card]', { hasText: top }).count(), 0);
+  check(`${mode}: the board does not hold the card any more`, await pg.locator('[data-task-card]', { hasText: top }).count(), 0); // NOSONAR javascript:S9382
 
-  await pg.getByTestId('toast').getByRole('button', { name: 'Catch it' }).click();
-  await pg.getByRole('button', { name: top, exact: true }).waitFor();
-  const after = await columnTitles(pg);
+  await pg.getByTestId('toast').getByRole('button', { name: 'Catch it' }).click(); // NOSONAR javascript:S9382
+  await pg.getByRole('button', { name: top, exact: true }).waitFor(); // NOSONAR javascript:S9382
+  const after = await columnTitles(pg); // NOSONAR javascript:S9382
   check(`${mode}: Catch it puts the card back in place`, after.join('|'), before.join('|'));
-  check(`${mode}: and it is the same card, with the same id`, await pg.locator('[data-task-card]', { hasText: top }).evaluate(card => card.dataset.taskCard), topId);
-  const stored = await page.request.get(`${API}/tasks/${topId}`, homeAuth);
-  check(`${mode}: the server has the same task, with its own creation date`, `${stored.status()} ${(await stored.json()).data?.createdAt === topCreated.createdAt}`, '200 true');
-  await exitContext.close();
+  check(`${mode}: and it is the same card, with the same id`, await pg.locator('[data-task-card]', { hasText: top }).evaluate(card => card.dataset.taskCard), topId); // NOSONAR javascript:S9382
+  const stored = await page.request.get(`${API}/tasks/${topId}`, homeAuth); // NOSONAR javascript:S9382
+  check(`${mode}: the server has the same task, with its own creation date`, `${stored.status()} ${(await stored.json()).data?.createdAt === topCreated.createdAt}`, '200 true'); // NOSONAR javascript:S9382
+  await exitContext.close(); // NOSONAR javascript:S9382
 }
 await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze: 'breezy' } });
 

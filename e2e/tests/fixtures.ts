@@ -84,13 +84,13 @@ export async function seedBoard(page: Page, token: string, columns: string[][]):
   const boardColumns = [...board.columns].sort((a: { order: number }, b: { order: number }) => a.order - b.order);
 
   for (const [index, titles] of columns.entries()) {
-    for (const title of titles) {
+    for (const title of titles) { // NOSONAR typescript:S9382 sequential on purpose, see below
       // Sequential on purpose: the server mints each task's position at the end
       // of its column, so creating them in parallel would shuffle the order.
-      const task = await page.request.post(`${API_URL}/tasks/board/${board._id}`, {
-        headers,
-        data: { title, status: boardColumns[index]._id, color: taskColors[0]._id },
-      });
+      const task = await page.request.post( // NOSONAR typescript:S9382
+        `${API_URL}/tasks/board/${board._id}`,
+        { headers, data: { title, status: boardColumns[index]._id, color: taskColors[0]._id } },
+      );
       expect(task.ok(), `Task creation failed with ${task.status()}`).toBe(true);
     }
   }

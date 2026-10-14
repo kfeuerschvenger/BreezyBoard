@@ -104,8 +104,8 @@ const columns = [...board.body.data.columns].sort((a, b) => a.order - b.order);
 
 const LONG_TITLE =
   'A task title long enough that it has to wrap or be cut somewhere on a phone screen without breaking anything';
-for (const [index, title] of [LONG_TITLE, 'Short task'].entries()) {
-  await req('POST', `/tasks/board/${boardId}`, token, {
+for (const [index, title] of [LONG_TITLE, 'Short task'].entries()) { // NOSONAR javascript:S9382 sequential on purpose: the server mints each position at the end of the column, so the order of the requests is the order of the cards
+  await req('POST', `/tasks/board/${boardId}`, token, { // NOSONAR javascript:S9382
     title,
     description: 'Some description text for the card.',
     status: columns[index]._id,
@@ -651,25 +651,25 @@ const anonymous = [
   },
 ];
 
-for (const viewport of VIEWPORTS) {
+for (const viewport of VIEWPORTS) { // NOSONAR javascript:S9382 sequential on purpose: two shared pages whose viewport is resized for each width, so the widths cannot overlap
   log(`\n--- ${viewport.width} by ${viewport.height} ---`);
-  await page.setViewportSize(viewport);
-  await anonPage.setViewportSize(viewport);
+  await page.setViewportSize(viewport); // NOSONAR javascript:S9382
+  await anonPage.setViewportSize(viewport); // NOSONAR javascript:S9382
 
-  for (const surface of authed) {
+  for (const surface of authed) { // NOSONAR javascript:S9382 sequential on purpose: each surface replaces the one before it on the same page
     if (surface.below !== undefined && viewport.width >= surface.below) continue;
-    await surface.open();
-    await scanSurface(page, surface.name, viewport.width);
+    await surface.open(); // NOSONAR javascript:S9382
+    await scanSurface(page, surface.name, viewport.width); // NOSONAR javascript:S9382
   }
-  for (const surface of anonymous) {
-    await surface.open();
-    await scanSurface(anonPage, surface.name, viewport.width);
+  for (const surface of anonymous) { // NOSONAR javascript:S9382 sequential on purpose: each surface replaces the one before it on the same page
+    await surface.open(); // NOSONAR javascript:S9382
+    await scanSurface(anonPage, surface.name, viewport.width); // NOSONAR javascript:S9382
 
     if (surface.name === 'register') {
       // The two name fields share a row from the small breakpoint up and take
       // a row each below it, where half of a phone's width is too narrow to
       // read what was typed.
-      const names = await anonPage.evaluate(() =>
+      const names = await anonPage.evaluate(() => // NOSONAR javascript:S9382
         ['firstName', 'lastName'].map(name => {
           const box = document.querySelector(`input[name="${name}"]`).getBoundingClientRect();
           return { left: Math.round(box.left), top: Math.round(box.top), width: Math.round(box.width) };
@@ -733,16 +733,16 @@ const modalGeometry = () =>
 
 const within = (r, vw, vh) => r?.left >= -0.5 && r.right <= vw + 0.5 && r.top >= -0.5 && r.bottom <= vh + 0.5;
 
-for (const viewport of VIEWPORTS) {
-  await page.setViewportSize(viewport);
-  await page.goto(`${FRONT}/board/${boardId}`);
-  await page.getByText('Short task', { exact: true }).waitFor();
-  await page.getByText('Short task', { exact: true }).click();
-  await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
-  await settle(page);
-  await dialogStill(page);
+for (const viewport of VIEWPORTS) { // NOSONAR javascript:S9382 sequential on purpose: one shared page whose viewport is resized for each width, so the widths cannot overlap
+  await page.setViewportSize(viewport); // NOSONAR javascript:S9382
+  await page.goto(`${FRONT}/board/${boardId}`); // NOSONAR javascript:S9382
+  await page.getByText('Short task', { exact: true }).waitFor(); // NOSONAR javascript:S9382
+  await page.getByText('Short task', { exact: true }).click(); // NOSONAR javascript:S9382
+  await page.getByRole('dialog', { name: 'Edit Task' }).waitFor(); // NOSONAR javascript:S9382
+  await settle(page); // NOSONAR javascript:S9382
+  await dialogStill(page); // NOSONAR javascript:S9382
 
-  const g = await modalGeometry();
+  const g = await modalGeometry(); // NOSONAR javascript:S9382
   const label = `at ${viewport.width}`;
   if (viewport.width < MD) {
     check(`${label}: the modal is a bottom sheet, full width and anchored to the bottom`,
@@ -787,22 +787,22 @@ for (const viewport of VIEWPORTS) {
       scroller.scrollTop = scroller.scrollHeight;
       return scroller.scrollTop;
     });
-  let scrolled = await scrollTheForm();
+  let scrolled = await scrollTheForm(); // NOSONAR javascript:S9382
   if (scrolled === null && viewport.height <= 844) {
     // A form that fits has nothing to scroll, which says nothing about the
     // panel. How tall the form is depends on its header and its padding, so
     // the height is taken down until it overflows, and the body is asked to
     // scroll there.
-    await page.setViewportSize({ width: viewport.width, height: 420 });
-    await dialogStill(page);
-    scrolled = await scrollTheForm();
-    await page.setViewportSize(viewport);
-    await dialogStill(page);
+    await page.setViewportSize({ width: viewport.width, height: 420 }); // NOSONAR javascript:S9382
+    await dialogStill(page); // NOSONAR javascript:S9382
+    scrolled = await scrollTheForm(); // NOSONAR javascript:S9382
+    await page.setViewportSize(viewport); // NOSONAR javascript:S9382
+    await dialogStill(page); // NOSONAR javascript:S9382
   }
   if (viewport.height <= 844) {
     check(`${label}: the form scrolls inside the panel`, scrolled !== null && scrolled > 0, `scrollTop ${scrolled}`);
   }
-  const after = await modalGeometry();
+  const after = await modalGeometry(); // NOSONAR javascript:S9382
   check(`${label}: the title and the actions stay put while the form scrolls`,
     within(after.heading, after.vw, after.vh) &&
       within(after.save, after.vw, after.vh) &&
@@ -814,10 +814,10 @@ for (const viewport of VIEWPORTS) {
   // it, and dynamic viewport units follow.
   if (viewport.width < MD) {
     const keyboardHeight = Math.round(viewport.height * 0.5);
-    await page.setViewportSize({ width: viewport.width, height: keyboardHeight });
-    await page.getByRole('textbox', { name: /^Title/ }).focus();
-    await dialogStill(page);
-    const k = await modalGeometry();
+    await page.setViewportSize({ width: viewport.width, height: keyboardHeight }); // NOSONAR javascript:S9382
+    await page.getByRole('textbox', { name: /^Title/ }).focus(); // NOSONAR javascript:S9382
+    await dialogStill(page); // NOSONAR javascript:S9382
+    const k = await modalGeometry(); // NOSONAR javascript:S9382
     check(`${label}: with half the height gone the sheet fits and the actions stay reachable`,
       k.box.top >= -0.5 && k.box.bottom <= k.vh + 0.5 && within(k.save, k.vw, k.vh) && within(k.blow, k.vw, k.vh),
       `sheet y ${Math.round(k.box.top)} to ${Math.round(k.box.bottom)} of ${k.vh}`);
@@ -825,13 +825,14 @@ for (const viewport of VIEWPORTS) {
   }
 
   // Dialog semantics survive the layout change.
-  await page.setViewportSize(viewport);
-  check(`${label}: focus is inside the dialog`, (await modalGeometry()).activeInside);
-  await page.keyboard.press('Escape');
-  await page.getByRole('dialog').waitFor({ state: 'detached' });
+  await page.setViewportSize(viewport); // NOSONAR javascript:S9382
+  check(`${label}: focus is inside the dialog`, (await modalGeometry()).activeInside); // NOSONAR javascript:S9382
+  await page.keyboard.press('Escape'); // NOSONAR javascript:S9382
+  await page.getByRole('dialog').waitFor({ state: 'detached' }); // NOSONAR javascript:S9382
   check(`${label}: Escape closes it and focus returns to the control that opened it`,
     // The control that opened it is the card's title button.
-    await page.evaluate(() => document.activeElement?.dataset.taskOpen !== undefined && /short task/i.test(document.activeElement.textContent ?? '')));
+    await page.evaluate( // NOSONAR javascript:S9382
+      () => document.activeElement?.dataset.taskOpen !== undefined && /short task/i.test(document.activeElement.textContent ?? '')));
 }
 
 log('\n--- on a touch screen nothing is hidden behind a hover ---');
@@ -853,11 +854,11 @@ const touchSurfaces = [
   ['dashboard', `${FRONT}/`, () => touchPage.getByRole('button', { name: /^Options for / }).first().waitFor()],
   ['board', `${FRONT}/board/${boardId}`, () => touchPage.getByText('Short task', { exact: true }).waitFor()],
 ];
-for (const [name, url, ready] of touchSurfaces) {
-  await touchPage.goto(url);
-  await ready();
-  await settle(touchPage);
-  const hidden = await touchPage.evaluate(() => {
+for (const [name, url, ready] of touchSurfaces) { // NOSONAR javascript:S9382 sequential on purpose: each surface replaces the one before it on the same page
+  await touchPage.goto(url); // NOSONAR javascript:S9382
+  await ready(); // NOSONAR javascript:S9382
+  await settle(touchPage); // NOSONAR javascript:S9382
+  const hidden = await touchPage.evaluate(() => { // NOSONAR javascript:S9382
     const found = [];
     for (const el of document.querySelectorAll('a[href],button,input:not([type="hidden"]),select,textarea,[role="button"]')) {
       const box = el.getBoundingClientRect();

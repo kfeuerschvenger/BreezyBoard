@@ -50,8 +50,8 @@ const token = reg.body.data.token;
 
 const colors = await call(V1, '/colors?type=board', token);
 const templates = await call(V1, '/templates', token);
-for (let i = 1; i <= 3; i++) {
-  await call(V1, '/boards', token, {
+for (let i = 1; i <= 3; i++) { // NOSONAR javascript:S9382 sequential on purpose: the boards are listed by creation order and the pagination checks read that order
+  await call(V1, '/boards', token, { // NOSONAR javascript:S9382
     method: 'POST',
     body: {
       title: `Board ${i}`,

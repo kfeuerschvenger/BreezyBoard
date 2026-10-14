@@ -32,8 +32,8 @@ test.describe('board core loop', () => {
       // By heading, not by text: the create board dialog is still leaving and
       // lists the same four names, so a text match can be satisfied by it
       // before the board has rendered.
-      for (const column of ['Backlog', 'Up Next', 'In Progress', 'Done']) {
-        await expect(page.getByRole('heading', { level: 2, name: column, exact: true })).toBeVisible();
+      for (const column of ['Backlog', 'Up Next', 'In Progress', 'Done']) { // NOSONAR typescript:S9382 sequential on purpose: the assertions read the same page, in board order
+        await expect(page.getByRole('heading', { level: 2, name: column, exact: true })).toBeVisible(); // NOSONAR typescript:S9382
       }
       expect(await columnCount(page, 'Backlog')).toBe(0);
     });
@@ -83,14 +83,14 @@ test.describe('board core loop', () => {
         .toContain('picked up');
       expect(await page.locator('[role="article"]').count(), 'the drag overlay renders a second card').toBe(2);
 
-      for (let step = 1; step <= 25; step++) {
-        await page.mouse.move(
+      for (let step = 1; step <= 25; step++) { // NOSONAR typescript:S9382 sequential on purpose: one pointer, and each move is the next point of the path
+        await page.mouse.move( // NOSONAR typescript:S9382
           from!.x + (to!.x + 80 - from!.x) * (step / 25),
           from!.y + (to!.y + 220 - from!.y) * (step / 25),
           { steps: 2 }
         );
         // Paces the input, it does not synchronise: dnd-kit coalesces a burst of moves.
-        await page.waitForTimeout(25); // NOSONAR typescript:S2925
+        await page.waitForTimeout(25); // NOSONAR typescript:S2925 typescript:S9382
       }
       // Release only once dnd-kit reports the pointer over the target column. Its
       // announcement names the column, so this is the drop target being active.
@@ -238,8 +238,8 @@ test.describe('board core loop', () => {
       expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(844);
       // `offsetHeight` is the layout height. The popup scales in from 97 percent,
       // and a bounding box read while it does is smaller than the item is.
-      for (const item of await page.getByRole('menuitem').all()) {
-        const height = await item.evaluate(element => (element as HTMLElement).offsetHeight);
+      for (const item of await page.getByRole('menuitem').all()) { // NOSONAR typescript:S9382 sequential on purpose: the items belong to one open menu on one shared page
+        const height = await item.evaluate(element => (element as HTMLElement).offsetHeight); // NOSONAR typescript:S9382
         expect(height, 'menu item height').toBeGreaterThanOrEqual(44);
       }
     });
@@ -498,12 +498,12 @@ test.describe('board core loop', () => {
       await pickUp(page, 'Space', 'Picked up A1. Backlog, position 1 of 2.');
 
       let previous = await row.evaluate(element => element.scrollLeft);
-      for (const title of ['Up Next', 'In Progress', 'Done']) {
-        await page.keyboard.press('ArrowRight');
-        await expect(dndAnnouncement(page)).toContainText(`${title}, position`);
+      for (const title of ['Up Next', 'In Progress', 'Done']) { // NOSONAR typescript:S9382 sequential on purpose: one keyboard drag, each press moves the card one column on
+        await page.keyboard.press('ArrowRight'); // NOSONAR typescript:S9382
+        await expect(dndAnnouncement(page)).toContainText(`${title}, position`); // NOSONAR typescript:S9382
 
         // The row scrolls on its own, smoothly, so it is polled rather than read.
-        await expect
+        await expect // NOSONAR typescript:S9382
           .poll(
             async () => {
               const heading = (await page.getByRole('heading', { name: title, level: 2 }).boundingBox())!;
@@ -513,12 +513,12 @@ test.describe('board core loop', () => {
           )
           .toBe(true);
 
-        const now = await row.evaluate(element => element.scrollLeft);
+        const now = await row.evaluate(element => element.scrollLeft); // NOSONAR typescript:S9382
         expect(now, 'the row scrolled toward the target').toBeGreaterThan(previous);
         previous = now;
 
         // The carried card is in view too, not left behind in the first column.
-        const overlay = (await page.locator('[role="article"]').last().boundingBox())!;
+        const overlay = (await page.locator('[role="article"]').last().boundingBox())!; // NOSONAR typescript:S9382
         expect(overlay.x).toBeGreaterThanOrEqual(0);
         expect(overlay.x + overlay.width).toBeLessThanOrEqual(390);
       }
@@ -547,8 +547,8 @@ test.describe('board core loop', () => {
     await logInThroughTheUi(page, authedUser);
     const trigger = page.getByRole('button', { name: /^Account menu for/ });
 
-    for (const width of [1440, 390]) {
-      await test.step(`at ${width} pixels`, async () => {
+    for (const width of [1440, 390]) { // NOSONAR typescript:S9382 sequential on purpose: one page whose viewport is resized, so the widths cannot overlap
+      await test.step(`at ${width} pixels`, async () => { // NOSONAR typescript:S9382
         await page.setViewportSize({ width, height: 844 });
         const openNavigation = page.getByRole('button', { name: 'Open navigation' });
         if (await openNavigation.isVisible()) await openNavigation.click();
