@@ -198,4 +198,71 @@ describe('useTaskForm', () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(result.current.isSubmitting).toBe(false);
   });
+
+  describe('the draft of a task that is opened', () => {
+    const DRAFT_KEY = 'breezyboard:draft:task:task-1';
+    const STORED = {
+      title: 'Half edited title',
+      description: 'Half edited description',
+      priority: 'high',
+      color: 'color-red',
+      owner: ADA._id,
+      checklist: [],
+    };
+
+    /** Every value written under the task's draft key, in order. */
+    const recordDraftWrites = () => {
+      const written: Array<{ title: string }> = [];
+      const original = Storage.prototype.setItem;
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+        if (key === DRAFT_KEY) written.push(JSON.parse(value).value);
+        return original.call(this, key, value);
+      });
+      return written;
+    };
+
+    // The form is mounted closed and then opened on a task, which is how the
+    // board page uses it. In the render where it opens its values are still
+    // the empty ones it was built with, and the autosave effect runs in that
+    // same commit, so the stored draft was replaced by an empty form until the
+    // throttle wrote the restored values back half a second later. A tab
+    // closed inside that half second lost the draft.
+    it('is never replaced by the empty form the hook starts with', async () => {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 1, value: STORED }));
+      const written = recordDraftWrites();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+
+      const { result, rerender } = renderHook(
+        ({ open, task }: { open: boolean; task: typeof EXISTING_TASK | null }) =>
+          useTaskForm({ open, task, colors: COLORS, members: [], onSave, onSaved: vi.fn() }),
+        { initialProps: { open: false, task: null as typeof EXISTING_TASK | null } }
+      );
+
+      rerender({ open: true, task: EXISTING_TASK });
+
+      await waitFor(() => expect(result.current.values.title).toBe('Half edited title'));
+      expect(written.length).toBeGreaterThan(0);
+      expect(written.every(value => value.title === 'Half edited title')).toBe(true);
+    });
+
+    it('keeps being written as the person types after it has been restored', async () => {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ savedAt: 1, value: STORED }));
+      const onSave = vi.fn().mockResolvedValue(undefined);
+
+      const { result, rerender } = renderHook(
+        ({ open, task }: { open: boolean; task: typeof EXISTING_TASK | null }) =>
+          useTaskForm({ open, task, colors: COLORS, members: [], onSave, onSaved: vi.fn() }),
+        { initialProps: { open: false, task: null as typeof EXISTING_TASK | null } }
+      );
+      rerender({ open: true, task: EXISTING_TASK });
+      await waitFor(() => expect(result.current.values.title).toBe('Half edited title'));
+
+      act(() => result.current.setField('title', 'Typed after restoring'));
+
+      await waitFor(() => {
+        const stored = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? '{}');
+        expect(stored.value?.title).toBe('Typed after restoring');
+      });
+    });
+  });
 });

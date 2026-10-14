@@ -103,6 +103,10 @@ export function useTaskForm({
   const colorsRef = useRef<TaskColorOption[]>([]);
   colorsRef.current = colors;
 
+  // Set by the rebuild effect and consumed by the autosave effect, which run in
+  // the same commit, in that order.
+  const awaitingHydration = useRef(false);
+
   // Persists an in-progress edit across a reload or an accidental close.
   // Gated to null while the drawer is closed so nothing is read or written
   // for a form nobody has open.
@@ -139,6 +143,12 @@ export function useTaskForm({
     // A saved draft, when one exists, wins over rebuilding from the task
     // prop: it is exactly the in-progress edit that was never saved.
     const restoredDraft = draft.read();
+    // The autosave effect below runs in this same commit, still holding the
+    // values the form was built with. Left alone it writes them over the draft
+    // that has just been read, and the restored values are only written back
+    // when the throttle's trailing write fires, so a page lost in between
+    // loses the draft.
+    awaitingHydration.current = true;
     setValues(restoredDraft ?? fromTask);
     setErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,6 +185,12 @@ export function useTaskForm({
   // it does not re-fire on every unrelated render.
   useEffect(() => {
     if (!open) return;
+    // The commit that rebuilt the form from a task still carries the old
+    // values. The rebuilt ones arrive in the next render, and are written then.
+    if (awaitingHydration.current) {
+      awaitingHydration.current = false;
+      return;
+    }
     draft.write(values);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, open, draft.write]);
