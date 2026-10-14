@@ -321,6 +321,35 @@ describe('boards', () => {
     expect(asMember.body.data.viewerRole).toBe('member');
   });
 
+  // The board's page draws its owner, as the dashboard tile does. A bare id
+  // gives it nothing to draw, so the read names the owner the way the list does
+  // and exposes nothing else about them.
+  test('get by id names the owner, with what a page draws and nothing more', async () => {
+    const member = await registerUser();
+    const board = await createBoard(owner.token, colors.boardColor._id);
+
+    const res = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${member.token}`);
+    // A member of the board reads it too.
+    await request(app)
+      .patch(`/api/boards/${board._id}/members`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ members: [member.user.id ?? member.user._id] });
+    const asMember = await request(app).get(`/api/boards/${board._id}`).set('Authorization', `Bearer ${member.token}`);
+
+    expect(res.status).toBe(403);
+    expect(asMember.status).toBe(200);
+    const named = asMember.body.data.createdBy;
+    expect(named).toMatchObject({
+      _id: owner.user.id ?? owner.user._id,
+      firstName: owner.user.firstName,
+      lastName: owner.user.lastName,
+    });
+    expect(named).toHaveProperty('avatar');
+    for (const private_ of ['email', 'password', 'tokenVersion', 'role']) {
+      expect(named, `the owner's ${private_} must not be sent`).not.toHaveProperty(private_);
+    }
+  });
+
   test('the board list tells each caller their own role on every board, as the read does', async () => {
     const member = await registerUser();
     const board = await createBoard(owner.token, colors.boardColor._id);
