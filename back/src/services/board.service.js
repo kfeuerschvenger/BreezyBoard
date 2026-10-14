@@ -137,6 +137,10 @@ export const createBoard = async (boardData, userId) => {
 
 export const getBoardById = async id => {
   const board = await Board.findById(id)
+    // The owner's name and picture, as the list gives them, because the board's
+    // page draws its owner and a bare id says nothing a page can show. The
+    // authorization middleware reads the board on its own and still sees an id.
+    .populate('createdBy', 'firstName lastName avatar')
     .populate('color', 'name value')
     .populate('columns.color', 'name value')
     .populate('template', 'name iconName');
