@@ -4,22 +4,24 @@ import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
-import { BoardActions } from '@/features/boards';
+import { BoardHeader, boardHueOf } from '@/features/boards';
+import { useColors } from '@/features/colors';
 import { BoardColumns, TaskDrawer, useBoardData, useTaskDragAndDrop } from '@/features/tasks';
-import { motion } from 'motion/react';
 import { IconPlus } from '@tabler/icons-react';
 import { Button, LoadingScreen, Icon } from '@/shared/ui';
 import { ShellAction } from '@/app/layouts/shell/ShellAction';
 import NotFound from './NotFound';
-import PageHeader from '../components/PageHeader';
 
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Partial<Task> | null>(null);
+  // Changes each time something asks for the first column's composer.
+  const [composerRequest, setComposerRequest] = useState(0);
 
   const { board, columns, tasks, taskColors, cache, isLoading, error, notFound } = useBoardData(boardId);
+  const { data: taskPalette } = useColors('task');
 
   const drag = useTaskDragAndDrop({
     tasks,
@@ -32,20 +34,22 @@ const Board = () => {
     setDrawerOpen(true);
   };
 
-  const openNewTask = () => {
-    if (!boardId || columns.length === 0) return;
-    const [firstColumn] = columns;
+  const requestComposer = () => setComposerRequest(count => count + 1);
 
-    openTask({
-      title: 'New Task',
-      description: '',
-      status: firstColumn.id,
-      priority: 'medium',
-      color: firstColumn.color,
-      owner: '',
-      boardId,
-      checklist: [],
-    });
+  /**
+   * Adds a card from a column's composer: a title and nothing else. The server
+   * needs a colour, so the first of the task palette is sent, as the task form
+   * preselects it. It rejects when the card could not be saved and the
+   * composer keeps what was typed.
+   */
+  const createTask = async (columnId: string, title: string): Promise<Task> => {
+    if (!boardId) throw new Error('No board was specified in the address.');
+    const color = taskPalette?.[0]?._id;
+    if (!color) throw new Error('The task colours have not loaded.');
+
+    const created = await TaskService.create(boardId, { title, status: columnId, color });
+    cache.write([...(cache.read() ?? []), created]);
+    return created;
   };
 
   const moveTask = async (taskId: string, newStatus: string, between: TaskNeighbours = {}) => {
@@ -111,7 +115,7 @@ const Board = () => {
     );
   }
 
-  if (error) {
+  if (error || !board) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <div role="alert" className="max-w-md rounded-panel border border-line-08 bg-surface p-8 text-center shadow-card">
@@ -130,49 +134,47 @@ const Board = () => {
     );
   }
 
+  // The last column is where work has landed, by order, which is also how a
+  // finished checklist picks the column it moves a task to.
+  const lastColumn = columns.reduce<(typeof columns)[number] | null>(
+    (last, column) => (!last || column.order > last.order ? column : last),
+    null,
+  );
+  const landed = lastColumn ? tasks.filter(task => task.status === lastColumn.id).length : 0;
+
   return (
     // Fills the frame the app gives the board page, which is pinned to the
     // viewport: the header takes what it needs and the columns take the rest,
     // so the only things that scroll are the column row sideways and each
     // column body down.
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <PageHeader
-        title={board ? board.title : 'Project Board'}
-        subtitle="Manage tasks in this board"
-        showBackButton
-        onBack={() => navigate('/')}
-      >
-        {board && <BoardActions board={board} onDeleted={() => navigate('/')} />}
-      </PageHeader>
+    <div className="flex min-h-0 flex-1 animate-bb-view-once flex-col overflow-hidden">
+      <BoardHeader board={board} landed={landed} total={tasks.length} onDeleted={() => navigate('/')} />
 
       <ShellAction>
         <Button
           type="button"
           size="sm"
-          onClick={openNewTask}
+          onClick={requestComposer}
           disabled={columns.length === 0}
           leftIcon={<Icon as={IconPlus} size={18} />}
         >
-          Add Task
+          Add card
         </Button>
       </ShellAction>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex min-h-0 flex-1 flex-col pt-6"
-      >
-        <BoardColumns
-          columns={columns}
-          tasks={tasks}
-          drag={drag}
-          taskColors={taskColors}
-          onTaskClick={openTask}
-          onAddTask={openNewTask}
-        />
+      <BoardColumns
+        columns={columns}
+        tasks={tasks}
+        drag={drag}
+        taskColors={taskColors}
+        hue={boardHueOf(board.color)}
+        onTaskClick={openTask}
+        onCreateTask={createTask}
+        composerRequest={composerRequest}
+        onRequestComposer={requestComposer}
+      />
 
-        <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />
-      </motion.div>
+      <TaskDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} task={selectedTask} onSave={saveTask} />
     </div>
   );
 };

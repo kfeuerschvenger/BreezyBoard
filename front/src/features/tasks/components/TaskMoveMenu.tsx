@@ -38,8 +38,8 @@ export const TaskMoveMenu: React.FC<TaskMoveMenuProps> = ({ taskId, taskTitle, c
         type="button"
         data-task-move-trigger={taskId}
         aria-label={`Move ${taskTitle} to another column`}
-        className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:w-8 ${
-          open ? 'bg-gray-100 text-gray-700' : ''
+        className={`focus-ring flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded text-ink-tertiary hover:bg-line-06 hover:text-ink sm:h-8 sm:w-8 ${
+          open ? 'bg-line-06 text-ink' : ''
         }`}
       >
         <Icon as={IconArrowsLeftRight} size={16} aria-hidden="true" />
@@ -52,7 +52,7 @@ export const TaskMoveMenu: React.FC<TaskMoveMenuProps> = ({ taskId, taskTitle, c
       return (
         <MenuItem key={column.id} disabled={isCurrent} onSelect={() => onMove(column)}>
           <span className="flex-1 truncate">{column.title}</span>
-          {isCurrent && <span className="text-xs text-gray-500">Current</span>}
+          {isCurrent && <span className="text-xs text-ink-tertiary">Current</span>}
         </MenuItem>
       );
     })}

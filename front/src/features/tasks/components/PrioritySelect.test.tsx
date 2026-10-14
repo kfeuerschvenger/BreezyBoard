@@ -34,17 +34,17 @@ describe('PrioritySelect', () => {
 
     for (const [label, tone] of [
       ['Low', 'green'],
-      ['Medium', 'yellow'],
-      ['High', 'red'],
+      ['Medium', 'sand'],
+      ['High', 'coral'],
     ]) {
       const option = screen.getByText(label).closest('label');
       const classes = option?.className ?? '';
 
-      expect(classes).toContain(`has-[:checked]:bg-${tone}-100`);
-      expect(classes).toContain(`has-[:checked]:text-${tone}-800`);
+      expect(classes).toContain(`has-[:checked]:bg-${tone}-tint`);
+      expect(classes).toContain(`has-[:checked]:text-${tone}-deep`);
       // Unconditionally is the failure: it paints an option that is not chosen.
-      expect(classes.split(/\s+/)).not.toContain(`text-${tone}-800`);
-      expect(classes.split(/\s+/)).not.toContain(`bg-${tone}-100`);
+      expect(classes.split(/\s+/)).not.toContain(`text-${tone}-deep`);
+      expect(classes.split(/\s+/)).not.toContain(`bg-${tone}-tint`);
     }
   });
 });

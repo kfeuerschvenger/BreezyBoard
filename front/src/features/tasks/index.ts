@@ -7,7 +7,7 @@ export { PrioritySelect } from './components/PrioritySelect';
 export type { PrioritySelectProps } from './components/PrioritySelect';
 export {
   asTaskPriority,
-  PRIORITY_BADGE_CLASSES,
+  PRIORITY_HUE,
   PRIORITY_LABELS,
   PRIORITY_SELECTED_CLASSES,
   TASK_PRIORITIES,
@@ -36,6 +36,10 @@ export type {
   UseTaskMoverOptions,
   UseTaskMoverResult,
 } from './hooks/useTaskMover';
+export { CardComposer } from './components/CardComposer';
+export type { CardComposerProps } from './components/CardComposer';
+export { EmptyBoardHero } from './components/EmptyBoardHero';
+export type { EmptyBoardHeroProps } from './components/EmptyBoardHero';
 export { BoardColumns } from './components/BoardColumns';
 export type { BoardColumnsProps } from './components/BoardColumns';
 export { useBoardData } from './hooks/useBoardData';

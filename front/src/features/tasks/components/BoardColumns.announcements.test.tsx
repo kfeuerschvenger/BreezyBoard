@@ -57,7 +57,8 @@ const Board = () => {
       drag={drag}
       taskColors={new Map()}
       onTaskClick={() => {}}
-      onAddTask={() => {}}
+      onCreateTask={async () => task}
+      onRequestComposer={() => {}}
     />
   );
 };

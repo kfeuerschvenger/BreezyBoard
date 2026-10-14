@@ -59,14 +59,14 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
             type="button"
             {...props}
             aria-label={`Options for ${board.title}`}
-            className="flex cursor-pointer items-center justify-center rounded-lg p-3 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:p-2"
+            className="focus-ring inline-flex size-11 cursor-pointer items-center justify-center rounded-pill border border-glass-border bg-glass-strong text-ink-secondary backdrop-blur-sm transition-colors duration-200 hover:bg-surface hover:text-ink sm:size-9.5"
           >
-            <Icon as={IconDots} size={20} className="text-gray-600" aria-hidden="true" />
+            <Icon as={IconDots} size={20} aria-hidden="true" />
           </button>
         )}
       >
         <MenuItem onSelect={() => setEditing(true)}>
-          <Icon as={IconPencil} size={16} className="text-gray-400" aria-hidden="true" />
+          <Icon as={IconPencil} size={16} className="text-ink-tertiary" aria-hidden="true" />
           <span>Edit board</span>
         </MenuItem>
 
@@ -75,9 +75,9 @@ export const BoardActions = ({ board, onDeleted }: BoardActionsProps) => {
             setDeleteError(null);
             setConfirmingDelete(true);
           }}
-          className="text-red-600 hover:bg-red-50"
+          className="text-danger hover:bg-danger-bg"
         >
-          <Icon as={IconTrash} size={16} className="text-red-500" aria-hidden="true" />
+          <Icon as={IconTrash} size={16} aria-hidden="true" />
           <span>Delete board</span>
         </MenuItem>
       </Menu>

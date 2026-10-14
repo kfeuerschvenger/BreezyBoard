@@ -1,34 +1,27 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { motion } from 'motion/react';
-import {
-  IconAlertCircle,
-  IconCircleCheck,
-  IconGripVertical,
-  IconShieldExclamation,
-  IconUser,
-  type Icon as TablerGlyph,
-} from '@tabler/icons-react';
-import { Icon } from '@/shared/ui';
+import { IconCircleCheckFilled, IconGripVertical, IconListCheck } from '@tabler/icons-react';
+import { swayAnimation, swayOf, useBreeze } from '@/features/breeze';
+import { Avatar, Chip, Icon } from '@/shared/ui';
 import type { Task } from '@/models';
 import { COLOR_FALLBACK } from '@/features/colors';
-import { asTaskPriority, PRIORITY_BADGE_CLASSES, TaskMoveMenu } from '@/features/tasks';
-import type { MoveTarget, TaskPriority } from '@/features/tasks';
+import { asTaskPriority, PRIORITY_HUE, PRIORITY_LABELS, TaskMoveMenu } from '@/features/tasks';
+import type { MoveTarget } from '@/features/tasks';
 
-interface TaskCardProps {
+/** How a card announces itself on arrival: dropped into place, or newly created. */
+export type CardEntrance = 'landed' | 'fresh';
+
+interface TaskCardViewProps {
   task: Task;
   /**
-   * The hex value to paint the progress bar with, already resolved.
-   *
-   * The card used to resolve this itself, which meant a request per card for
-   * any task whose colour was stored as an id: a board of thirty tasks asked
-   * the colour endpoint thirty times for parts of a list it serves whole.
-   * Whoever renders the board reads that list once and passes the answer.
+   * The hex value of the task's colour, already resolved. Whoever renders the
+   * board reads the palette once and passes the answer, so no card asks the
+   * colour endpoint for itself.
    */
   color?: string;
+  /** The card sits in the board's last column, so it is drawn as landed. */
+  done?: boolean;
   onClick?: () => void;
-  isDragging?: boolean;
   /**
    * The columns the card can be moved to without dragging. The "Move to" menu
    * renders only when this and `onMove` are both given, so the copy of the card
@@ -36,120 +29,173 @@ interface TaskCardProps {
    */
   moveTargets?: MoveTarget[];
   onMove?: (task: Task, target: MoveTarget) => void;
+  /** The card is in the air, so its place in the column is the gap and the card takes no room. */
+  held?: boolean;
+  entrance?: CardEntrance | null;
+  /** Called when the entrance animation has finished, so the caller can clear its flag. */
+  onEntranceEnd?: (taskId: string) => void;
+  /** The copy that follows the pointer: lifted, tilted, and not a control. */
+  overlay?: boolean;
+  /** Set by the sortable wrapper: the node the drag context measures and the activator props of the handle. */
+  rootRef?: (node: HTMLElement | null) => void;
+  handleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
 }
 
+const CARD_CLASSES = 'rounded-card bg-surface transition-[translate,rotate,box-shadow] duration-250 ease-standard';
+
 /**
- * The icons are the card's own. The colours are not: which colour a priority
- * is gets decided once, in features/tasks/priority, because it used to be
- * decided here and again in the picker. That is the priority half of P3-6.
+ * The card while a drag has it in the air. Its place in the column is the gap,
+ * so the card collapses to nothing rather than being removed: the element has
+ * to stay mounted and focusable, because the keyboard sensor is listening on
+ * it and focus has to still be on its handle when the card is put down.
+ *
+ * It carries no padding of its own. A box cannot be shorter than its padding,
+ * so a `p-0` beside a `py-3` would lose to it and leave the card 24 pixels
+ * tall; the padding belongs to the states in which the card has a body.
  */
-const PRIORITY_ICONS: Record<TaskPriority, TablerGlyph> = {
-  low: IconCircleCheck,
-  medium: IconAlertCircle,
-  high: IconShieldExclamation,
+const HELD_CLASSES = 'pointer-events-none mb-0 h-0 overflow-hidden opacity-0';
+
+const BODY_CLASSES = 'px-3.5 py-3 shadow-card';
+
+/** The card's resting rules, which a card in the air or in the overlay does not have. */
+const RESTING_CLASSES = `${BODY_CLASSES} mb-2.5 cursor-pointer hover:-translate-y-0.5 hover:-rotate-[0.6deg] hover:shadow-card-hover`;
+
+const OVERLAY_CLASSES = 'px-3.5 py-3 rotate-3 scale-[1.03] cursor-grabbing shadow-card-landing';
+
+const ENTRANCE_CLASSES: Record<CardEntrance, string> = {
+  landed: 'animate-bb-land',
+  fresh: 'animate-bb-in',
 };
 
 /**
- * TaskCard: presentational card for a single task with optional drag support.
+ * The card as drawn, with no knowledge of dnd-kit: the sortable wrapper below
+ * supplies the node and the handle's activators, and the drag overlay supplies
+ * neither.
+ *
+ * The card is a container, not a control. Its title is a real button, so the
+ * keyboard can open the task, and a click anywhere else on the card opens it
+ * for a mouse. The drag handle and the "Move to" button sit in their own box
+ * and swallow their clicks, so neither opens the task.
  */
-const TaskCard: React.FC<TaskCardProps> = ({
+const TaskCardView: React.FC<TaskCardViewProps> = ({
   task,
   color = COLOR_FALLBACK,
+  done = false,
   onClick,
-  isDragging = false,
   moveTargets,
   onMove,
+  held = false,
+  entrance = null,
+  onEntranceEnd,
+  overlay = false,
+  rootRef,
+  handleProps,
 }) => {
-  // Use the task id as the sortable id (must be stable)
-  const sortableId = task._id;
+  const { level } = useBreeze();
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging: sortableIsDragging,
-  } = useSortable({ id: sortableId });
-
-  // Convert dnd-kit transform to a style string; memoize so we don't recreate object every render.
-  const style = useMemo(() => {
-    return {
-      transform: CSS.Transform.toString(transform),
-      transition,
-    } as React.CSSProperties;
-  }, [transform, transition]);
-
-  // Checklist progress calculations (memoized)
   const checklist = task.checklist ?? [];
-  const completedItems = checklist.filter(item => !!item.completed).length;
+  const completedItems = checklist.filter(item => item.completed).length;
   const totalItems = checklist.length;
-  const progressPercentage = useMemo(() => {
-    return totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
-  }, [completedItems, totalItems]);
 
   // Anything unrecognised reads as the least urgent rather than crashing.
   const priority = asTaskPriority(task.priority);
-  const PriorityIcon = PRIORITY_ICONS[priority];
-  const priorityClass = PRIORITY_BADGE_CLASSES[priority];
 
-  // Owner name resolution (owner can be an object or an id)
-  const ownerName = useMemo(() => {
-    const owner = task.owner;
-    if (owner && typeof owner === 'object') {
-      return `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim();
-    }
-    return '';
-  }, [task.owner]);
+  const owner = typeof task.owner === 'object' && task.owner ? task.owner : null;
+  const ownerName = owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() : '';
 
-  // stop propagation wrapper for drag handle clicks so parent onClick doesn't fire
-  const stopAndHandle = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-  }, []);
+  // One animation property serves four purposes and only one can win. A card
+  // that has just arrived or landed plays that; otherwise, in gusty weather, it
+  // sways. A card in the air or in the overlay plays neither.
+  const style = useMemo(
+    () =>
+      !held && !overlay && !entrance && level === 'gusty'
+        ? { animation: swayAnimation(swayOf(task._id)) }
+        : undefined,
+    [held, overlay, entrance, level, task._id],
+  );
+
+  const stopClick = useCallback((event: React.MouseEvent) => event.stopPropagation(), []);
+
+  // The card's own animation ends the entrance, and one inside it must not.
+  // A native listener rather than `onAnimationEnd`, as `useShake` does: the
+  // event bubbles, so the target is checked, and a listener on the node sees
+  // the same event in a test as in a browser.
+  const node = useRef<HTMLElement | null>(null);
+  const attach = useCallback(
+    (element: HTMLElement | null) => {
+      node.current = element;
+      rootRef?.(element);
+    },
+    [rootRef],
+  );
+  useEffect(() => {
+    const element = node.current;
+    if (!entrance || !element) return;
+
+    const done = (event: Event) => {
+      if (event.target === element) onEntranceEnd?.(task._id);
+    };
+    element.addEventListener('animationend', done);
+    return () => element.removeEventListener('animationend', done);
+  }, [entrance, onEntranceEnd, task._id]);
+
+  const state = held ? HELD_CLASSES : overlay ? OVERLAY_CLASSES : RESTING_CLASSES;
+  const arrival = !held && !overlay && entrance ? ENTRANCE_CLASSES[entrance] : '';
 
   return (
-    <motion.div
-      ref={setNodeRef}
+    // The mouse opens the task from anywhere on the card. The keyboard does it
+    // through the title button inside, which is the focusable control, so this
+    // handler is a pointer affordance and not a second way in.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events
+    <div
+      ref={attach}
       style={style}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      className={`bg-white rounded-lg border border-gray-200 p-4 cursor-pointer transition-all ${
-        sortableIsDragging || isDragging ? 'shadow-lg opacity-50' : 'hover:shadow-md'
-      }`}
-      onClick={onClick}
+      data-task-card={task._id}
+      data-landed={entrance === 'landed' && !held ? '' : undefined}
       role="article"
-      aria-labelledby={`task-title-${sortableId}`}
+      aria-labelledby={`task-title-${task._id}`}
+      aria-hidden={overlay || undefined}
+      onClick={overlay || !onClick ? undefined : () => onClick()}
+      className={`${CARD_CLASSES} ${state} ${arrival} flex flex-col gap-[9px]`}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 pr-3">
-          <h3 id={`task-title-${sortableId}`} className="font-medium text-gray-900 mb-1 font-heading">
-            {task.title}
-          </h3>
-          {task.description && (
-            <p className="text-sm text-gray-600 line-clamp-2 font-body" aria-label="Task description">
-              {task.description}
-            </p>
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          data-task-colour
+          className="size-2 shrink-0 rotate-12 rounded-[3px]"
+          style={{ backgroundColor: color }}
+        />
+        <Chip hue={PRIORITY_HUE[priority]}>
+          <span className="sr-only">Priority: </span>
+          {PRIORITY_LABELS[priority]}
+        </Chip>
+      </div>
+
+      <div className="flex items-start gap-2">
+        {done && (
+          <Icon as={IconCircleCheckFilled} size={17} className="mt-px shrink-0 text-success" aria-hidden="true" />
+        )}
+
+        <h3 id={`task-title-${task._id}`} className="min-w-0 flex-1 font-heading text-[14.5px] font-semibold leading-snug">
+          {overlay ? (
+            <span className={`break-words ${done ? 'text-ink-secondary' : 'text-ink'}`}>{task.title}</span>
+          ) : (
+            <button
+              type="button"
+              data-task-open={task._id}
+              className={`focus-ring -m-0.5 cursor-pointer break-words rounded p-0.5 text-left ${
+                done ? 'text-ink-secondary' : 'text-ink'
+              }`}
+            >
+              {task.title}
+            </button>
           )}
-        </div>
+        </h3>
 
-        {/*
-          A real button rather than a div carrying a role. As a div it relied
-          on dnd-kit to supply the role, the tab stop and the key handling,
-          none of which static analysis can see through a spread, so it sat
-          under two permanent accessibility warnings that could not be
-          answered without rewriting it. A button needs none of them to be
-          reachable, and dnd-kit's own attributes sit on top unchanged.
-
-          The dnd-kit spreads MUST still come last: they supply onPointerDown
-          and onKeyDown, which are the sensor activators, and a duplicate JSX
-          prop declared after a spread silently replaces them. That is finding
-          P0-3. aria-label survives because dnd-kit does not set it, and
-          onClick is not an activator.
-        */}
-        <div className="flex shrink-0 items-center gap-1">
-          {moveTargets && onMove && (
+        {/* A box of their own that swallows clicks, so neither control opens the task. */}
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <div className="flex shrink-0 items-center gap-1" onClick={stopClick}>
+          {!overlay && moveTargets && onMove && (
             <TaskMoveMenu
               taskId={task._id}
               taskTitle={task.title}
@@ -158,74 +204,87 @@ const TaskCard: React.FC<TaskCardProps> = ({
               onMove={target => onMove(task, target)}
             />
           )}
-          <button
-            type="button"
-            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-            aria-label="Drag handle"
-            data-task-drag-handle={task._id}
-            onClick={stopAndHandle}
-            {...attributes}
-            {...listeners}
-          >
-            <Icon as={IconGripVertical} size={16} />
-          </button>
+
+          {/*
+            A real button rather than a div carrying a role. As a div it relied
+            on dnd-kit to supply the role, the tab stop and the key handling,
+            none of which static analysis can see through a spread, so it sat
+            under two permanent accessibility warnings that could not be
+            answered without rewriting it. A button needs none of them to be
+            reachable, and dnd-kit's own attributes sit on top unchanged.
+
+            The dnd-kit spread MUST still come last: it supplies onPointerDown
+            and onKeyDown, which are the sensor activators, and a duplicate JSX
+            prop declared after a spread silently replaces them. That is
+            finding P0-3. aria-label survives because dnd-kit does not set it.
+          */}
+          {overlay ? (
+            <span className="flex size-6 items-center justify-center text-ink-tertiary" aria-hidden="true">
+              <Icon as={IconGripVertical} size={16} />
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="focus-ring flex size-6 cursor-grab items-center justify-center rounded text-ink-tertiary hover:text-ink"
+              aria-label="Drag handle"
+              data-task-drag-handle={task._id}
+              {...handleProps}
+            >
+              <Icon as={IconGripVertical} size={16} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Progress / checklist */}
-      {totalItems > 0 && (
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-            <span>
-              {completedItems}/{totalItems} completed
+      {(totalItems > 0 || owner) && (
+        <div className="flex items-center gap-3 text-xs">
+          {totalItems > 0 && (
+            <span
+              data-checklist-progress
+              className={`flex items-center gap-1 font-mono ${
+                completedItems === totalItems ? 'text-green-deep' : 'text-ink-secondary'
+              }`}
+            >
+              <Icon as={IconListCheck} size={13} aria-hidden="true" />
+              <span>
+                {completedItems}/{totalItems}
+              </span>
+              <span className="sr-only"> checklist items completed</span>
             </span>
-            <span>{Math.round(progressPercentage)}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <motion.div
-              className="h-2 rounded-full"
-              // use resolved color for progress bar
-              style={{ backgroundColor: color }}
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.max(0, Math.min(100, progressPercentage))}%` }}
-              transition={{ duration: 0.3 }}
-            />
-          </div>
+          )}
+
+          {owner && (
+            <span className="ml-auto flex" title={ownerName}>
+              <Avatar name={ownerName} src={owner.avatar} seed={owner._id} size="sm" ring="surface" decorative />
+              <span className="sr-only">Owner: {ownerName}</span>
+            </span>
+          )}
         </div>
       )}
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/*
-            Not aria-hidden any more. Finding P4-3 recorded this whole badge
-            as hidden, which hid real information rather than a decorative
-            icon: it is the only place a task shows its priority, so a card
-            said nothing about it at all.
-
-            The icon is hidden instead, because the word beside it already
-            says the same thing, and the word gains a subject that is carried
-            for assistive technology only, so the badge still reads as one
-            word on screen.
-          */}
-          <span
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${priorityClass}`}
-          >
-            <Icon as={PriorityIcon} size={12} />
-            <span className="sr-only">Priority: </span>
-            {priority}
-          </span>
-        </div>
-
-        {ownerName ? (
-          <div className="flex items-center gap-1 text-xs text-gray-600">
-            <Icon as={IconUser} size={12} aria-hidden="true" />
-            <span className="font-body">{ownerName}</span>
-          </div>
-        ) : null}
-      </div>
-    </motion.div>
+    </div>
   );
 };
+
+export type TaskCardProps = Omit<TaskCardViewProps, 'rootRef' | 'handleProps' | 'overlay'>;
+
+/**
+ * A task on the board, draggable by its handle.
+ *
+ * It is both a draggable and a droppable, because dnd-kit reports a card as
+ * the thing a card is over. Its column's sorting strategy moves nothing: the
+ * gap that opens in a column is a real element the column draws, so a
+ * transform from the sortable layer on top of it would shift every card twice.
+ */
+const TaskCard: React.FC<TaskCardProps> = props => {
+  const { attributes, listeners, setNodeRef } = useSortable({ id: props.task._id });
+
+  return <TaskCardView {...props} rootRef={setNodeRef} handleProps={{ ...attributes, ...listeners }} />;
+};
+
+/** The copy of a card that follows the pointer. It carries no handlers and no controls. */
+export const TaskCardOverlay: React.FC<Pick<TaskCardViewProps, 'task' | 'color' | 'done'>> = props => (
+  <TaskCardView {...props} overlay />
+);
 
 // memoize to avoid unnecessary re-renders when props are shallow-equal
 export default React.memo(TaskCard);

@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo } from 'react';
-import { IconClipboardList, IconPlus } from '@tabler/icons-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import Column from '@/components/Column';
-import TaskCard from '@/components/TaskCard';
+import { TaskCardOverlay } from '@/components/TaskCard';
 import type { Task } from '@/models';
-import { EmptyState, Icon } from '@/shared/ui';
+import { DEFAULT_HUE } from '@/shared/ui';
+import type { Hue } from '@/shared/ui';
 import { resolveColor } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import type { ColumnData } from '../hooks/useBoardData';
 import type { UseTaskDragAndDropResult } from '../hooks/useTaskDragAndDrop';
+import { EmptyBoardHero } from './EmptyBoardHero';
 
 export interface BoardColumnsProps {
   columns: ColumnData[];
@@ -16,9 +17,18 @@ export interface BoardColumnsProps {
   drag: UseTaskDragAndDropResult;
   /** The task palette, so no card has to resolve its own colour. */
   taskColors: ColorLookup;
+  /** The board's hue, which the empty board banner is drawn in. */
+  hue?: Hue;
   onTaskClick: (task: Task) => void;
-  /** Starts a new task in the first column, the same flow as the page header's button. */
-  onAddTask: () => void;
+  /** Adds a card to a column from its composer. Resolves to the card, rejects when it could not be saved. */
+  onCreateTask: (columnId: string, title: string) => Promise<Task>;
+  /**
+   * Changes whenever something outside, the board header's "Add card" or the
+   * empty board banner, asks for the first column's composer to open.
+   */
+  composerRequest?: number;
+  /** Asks for it. The banner's button calls this. */
+  onRequestComposer: () => void;
 }
 
 /**
@@ -32,14 +42,33 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
   tasks,
   drag,
   taskColors,
+  hue = DEFAULT_HUE,
   onTaskClick,
-  onAddTask,
+  onCreateTask,
+  composerRequest = 0,
+  onRequestComposer,
 }) => {
   const colorOf = (task: Task) => resolveColor(task.color, taskColors);
 
   const { mover } = drag;
   const moveTargets = useMemo(() => columns.map(({ id, title }) => ({ id, title })), [columns]);
   const { focusRequest } = mover;
+
+  // The card that has just been created plays its arrival, once. Cleared by
+  // the card when the animation ends, which reduced motion collapses to an
+  // instant but does not skip.
+  const [freshId, setFreshId] = useState<string | null>(null);
+
+  const onEntranceEnd = (taskId: string) => {
+    setFreshId(current => (current === taskId ? null : current));
+    drag.onLandingEnd?.(taskId);
+  };
+
+  const create = async (columnId: string, title: string) => {
+    const created = await onCreateTask(columnId, title);
+    setFreshId(created._id);
+    return created;
+  };
 
   // A card that changes column is a new element and the focused one is gone,
   // so focus goes to the same control of the same task where it now stands:
@@ -64,12 +93,17 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
 
   if (columns.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="text-gray-500 text-lg">No columns available for this board</div>
-        <p className="text-gray-400 mt-2">This board template doesn't have any columns configured.</p>
+      <div className="py-12 text-center">
+        <div className="text-lg text-ink-secondary">No columns available for this board</div>
+        <p className="mt-2 text-ink-tertiary">This board template doesn&apos;t have any columns configured.</p>
       </div>
     );
   }
+
+  const slot = drag.slot ?? null;
+  const heldId = drag.activeTask?._id ?? null;
+  const lastColumnId = columns.reduce((last, column) => (column.order > last.order ? column : last), columns[0]).id;
+  const firstColumnId = columns[0].id;
 
   return (
     <>
@@ -84,38 +118,15 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
         {mover.announcement && <span key={mover.announcementId}>{mover.announcement}</span>}
       </div>
 
-      {/*
-        A banner above the row rather than inside a column: it describes the
-        whole board, it never covers a drop target, and it is the same shape at
-        390 and 1440 pixels. It is shown only while the board has no task at all
-        and the columns and their hints stay on screen beneath it.
-      */}
-      {tasks.length === 0 && (
-        <div className="mx-4 mb-4 shrink-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:mx-6">
-          <EmptyState
-            compact
-            headingLevel={2}
-            icon={<Icon as={IconClipboardList} size={20} className="text-gray-500" />}
-            title="This board has no tasks yet"
-            description="Add the first one, or drag tasks in once they exist."
-            action={
-              <button
-                type="button"
-                onClick={onAddTask}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
-              >
-                <Icon as={IconPlus} size={18} aria-hidden="true" />
-                Add task
-              </button>
-            }
-          />
-        </div>
-      )}
+      {tasks.length === 0 && <EmptyBoardHero hue={hue} onAddFirstCard={onRequestComposer} />}
+
       <DndContext
         sensors={drag.sensors}
         collisionDetection={drag.collisionDetection}
         accessibility={drag.accessibility}
         onDragStart={drag.onDragStart}
+        onDragMove={drag.onDragMove}
+        onDragOver={drag.onDragOver}
         onDragEnd={drag.onDragEnd}
         onDragCancel={drag.onDragCancel}
       >
@@ -138,23 +149,44 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
           // here required (axe: scrollable-region-focusable) rather than decorative.
           // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
           tabIndex={0}
-          className="flex min-h-0 flex-1 snap-x snap-proximity items-stretch gap-4 overflow-x-auto scroll-px-4 px-4 pb-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500 sm:scroll-px-6 sm:px-6"
+          className="focus-ring-inset flex min-h-0 flex-1 snap-x snap-proximity items-stretch gap-3.5 overflow-x-auto scroll-px-4 px-4 pb-4 sm:scroll-px-6 sm:px-6"
         >
           {columns.map(column => (
             <Column
               key={column.id}
               column={column}
               tasks={tasks.filter(task => task.status === column.id)}
+              isLast={column.id === lastColumnId}
+              heldId={heldId}
+              gapIndex={slot?.columnId === column.id ? slot.index : null}
+              highlighted={slot?.columnId === column.id}
+              landedId={drag.landedId ?? null}
+              freshId={freshId}
+              onEntranceEnd={onEntranceEnd}
               onTaskClick={onTaskClick}
               colorOf={colorOf}
               moveTargets={moveTargets}
               onMove={mover.moveToColumn}
+              onCreateTask={title => create(column.id, title)}
+              composerRequest={column.id === firstColumnId ? composerRequest : 0}
             />
           ))}
         </div>
 
-        <DragOverlay>
-          {drag.activeTask ? <TaskCard task={drag.activeTask} color={colorOf(drag.activeTask)} isDragging /> : null}
+        {/*
+          No drop animation. The overlay's own is measured against the card it
+          came from, which is collapsed to nothing while it is in the air, and
+          the settle is the card's: it lands in its place with a keyframe of
+          its own (`bbLand`), which the global reduced motion rule collapses.
+        */}
+        <DragOverlay dropAnimation={null}>
+          {drag.activeTask ? (
+            <TaskCardOverlay
+              task={drag.activeTask}
+              color={colorOf(drag.activeTask)}
+              done={drag.activeTask.status === lastColumnId}
+            />
+          ) : null}
         </DragOverlay>
       </DndContext>
     </>

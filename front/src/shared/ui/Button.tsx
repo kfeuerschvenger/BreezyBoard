@@ -5,8 +5,8 @@ import { Icon } from './Icon';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'glass' | 'ghost' | 'danger' | 'danger-ghost';
 
-/** The three heights of the reference design: 40, 44 and 52 pixels. */
-export type ButtonSize = 'sm' | 'md' | 'lg';
+/** The heights of the reference design: 34 for a composer, then 40, 44 and 52 pixels. */
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -39,6 +39,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
+  xs: 'h-[34px] rounded-button-small px-3.5 text-sm',
   sm: 'h-10 rounded-control px-4 text-sm',
   md: 'h-11 rounded-control px-5 text-[15px]',
   lg: 'h-13 rounded-card px-6 text-base',

@@ -10,31 +10,28 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
 };
 
 /**
- * One place decides that high is red, and it says so twice.
+ * One place decides which hue each priority is drawn in: green for low, sand
+ * for medium and coral for high. The card draws a `Chip` in it, and the
+ * picker below draws the same pair as the variant a checked radio needs.
  *
- * The two spellings are deliberate and the duplication between them is not
- * the kind worth removing. Tailwind generates a rule only for a class it can
- * read in the source, so deriving the variant form from the plain one at
- * runtime, `has-[:checked]:${PRIORITY_BADGE_CLASSES[p]}`, names rules that
- * were never emitted and paints nothing. Composing it from a value holding
- * two classes is worse still: only the first inherits the variant and the
- * second applies unconditionally. That is finding P4-7, which reached the
- * interface once already through these exact chips.
- *
- * What was worth removing is the colour decision living in two files, which
- * is the priority half of P3-6. It lives here.
+ * The picker's classes are whole literals and never derived from the hue at
+ * runtime. Tailwind generates a rule only for a class it can read in the
+ * source, so `has-[:checked]:${...}` names rules that were never emitted and
+ * paints nothing, and composing it from a value holding two classes lets only
+ * the first inherit the variant while the second applies unconditionally.
+ * That is finding P4-7.
  */
-export const PRIORITY_BADGE_CLASSES: Record<TaskPriority, string> = {
-  low: 'bg-green-100 text-green-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-red-100 text-red-800',
+export const PRIORITY_HUE: Record<TaskPriority, 'green' | 'sand' | 'coral'> = {
+  low: 'green',
+  medium: 'sand',
+  high: 'coral',
 };
 
-/** The same three pairs, as the variant a checked radio inside a label needs. */
+/** The hue's tint and deep step as the variant a checked radio inside a label needs. */
 export const PRIORITY_SELECTED_CLASSES: Record<TaskPriority, string> = {
-  low: 'has-[:checked]:bg-green-100 has-[:checked]:text-green-800',
-  medium: 'has-[:checked]:bg-yellow-100 has-[:checked]:text-yellow-800',
-  high: 'has-[:checked]:bg-red-100 has-[:checked]:text-red-800',
+  low: 'has-[:checked]:bg-green-tint has-[:checked]:text-green-deep',
+  medium: 'has-[:checked]:bg-sand-tint has-[:checked]:text-sand-deep',
+  high: 'has-[:checked]:bg-coral-tint has-[:checked]:text-coral-deep',
 };
 
 /** Anything unrecognised reads as the least urgent rather than crashing. */

@@ -5,21 +5,13 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import Board from './Board';
 import { BoardService, TaskService, ColorService, UserService } from '@/services';
-import type { Board as BoardModel, Task } from '@/models';
+import type { Board as BoardModel } from '@/models';
 
 vi.mock('@/services', () => ({
   BoardService: { getById: vi.fn() },
   TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
-}));
-
-// The drawer is replaced by a probe that prints the task it was handed, so
-// the test can see which column a new task was aimed at without driving the
-// whole form.
-vi.mock('@/features/tasks/components/TaskDrawer', () => ({
-  default: ({ open, task }: { open: boolean; task: Partial<Task> | null }) =>
-    open ? <div data-testid="drawer">{String(task?.status)}</div> : null,
 }));
 
 const board: BoardModel = {
@@ -55,13 +47,13 @@ describe('Board, empty board banner', () => {
     vi.mocked(UserService.getBoardMembers).mockReset().mockResolvedValue([]);
   });
 
-  it('opens the drawer aimed at the first column, the same as the header button', async () => {
+  it('opens the first column composer, the same as the header button', async () => {
     vi.mocked(TaskService.getByBoard).mockResolvedValue([]);
     renderBoard();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add your first card' }));
 
-    expect(screen.getByTestId('drawer')).toHaveTextContent('col-todo');
+    expect(await screen.findByRole('textbox', { name: /new card in To Do/i })).toHaveFocus();
   });
 
   it('is not shown when the board already has a task', async () => {
@@ -83,6 +75,6 @@ describe('Board, empty board banner', () => {
 
     await screen.findByText('First');
 
-    expect(screen.queryByRole('heading', { name: /no tasks yet/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /a fresh board/i })).not.toBeInTheDocument();
   });
 });

@@ -10,3 +10,5 @@ export type { BreezeContextValue } from './breezeContext';
 export { BREEZE_KMH, BREEZE_LABEL, BREEZE_LEVELS, DEFAULT_BREEZE } from './breeze';
 export type { BreezeLevel } from './breeze';
 export { breezeKeys, useBreezeSetting } from './queries';
+export { swayAnimation, swayOf } from './sway';
+export type { Sway } from './sway';
