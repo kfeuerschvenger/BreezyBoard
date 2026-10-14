@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { IconAlignLeft, IconCircleCheckFilled,IconGripVertical, IconListCheck } from '@tabler/icons-react';
 import { swayAnimation, swayOf, useBreeze } from '@/features/breeze';
@@ -36,6 +36,8 @@ interface TaskCardViewProps {
   onEntranceEnd?: (taskId: string) => void;
   /** The copy that follows the pointer: lifted, tilted, and not a control. */
   overlay?: boolean;
+  /** The card has been deleted and is playing its exit: not a control, and not part of the board any more. */
+  leaving?: boolean;
   /** Set by the sortable wrapper: the node the drag context measures and the activator props of the handle. */
   rootRef?: (node: HTMLElement | null) => void;
   handleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
@@ -61,6 +63,14 @@ const BODY_CLASSES = 'px-3.5 py-3 shadow-card';
 const RESTING_CLASSES = `${BODY_CLASSES} mb-2.5 cursor-pointer hover:-translate-y-0.5 hover:-rotate-[0.6deg] hover:shadow-card-hover`;
 
 const OVERLAY_CLASSES = 'px-3.5 py-3 rotate-3 scale-[1.03] cursor-grabbing shadow-card-landing';
+
+/**
+ * The card as it is blown away: it keeps its size and its place in the column
+ * while `animate-bb-away` carries it off, so the cards around it stay where
+ * they are until it is gone and then close the gap. It takes no pointer, so a
+ * press on the spot it still occupies reaches what is under it.
+ */
+const LEAVING_CLASSES = `${BODY_CLASSES} mb-2.5 pointer-events-none animate-bb-away`;
 
 const ENTRANCE_CLASSES: Record<CardEntrance, string> = {
   landed: 'animate-bb-land',
@@ -88,10 +98,15 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
   entrance = null,
   onEntranceEnd,
   overlay = false,
+  leaving = false,
   rootRef,
   handleProps,
 }) => {
   const { level } = useBreeze();
+
+  // The overlay and the card on its way out are both pictures of a card: they
+  // draw its content and carry no control and no way in.
+  const picture = overlay || leaving;
 
   const checklist = task.checklist ?? [];
   const completedItems = checklist.filter(item => item.completed).length;
@@ -110,10 +125,10 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
   // sways. A card in the air or in the overlay plays neither.
   const style = useMemo(
     () =>
-      !held && !overlay && !entrance && level === 'gusty'
+      !held && !picture && !entrance && level === 'gusty'
         ? { animation: swayAnimation(swayOf(task._id)) }
         : undefined,
-    [held, overlay, entrance, level, task._id],
+    [held, picture, entrance, level, task._id],
   );
 
   const stopClick = useCallback((event: React.MouseEvent) => event.stopPropagation(), []);
@@ -141,8 +156,8 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
     return () => element.removeEventListener('animationend', done);
   }, [entrance, onEntranceEnd, task._id]);
 
-  const state = held ? HELD_CLASSES : overlay ? OVERLAY_CLASSES : RESTING_CLASSES;
-  const arrival = !held && !overlay && entrance ? ENTRANCE_CLASSES[entrance] : '';
+  const state = held ? HELD_CLASSES : overlay ? OVERLAY_CLASSES : leaving ? LEAVING_CLASSES : RESTING_CLASSES;
+  const arrival = !held && !picture && entrance ? ENTRANCE_CLASSES[entrance] : '';
 
   return (
     // The mouse opens the task from anywhere on the card. The keyboard does it
@@ -152,12 +167,16 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
     <div
       ref={attach}
       style={style}
-      data-task-card={task._id}
+      // A card on its way out is not on the board, so it is not found as one:
+      // `data-task-card` is how the board's own code and its checks find a card.
+      data-task-card={leaving ? undefined : task._id}
+      data-task-leaving={leaving ? task._id : undefined}
       data-landed={entrance === 'landed' && !held ? '' : undefined}
       role="article"
       aria-labelledby={`task-title-${task._id}`}
-      aria-hidden={overlay || undefined}
-      onClick={overlay || !onClick ? undefined : () => onClick()}
+      aria-hidden={picture || undefined}
+      inert={leaving || undefined}
+      onClick={picture || !onClick ? undefined : () => onClick()}
       className={`${CARD_CLASSES} ${state} ${arrival} flex flex-col gap-[9px]`}
     >
       <div className="flex items-center gap-2">
@@ -179,7 +198,7 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
         )}
 
         <h3 id={`task-title-${task._id}`} className="min-w-0 flex-1 font-heading text-[14.5px] font-semibold leading-snug">
-          {overlay ? (
+          {picture ? (
             <span className={`break-words ${done ? 'text-ink-secondary' : 'text-ink'}`}>{task.title}</span>
           ) : (
             <button
@@ -197,7 +216,7 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
         {/* A box of their own that swallows clicks, so neither control opens the task. */}
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
         <div className="flex shrink-0 items-center gap-1" onClick={stopClick}>
-          {!overlay && moveTargets && onMove && (
+          {!picture && moveTargets && onMove && (
             <TaskMoveMenu
               taskId={task._id}
               taskTitle={task.title}
@@ -220,7 +239,7 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
             prop declared after a spread silently replaces them. That is
             finding P0-3. aria-label survives because dnd-kit does not set it.
           */}
-          {overlay ? (
+          {picture ? (
             <span className="flex size-6 items-center justify-center text-ink-tertiary" aria-hidden="true">
               <Icon as={IconGripVertical} size={16} />
             </span>
@@ -275,7 +294,7 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
   );
 };
 
-export type TaskCardProps = Omit<TaskCardViewProps, 'rootRef' | 'handleProps' | 'overlay'>;
+export type TaskCardProps = Omit<TaskCardViewProps, 'rootRef' | 'handleProps' | 'overlay' | 'leaving'>;
 
 /**
  * A task on the board, draggable by its handle.
@@ -295,6 +314,52 @@ const TaskCard: React.FC<TaskCardProps> = props => {
 export const TaskCardOverlay: React.FC<Pick<TaskCardViewProps, 'task' | 'color' | 'done'>> = props => (
   <TaskCardView {...props} overlay />
 );
+
+/**
+ * How long a leaving card is given before it is taken off the board whether or
+ * not its animation reported an end. The animation is 460 milliseconds, and
+ * reduced motion collapses it to an instant that still reports one. This is
+ * for a browser that never runs it, such as a tab in the background.
+ */
+export const LEAVING_FALLBACK_MS = 800;
+
+export interface TaskCardLeavingProps extends Pick<TaskCardViewProps, 'task' | 'color' | 'done'> {
+  /** The card has finished leaving, and nothing of it needs to stay on the board. */
+  onGone: (taskId: string) => void;
+}
+
+/**
+ * A deleted card playing its exit, which is the reference design's `bbAway`:
+ * it lifts off to the upper right, turns and fades over 460 milliseconds. It is
+ * a picture of the card and nothing more, with no drag, no menu and no way in,
+ * so dnd-kit never sees it and the cards around it are not rearranged by it
+ * until it is gone.
+ *
+ * The exit is interaction motion: it plays at every Breeze level, and only the
+ * system's reduced motion preference collapses it.
+ */
+export const TaskCardLeaving: React.FC<TaskCardLeavingProps> = ({ task, color, done, onGone }) => {
+  const [node, setNode] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!node) return;
+
+    const finish = () => onGone(task._id);
+    // Its own animation ends the exit, and one inside it must not.
+    const onEnd = (event: Event) => {
+      if (event.target === node) finish();
+    };
+    node.addEventListener('animationend', onEnd);
+    const fallback = window.setTimeout(finish, LEAVING_FALLBACK_MS);
+
+    return () => {
+      node.removeEventListener('animationend', onEnd);
+      window.clearTimeout(fallback);
+    };
+  }, [node, task._id, onGone]);
+
+  return <TaskCardView task={task} color={color} done={done} leaving rootRef={setNode} />;
+};
 
 // memoize to avoid unnecessary re-renders when props are shallow-equal
 export default React.memo(TaskCard);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -483,6 +483,85 @@ describe('Board page adding and saving a task', () => {
       expect(await screen.findByRole('button', { name: 'Write the spec' })).toBeInTheDocument();
       expect(mockedTaskService.restore).toHaveBeenCalledWith('task-1');
       expect(mockedTaskService.create).not.toHaveBeenCalled();
+    });
+
+    describe('the exit of a card that is blown away', () => {
+      const leavingPicture = () => document.querySelector('[data-task-leaving="task-1"]');
+
+      const blowAway = async (user: ReturnType<typeof userEvent.setup>) => {
+        mockedTaskService.getByBoard.mockResolvedValue([existing]);
+        mockedTaskService.delete.mockResolvedValue(undefined);
+        mockedTaskService.restore.mockResolvedValue(existing);
+        renderBoard();
+
+        await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+        await user.click(await screen.findByRole('button', { name: 'Blow it away' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      };
+
+      it('plays from a picture of the card, which is no longer one of the board cards', async () => {
+        const user = userEvent.setup();
+
+        await blowAway(user);
+
+        expect(leavingPicture()).toHaveClass('animate-bb-away');
+        expect(document.querySelector('[data-task-card="task-1"]')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Write the spec' })).not.toBeInTheDocument();
+        // It is not counted: the column's count is read from the list.
+        const todo = document.querySelector('[data-column="col-todo"]') as HTMLElement;
+        expect(within(todo).getByText('0')).toBeInTheDocument();
+        expect(todo).toContainElement(leavingPicture() as HTMLElement);
+      });
+
+      it('does not hold back the request or the Catch it toast for it', async () => {
+        const user = userEvent.setup();
+
+        await blowAway(user);
+
+        // The animation has not ended, and the toast and the request are there.
+        expect(leavingPicture()).not.toBeNull();
+        expect(mockedTaskService.delete).toHaveBeenCalledWith('task-1');
+        expect(screen.getByRole('button', { name: 'Catch it' })).toBeInTheDocument();
+      });
+
+      it('leaves the board when its animation ends', async () => {
+        const user = userEvent.setup();
+        await blowAway(user);
+
+        act(() => {
+          leavingPicture()!.dispatchEvent(new Event('animationend', { bubbles: true }));
+        });
+
+        expect(leavingPicture()).toBeNull();
+        // Both columns are empty now, and say so.
+        expect(screen.getAllByText('Still air')).toHaveLength(2);
+      });
+
+      it('shows the card once, in place, when it is caught while it is still leaving', async () => {
+        const user = userEvent.setup();
+        await blowAway(user);
+
+        await user.click(screen.getByRole('button', { name: 'Catch it' }));
+
+        expect(await screen.findByRole('button', { name: 'Write the spec' })).toBeInTheDocument();
+        expect(leavingPicture()).toBeNull();
+        expect(screen.getAllByRole('button', { name: 'Write the spec' })).toHaveLength(1);
+      });
+
+      it('plays nothing when the server refuses the delete, and the card stays', async () => {
+        const user = userEvent.setup();
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        mockedTaskService.getByBoard.mockResolvedValue([existing]);
+        mockedTaskService.delete.mockRejectedValue(new Error('refused'));
+        renderBoard();
+
+        await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+        await user.click(await screen.findByRole('button', { name: 'Blow it away' }));
+
+        expect(await screen.findByRole('alert')).toBeInTheDocument();
+        expect(leavingPicture()).toBeNull();
+        expect(document.querySelector('[data-task-card="task-1"]')).not.toBeNull();
+      });
     });
   });
 });

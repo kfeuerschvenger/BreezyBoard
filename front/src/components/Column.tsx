@@ -6,9 +6,9 @@ import { IconPlaneArrival, IconWind } from '@tabler/icons-react';
 import type { Column as ColumnType, Task } from '@/models';
 import { useBreeze } from '@/features/breeze';
 import { CardComposer } from '@/features/tasks';
-import type { MoveTarget } from '@/features/tasks';
+import type { LeavingCard, MoveTarget } from '@/features/tasks';
 import { Icon } from '@/shared/ui';
-import TaskCard from './TaskCard';
+import TaskCard, { TaskCardLeaving } from './TaskCard';
 import type { CardEntrance } from './TaskCard';
 
 interface ColumnProps {
@@ -42,6 +42,12 @@ interface ColumnProps {
   onCreateTask?: (title: string) => Promise<unknown>;
   /** Changes whenever something asks this column's composer to open. */
   composerRequest?: number;
+  /**
+   * Deleted cards still playing their exit. Each is drawn where it stood, in
+   * the column it belongs to, and is not one of the column's tasks.
+   */
+  leaving?: LeavingCard[];
+  onLeavingEnd?: (taskId: string) => void;
 }
 
 /** The empty slot a held card would drop into, 58 pixels tall as in the reference design. */
@@ -109,18 +115,42 @@ const Column: React.FC<ColumnProps> = ({
   onMove,
   onCreateTask,
   composerRequest,
+  leaving = [],
+  onLeavingEnd,
 }) => {
   const { setNodeRef } = useDroppable({
     id: column._id,
   });
 
+  // The cards leaving this column. One that is back in the list, because it
+  // was caught while it was still going, is the task again and not a picture.
+  const heldAway = leaving.filter(
+    ({ task }) => task.status === column._id && !tasks.some(other => other._id === task._id),
+  );
+  const leavingBefore = (beforeId: string | null) => heldAway.filter(card => card.beforeId === beforeId);
+  const placedAmongTasks = new Set(tasks.map(task => task._id));
+
+  const items: React.ReactNode[] = [];
+  const pushLeaving = (cards: LeavingCard[]) =>
+    cards.forEach(({ task }) =>
+      items.push(
+        <TaskCardLeaving
+          key={`leaving-${task._id}`}
+          task={task}
+          color={colorOf(task)}
+          done={isLast}
+          onGone={id => onLeavingEnd?.(id)}
+        />,
+      ),
+    );
+
   // The held card stays mounted, collapsed, where it was in the list. The gap
   // is counted among the cards that take room, so it is placed by walking the
   // list and skipping the held one.
-  const items: React.ReactNode[] = [];
   let visible = 0;
   tasks.forEach(task => {
     const held = task._id === heldId;
+    pushLeaving(leavingBefore(task._id));
     if (!held && gapIndex === visible) items.push(<Gap key="gap" />);
 
     const entrance: CardEntrance | null = task._id === landedId ? 'landed' : task._id === freshId ? 'fresh' : null;
@@ -140,9 +170,12 @@ const Column: React.FC<ColumnProps> = ({
     );
     if (!held) visible += 1;
   });
+  // A card that stood last, or whose lower neighbour has gone too, leaves from
+  // the foot of the column.
+  pushLeaving(heldAway.filter(card => card.beforeId === null || !placedAmongTasks.has(card.beforeId)));
   if (gapIndex !== null && gapIndex >= visible) items.push(<Gap key="gap" />);
 
-  const empty = visible === 0 && gapIndex === null;
+  const empty = visible === 0 && gapIndex === null && heldAway.length === 0;
   const dot = typeof column.color === 'string' ? column.color : column.color.value;
 
   return (

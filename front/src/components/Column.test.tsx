@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DndContext } from '@dnd-kit/core';
 import Column from './Column';
@@ -202,6 +202,90 @@ describe('Column, while a card is carried', () => {
     const unlit = document.querySelector('[data-column]') as HTMLElement;
     expect(unlit).not.toHaveAttribute('data-highlighted');
     expect(unlit).toHaveClass('bg-glass-column');
+  });
+});
+
+describe('Column, a card that is blown away', () => {
+  /** The cards, the leaving pictures and the gap in the order they stand, by what they are. */
+  const order = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>('[data-task-card], [data-task-leaving], [data-drop-gap]'),
+    ).map(element =>
+      element.matches('[data-drop-gap]')
+        ? 'gap'
+        : element.matches('[data-task-leaving]')
+          ? `leaving:${element.dataset.taskLeaving}`
+          : (element.dataset.taskCard as string),
+    );
+
+  const GONE = makeTask('x', 'Xray');
+  const TWO = [makeTask('a', 'Alpha'), makeTask('c', 'Charlie')];
+
+  it('stays where it stood, above the card that was below it', () => {
+    renderColumn(TWO, { leaving: [{ task: GONE, beforeId: 'c' }] });
+
+    expect(order()).toEqual(['a', 'leaving:x', 'c']);
+  });
+
+  it('stays at the foot when it was the last card', () => {
+    renderColumn(TWO, { leaving: [{ task: GONE, beforeId: null }] });
+
+    expect(order()).toEqual(['a', 'c', 'leaving:x']);
+  });
+
+  it('stays at the foot when the card that was below it has gone as well', () => {
+    renderColumn(TWO, { leaving: [{ task: GONE, beforeId: 'vanished' }] });
+
+    expect(order()).toEqual(['a', 'c', 'leaving:x']);
+  });
+
+  it('is not one of the column tasks: the count does not include it', () => {
+    renderColumn(TWO, { leaving: [{ task: GONE, beforeId: 'c' }] });
+
+    expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('is drawn in its own column and no other', () => {
+    renderColumn(TWO, { leaving: [{ task: { ...GONE, status: 'col-done' }, beforeId: null }] });
+
+    expect(order()).toEqual(['a', 'c']);
+  });
+
+  it('gives way to the card when it has been brought back before it finished', () => {
+    renderColumn([...TWO, GONE], { leaving: [{ task: GONE, beforeId: null }] });
+
+    expect(order()).toEqual(['a', 'c', 'x']);
+  });
+
+  it('does not say the column is empty while its last card is on its way out', () => {
+    renderColumn([], { leaving: [{ task: GONE, beforeId: null }] });
+
+    expect(order()).toEqual(['leaving:x']);
+    expect(screen.queryByText('Still air')).not.toBeInTheDocument();
+  });
+
+  it('says so again once it has gone', () => {
+    renderColumn([], { leaving: [] });
+
+    expect(screen.getByText('Still air')).toBeInTheDocument();
+  });
+
+  it('reports which card has finished, so the board can let go of it', () => {
+    const onLeavingEnd = vi.fn();
+    renderColumn(TWO, { leaving: [{ task: GONE, beforeId: 'c' }], onLeavingEnd });
+
+    act(() => {
+      document.querySelector('[data-task-leaving="x"]')!.dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+
+    expect(onLeavingEnd).toHaveBeenCalledWith('x');
+  });
+
+  it('stays out of the sortable list, so dnd-kit never sees it as a card', () => {
+    renderColumn(TWO, { leaving: [{ task: GONE, beforeId: 'c' }] });
+
+    expect(document.querySelector('[data-task-leaving="x"] [data-task-drag-handle]')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xray' })).not.toBeInTheDocument();
   });
 });
 
