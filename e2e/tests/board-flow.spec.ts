@@ -249,8 +249,9 @@ test.describe('board core loop', () => {
 
   /**
    * The task modal's two actions that happen at once and never go through its
-   * form: Move to and Blow it away. The reload at the end is what proves the
-   * card was made again on the server and not just drawn again.
+   * form: Move to and Blow it away. The reload at the end, and the id that
+   * stays the same, are what prove the server restored the card and did not
+   * make a new one.
    */
   test('a task is moved from its modal, blown away, and caught again', async ({ page, authedUser }) => {
     const pageErrors: string[] = [];
@@ -286,6 +287,14 @@ test.describe('board core loop', () => {
       await expect(dialog).toBeVisible();
     });
 
+    const cardId = await page.locator('[data-task-card]', { hasText: 'Modal task' }).getAttribute('data-task-card');
+
+    await test.step('the footer is Blow it away and one Done, with no Cancel', async () => {
+      await expect(dialog.getByRole('button', { name: 'Blow it away' })).toBeVisible();
+      await expect(dialog.locator('button[type="submit"]')).toHaveText('Done');
+      await expect(dialog.getByRole('button', { name: /^cancel$/i })).toHaveCount(0);
+    });
+
     await test.step('Blow it away closes the modal and the card goes', async () => {
       await dialog.getByRole('button', { name: 'Blow it away' }).click();
 
@@ -293,17 +302,27 @@ test.describe('board core loop', () => {
       await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toHaveCount(0);
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(0);
       await expect(page.getByText('Card blown away.')).toBeVisible();
+      // Its picture plays the exit and then leaves: nothing of it stays on the board.
+      await expect(page.locator('[data-task-leaving]')).toHaveCount(0);
     });
 
-    await test.step('Catch it brings it back to the column it was in, and the server has it', async () => {
+    await test.step('Catch it brings back the same card, in the column it was in, and the server has it', async () => {
       await page.getByRole('button', { name: 'Catch it' }).click();
 
       await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toBeVisible();
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
+      expect(
+        await page.locator('[data-task-card]', { hasText: 'Modal task' }).getAttribute('data-task-card'),
+        'the same card, not a new one',
+      ).toBe(cardId);
 
       await page.reload();
       await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toBeVisible();
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
+      expect(
+        await page.locator('[data-task-card]', { hasText: 'Modal task' }).getAttribute('data-task-card'),
+        'and it is still the card the server had',
+      ).toBe(cardId);
     });
 
     expect(pageErrors, 'the modal must not throw').toEqual([]);

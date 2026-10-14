@@ -710,8 +710,7 @@ const modalGeometry = () =>
       return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
     };
     const buttons = [...dialog.querySelectorAll('button')];
-    const save = buttons.find(b => /save/i.test(b.textContent));
-    const cancel = buttons.find(b => /cancel/i.test(b.textContent));
+    const save = dialog.querySelector('button[type="submit"]');
     const blow = buttons.find(b => /blow it away/i.test(b.textContent));
     const close = buttons.find(b => b.getAttribute('aria-label') === 'Close');
     const strip = dialog.firstElementChild.getBoundingClientRect();
@@ -729,7 +728,6 @@ const modalGeometry = () =>
       box: { top: box.top, bottom: box.bottom, left: box.left, right: box.right, height: box.height },
       pageWide: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       save: save && rect(save),
-      cancel: cancel && rect(cancel),
       blow: blow && rect(blow),
       close: close && rect(close),
       strip: { top: strip.top, bottom: strip.bottom, height: strip.height },
@@ -780,9 +778,9 @@ for (const viewport of VIEWPORTS) {
       `bottom ${Math.round(g.box.bottom)} of ${g.vh}`);
   }
   check(`${label}: the modal does not scroll the page sideways`, g.pageWide <= 0, `overflows by ${g.pageWide}px`);
-  check(`${label}: Save, Cancel and Blow it away are inside the viewport`,
-    within(g.save, g.vw, g.vh) && within(g.cancel, g.vw, g.vh) && within(g.blow, g.vw, g.vh),
-    `save ${g.save && Math.round(g.save.bottom)}, cancel ${g.cancel && Math.round(g.cancel.bottom)}, blow ${g.blow && Math.round(g.blow.bottom)} of ${g.vh}`);
+  check(`${label}: Done and Blow it away are inside the viewport`,
+    within(g.save, g.vw, g.vh) && within(g.blow, g.vw, g.vh),
+    `done ${g.save && Math.round(g.save.bottom)}, blow ${g.blow && Math.round(g.blow.bottom)} of ${g.vh}`);
   check(`${label}: the header strip is 100px and the close button is on it`,
     Math.abs(g.strip.height - 100) < 1 && g.close.top >= g.strip.top - 0.5 && g.close.bottom <= g.strip.bottom + 0.5,
     `strip ${Math.round(g.strip.height)}px, close y ${Math.round(g.close.top)} to ${Math.round(g.close.bottom)}`);
@@ -834,7 +832,7 @@ for (const viewport of VIEWPORTS) {
     await page.waitForTimeout(300);
     const k = await modalGeometry();
     check(`${label}: with half the height gone the sheet fits and the actions stay reachable`,
-      k.box.top >= -0.5 && k.box.bottom <= k.vh + 0.5 && within(k.save, k.vw, k.vh) && within(k.cancel, k.vw, k.vh),
+      k.box.top >= -0.5 && k.box.bottom <= k.vh + 0.5 && within(k.save, k.vw, k.vh) && within(k.blow, k.vw, k.vh),
       `sheet y ${Math.round(k.box.top)} to ${Math.round(k.box.bottom)} of ${k.vh}`);
     check(`${label}: the focused field is on screen`, within(k.active, k.vw, k.vh), `field y ${k.active && Math.round(k.active.top)} to ${k.active && Math.round(k.active.bottom)}`);
   }

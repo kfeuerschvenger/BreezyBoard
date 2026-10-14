@@ -289,7 +289,23 @@ check(
   `${await taskDialog.getByRole('group', { name: 'Move to' }).count()} ${await taskDialog.getByRole('group', { name: 'Move to' }).locator('[aria-pressed="true"]').count()}`,
   '1 1',
 );
-await page.getByRole('button', { name: 'Add Item' }).click();
+// The checklist adds an item from a named field at its foot, with Enter, and
+// has no button that adds a blank row.
+check('the checklist has no Add Item button', await taskDialog.getByRole('button', { name: /add item/i }).count(), 0);
+const addItem = taskDialog.getByRole('textbox', { name: 'Add an item' });
+await addItem.fill('An item to scan');
+await addItem.press('Enter');
+await taskDialog.getByRole('textbox', { name: 'Checklist item 1' }).waitFor();
+check('Enter in the Add an item field adds the item and leaves the dialog open', `${await taskDialog.getByRole('textbox', { name: 'Checklist item 1' }).inputValue()} ${await taskDialog.isVisible()}`, 'An item to scan true');
+await addItem.press('Enter');
+check('Enter in an empty Add an item field adds nothing', await taskDialog.getByRole('textbox', { name: /^Checklist item/ }).count(), 1);
+// The footer is Blow it away and one Done. There is no Cancel and no Save
+// Changes, and the buttons are named by their text.
+check(
+  'the footer offers Blow it away and Done, and neither Cancel nor Save Changes',
+  `${await taskDialog.getByRole('button', { name: 'Blow it away' }).count()} ${await taskDialog.locator('button[type="submit"]').innerText()} ${await taskDialog.getByRole('button', { name: /^(cancel|save changes)$/i }).count()}`,
+  '1 Done 0',
+);
 await scan('board, task modal open');
 
 await page.setViewportSize({ width: 390, height: 844 });

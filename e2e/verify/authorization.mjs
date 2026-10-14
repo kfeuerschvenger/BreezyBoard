@@ -128,6 +128,14 @@ check(
 );
 check('owner PUT  /boards/:id', (await req('PUT', `/boards/${boardId}`, victim.token, { title: 'Renamed' })).status, 200);
 
+log('\n--- a deleted task is missing to everybody but the restore, which still asks for a role ---');
+const stranger = await mk('stranger');
+check('outsider POST /tasks/:id/restore on a task that is not deleted', (await req('POST', `/tasks/${taskId}/restore`, stranger.token)).status, 403);
+check('a member of the board may delete the task', (await req('DELETE', `/tasks/${taskId}`, attacker.token)).status, 200);
+check('the deleted task is a 404 to an outsider, who learns nothing about it', (await req('GET', `/tasks/${taskId}`, stranger.token)).status, 404);
+check('outsider POST /tasks/:id/restore on a deleted task is refused', (await req('POST', `/tasks/${taskId}/restore`, stranger.token)).status, 403);
+check('a member of the board may restore the task', (await req('POST', `/tasks/${taskId}/restore`, attacker.token)).status, 200);
+
 const after = await req('GET', `/tasks/${taskId}`, victim.token);
 log(`\ntask title is now: ${JSON.stringify(after.body.data.title)}`);
 
