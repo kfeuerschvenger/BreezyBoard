@@ -13,16 +13,19 @@ import { useSyncExternalStore } from 'react';
  * @param fallback - The answer where media queries are not available.
  */
 export function useMediaQuery(query: string, fallback = false): boolean {
-  const supported = typeof window !== 'undefined' && typeof window.matchMedia === 'function';
-
   return useSyncExternalStore(
     notify => {
-      if (!supported) return () => {};
+      // Checked again here and not carried over from the render: React runs the
+      // subscription in a passive effect, which can land after the environment
+      // that had `matchMedia` at render time has been torn down.
+      if (!isSupported()) return () => {};
       const list = window.matchMedia(query);
       list.addEventListener('change', notify);
       return () => list.removeEventListener('change', notify);
     },
-    () => (supported ? window.matchMedia(query).matches : fallback),
+    () => (isSupported() ? window.matchMedia(query).matches : fallback),
     () => fallback
   );
 }
+
+const isSupported = (): boolean => typeof window !== 'undefined' && typeof window.matchMedia === 'function';
