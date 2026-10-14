@@ -19,8 +19,8 @@ export type { TextareaProps } from './Textarea';
 export { Field } from './Field';
 export type { FieldControlProps, FieldProps } from './Field';
 
-export { Modal } from './Modal';
-export type { ModalProps, ModalSize } from './Modal';
+export { Modal, ModalClose } from './Modal';
+export type { ModalCloseProps, ModalPlacement, ModalProps, ModalSize } from './Modal';
 
 export { Drawer } from './Drawer';
 export type { DrawerProps, DrawerSize } from './Drawer';
