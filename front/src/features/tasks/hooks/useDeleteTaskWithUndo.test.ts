@@ -4,10 +4,10 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import { useDeleteTaskWithUndo } from './useDeleteTaskWithUndo';
-import type { DeletionCache } from './useDeleteTaskWithUndo';
+import type { DeletionCache, RemovedTask } from './useDeleteTaskWithUndo';
 
 vi.mock('@/services', () => ({
-  TaskService: { delete: vi.fn(), create: vi.fn(), move: vi.fn() },
+  TaskService: { delete: vi.fn(), restore: vi.fn() },
 }));
 
 const toast = { show: vi.fn(), dismiss: vi.fn() };
@@ -60,8 +60,9 @@ const makeCache = (initial: Task[] | undefined) => {
 
 const setup = (initial: Task[] | undefined = [A, B, C, OTHER_COLUMN]) => {
   const held = makeCache(initial);
-  const { result } = renderHook(() => useDeleteTaskWithUndo({ cache: held.cache }));
-  return { ...held, deleteTask: result.current.deleteTask };
+  const onRemoved = vi.fn<(removed: RemovedTask) => void>();
+  const { result } = renderHook(() => useDeleteTaskWithUndo({ cache: held.cache, onRemoved }));
+  return { ...held, onRemoved, deleteTask: result.current.deleteTask };
 };
 
 /** The action of the toast that was shown last. */
@@ -70,8 +71,7 @@ const lastAction = () => toast.show.mock.calls.at(-1)?.[0].action as { label: st
 beforeEach(() => {
   toast.show.mockReset();
   mockedTaskService.delete.mockReset().mockResolvedValue(undefined);
-  mockedTaskService.create.mockReset();
-  mockedTaskService.move.mockReset();
+  mockedTaskService.restore.mockReset();
 });
 
 describe('useDeleteTaskWithUndo, deleting', () => {
@@ -87,68 +87,77 @@ describe('useDeleteTaskWithUndo, deleting', () => {
     );
   });
 
-  it('leaves the card where it is and offers nothing when the server refuses', async () => {
+  it('says which card was removed and which stood below it, so the board can play its exit', async () => {
+    const { deleteTask, onRemoved } = setup();
+
+    await act(() => deleteTask(B));
+
+    expect(onRemoved).toHaveBeenCalledTimes(1);
+    expect(onRemoved).toHaveBeenCalledWith({ task: B, beforeId: 'c' });
+  });
+
+  it('reports no card below the last one of its column, and ignores the other columns', async () => {
+    const { deleteTask, onRemoved } = setup();
+
+    await act(() => deleteTask(C));
+
+    expect(onRemoved).toHaveBeenCalledWith({ task: C, beforeId: null });
+  });
+
+  it('does not wait for anything to play: the request and the toast come straight after one another', async () => {
+    const { deleteTask, onRemoved } = setup();
+    const order: string[] = [];
+    mockedTaskService.delete.mockImplementation(async () => {
+      order.push('request');
+    });
+    onRemoved.mockImplementation(() => order.push('removed'));
+    toast.show.mockImplementation(() => order.push('toast'));
+
+    await act(() => deleteTask(B));
+
+    expect(order).toEqual(['request', 'removed', 'toast']);
+  });
+
+  it('leaves the card where it is, plays nothing and offers nothing when the server refuses', async () => {
     mockedTaskService.delete.mockRejectedValue(refused(500));
-    const { deleteTask, current } = setup();
+    const { deleteTask, current, onRemoved } = setup();
 
     await expect(act(() => deleteTask(B))).rejects.toBeDefined();
 
     expect(current()?.map(entry => entry._id)).toEqual(['a', 'b', 'c', 'z']);
+    expect(onRemoved).not.toHaveBeenCalled();
     expect(toast.show).not.toHaveBeenCalled();
   });
 });
 
 describe('useDeleteTaskWithUndo, catching it', () => {
-  it('makes the card again from what it held and puts it between its old neighbours', async () => {
-    const back = { ...B, _id: 'b2', order: 'a3' };
-    const placed = { ...B, _id: 'b2', order: 'a0V' };
-    mockedTaskService.create.mockResolvedValue(back);
-    mockedTaskService.move.mockResolvedValue(placed);
+  it('asks the server to restore the same task and puts what it answers back on the board', async () => {
+    mockedTaskService.restore.mockResolvedValue(B);
     const { deleteTask, current } = setup();
     await act(() => deleteTask(B));
+    expect(current()?.map(entry => entry._id)).not.toContain('b');
 
     await act(async () => lastAction().onAction());
 
-    expect(mockedTaskService.create).toHaveBeenCalledWith('board-1', {
-      title: 'Task b',
-      description: 'The middle one.',
-      status: 'col-todo',
-      priority: 'medium',
-      color: 'color-blue',
-      owner: 'user-ada',
-      checklist: [{ text: 'Write it', completed: true }],
-    });
-    expect(mockedTaskService.move).toHaveBeenCalledWith('b2', 'col-todo', { afterId: 'a', beforeId: 'c' });
-    expect(current()?.find(entry => entry._id === 'b2')?.order).toBe('a0V');
+    expect(mockedTaskService.restore).toHaveBeenCalledWith('b');
+    expect(current()?.find(entry => entry._id === 'b')).toEqual(B);
     expect(toast.show).toHaveBeenLastCalledWith({ message: 'Caught "Task b".' });
   });
 
-  it('asks for no move when the card was alone in its column', async () => {
-    const lonely = task('z', 'a0', { status: 'col-done' });
-    mockedTaskService.create.mockResolvedValue({ ...lonely, _id: 'z2' });
-    const { deleteTask, current } = setup([A, lonely]);
-    await act(() => deleteTask(lonely));
-
-    await act(async () => lastAction().onAction());
-
-    expect(mockedTaskService.move).not.toHaveBeenCalled();
-    expect(current()?.map(entry => entry._id)).toEqual(['a', 'z2']);
-  });
-
-  it('keeps the card at the foot of its column when putting it back fails', async () => {
-    mockedTaskService.create.mockResolvedValue({ ...B, _id: 'b2', order: 'a3' });
-    mockedTaskService.move.mockRejectedValue(refused(409));
-    const { deleteTask, current } = setup();
+  it('does not add the card twice when it is already on the board', async () => {
+    mockedTaskService.restore.mockResolvedValue(B);
+    const { deleteTask, cache, current } = setup();
     await act(() => deleteTask(B));
+    // Another tab, or a refetch, brought it back before the toast was pressed.
+    cache.write([...(cache.read() ?? []), B]);
 
     await act(async () => lastAction().onAction());
 
-    expect(current()?.map(entry => entry._id)).toEqual(['a', 'c', 'z', 'b2']);
-    expect(toast.show).toHaveBeenLastCalledWith({ message: 'Caught "Task b".' });
+    expect(current()?.filter(entry => entry._id === 'b')).toHaveLength(1);
   });
 
   it('asks the server for the list when the board is no longer held', async () => {
-    mockedTaskService.create.mockResolvedValue({ ...B, _id: 'b2' });
+    mockedTaskService.restore.mockResolvedValue(B);
     const { deleteTask, cache, current } = setup();
     await act(() => deleteTask(B));
     // The board's list was dropped from the cache while the toast was open.
@@ -158,21 +167,21 @@ describe('useDeleteTaskWithUndo, catching it', () => {
 
     expect(cache.refetch).toHaveBeenCalledTimes(1);
     expect(current()).toBeUndefined();
-    expect(mockedTaskService.move).not.toHaveBeenCalled();
   });
 
-  it('says so, and offers no second try, when the board refuses the card for good', async () => {
-    mockedTaskService.create.mockRejectedValue(refused(400));
-    const { deleteTask } = setup();
+  it.each([400, 403, 404])('says so, and offers no second try, when the server answers %i', async status => {
+    mockedTaskService.restore.mockRejectedValue(refused(status));
+    const { deleteTask, current } = setup();
     await act(() => deleteTask(B));
 
     await act(async () => lastAction().onAction());
 
     expect(toast.show).toHaveBeenLastCalledWith({ message: '"Task b" can no longer be brought back.' });
+    expect(current()?.map(entry => entry._id)).not.toContain('b');
   });
 
   it('offers to try again when the failure may not repeat, and the second try catches it', async () => {
-    mockedTaskService.create.mockRejectedValueOnce(refused(503)).mockResolvedValueOnce({ ...C, _id: 'c2' });
+    mockedTaskService.restore.mockRejectedValueOnce(refused(503)).mockResolvedValueOnce(C);
     const { deleteTask, current } = setup();
     await act(() => deleteTask(C));
     await act(async () => lastAction().onAction());
@@ -186,7 +195,7 @@ describe('useDeleteTaskWithUndo, catching it', () => {
 
     await act(async () => lastAction().onAction());
 
-    expect(mockedTaskService.create).toHaveBeenCalledTimes(2);
-    expect(current()?.map(entry => entry._id)).toContain('c2');
+    expect(mockedTaskService.restore).toHaveBeenCalledTimes(2);
+    expect(current()?.map(entry => entry._id)).toContain('c');
   });
 });

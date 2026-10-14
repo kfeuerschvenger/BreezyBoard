@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { useTaskForm, type TaskColorOption } from './useTaskForm';
+import { useTaskForm, type StoredTask, type TaskColorOption } from './useTaskForm';
 import type { User } from '@/models';
 
 afterEach(() => {
@@ -20,19 +20,25 @@ const ADA: User = {
   avatar: '',
 };
 
-// Hoisted so its identity is stable across rerenders. The form rebuilds when
+// Hoisted so their identity is stable across rerenders. The form rebuilds when
 // the task changes, and a literal declared inside the render is a new task on
 // every pass.
-const EXISTING_TASK = { _id: 'task-1', boardId: 'board-1', color: 'color-blue' };
+const EXISTING_TASK: StoredTask = { _id: 'task-1', boardId: 'board-1', color: 'color-blue' };
+// A stored task with nothing filled in, so a test can say exactly which fields
+// it fills.
+const BARE_TASK: StoredTask = { _id: 'task-1', boardId: 'board-1' };
 
 const setup = (overrides: Partial<Parameters<typeof useTaskForm>[0]> = {}) => {
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onSaved = vi.fn();
-  const view = renderHook(() =>
-    useTaskForm({ open: true, task: null, colors: [], members: [], onSave, onSaved, ...overrides })
-  );
+  const view = renderHook(() => useTaskForm({ open: true, task: BARE_TASK, colors: [], onSave, onSaved, ...overrides }));
   return { ...view, onSave, onSaved };
 };
+
+const submit = (result: { current: ReturnType<typeof useTaskForm> }) =>
+  act(async () => {
+    await result.current.handleSubmit({ preventDefault: vi.fn() } as never);
+  });
 
 describe('useTaskForm', () => {
   // This is P0-1, which made task creation impossible for a year. Clearing an
@@ -90,9 +96,7 @@ describe('useTaskForm', () => {
     expect(result.current.values.description).toBe('');
     expect(result.current.isValid).toBe(true);
 
-    await act(async () => {
-      await result.current.handleSubmit({ preventDefault: vi.fn() } as never);
-    });
+    await submit(result);
 
     expect(result.current.errors).toEqual({});
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: 'Write the migration', description: '' }));
@@ -111,9 +115,7 @@ describe('useTaskForm', () => {
   it('names every missing field when a submit is attempted', async () => {
     const { result, onSave } = setup();
 
-    await act(async () => {
-      await result.current.handleSubmit({ preventDefault: vi.fn() } as never);
-    });
+    await submit(result);
 
     expect(onSave).not.toHaveBeenCalled();
     expect(result.current.errors).toEqual({
@@ -123,23 +125,64 @@ describe('useTaskForm', () => {
     });
   });
 
-  it('chooses the only possible owner rather than asking for a decision', async () => {
-    const { result } = setup({ members: [ADA] });
+  // The form edits a stored task and never makes one, so a task that was not
+  // given to it is nothing to submit, however complete the fields look.
+  it('submits nothing while it holds no task', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useTaskForm({ open: false, task: null, colors: COLORS, onSave, onSaved: vi.fn() }));
 
-    await waitFor(() => expect(result.current.values.owner).toBe(ADA._id));
+    act(() => {
+      result.current.setField('title', 'Orphan');
+      result.current.setField('owner', ADA._id);
+      result.current.setField('color', 'color-blue');
+    });
+    await submit(result);
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('leaves the owner alone when the board has more than one member', async () => {
-    const second: User = { ...ADA, _id: 'user-grace', firstName: 'Grace', lastName: 'Hopper' };
-    const { result } = setup({ members: [ADA, second] });
-
-    await waitFor(() => expect(result.current.values.owner).toBe(''));
-  });
-
-  it('preselects the first colour for a form opened with no task', async () => {
+  it('does not choose an owner for the person, whatever the board offers', async () => {
     const { result } = setup({ colors: COLORS });
 
     await waitFor(() => expect(result.current.values.color).toBe('color-blue'));
+    expect(result.current.values.owner).toBe('');
+  });
+
+  describe('what it saves', () => {
+    it('names the task and its board, and carries no column', async () => {
+      const { result, onSave, onSaved } = setup({
+        task: { ...EXISTING_TASK, status: 'col-todo', title: 'Pack the stove', owner: ADA._id },
+        colors: COLORS,
+      });
+
+      await submit(result);
+
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(onSave.mock.calls[0][0]).toMatchObject({ _id: 'task-1', boardId: 'board-1', title: 'Pack the stove' });
+      expect(onSave.mock.calls[0][0]).not.toHaveProperty('status');
+      expect(onSaved).toHaveBeenCalledTimes(1);
+    });
+
+    // The server refuses an item with no text, and an Enter pressed in a field
+    // that has just been emptied submits the form before the field has been
+    // left, which is what removes the row.
+    it('leaves out a checklist row that has no text', async () => {
+      const { result, onSave } = setup({
+        task: { ...EXISTING_TASK, title: 'Pack the stove', owner: ADA._id },
+        colors: COLORS,
+      });
+
+      act(() => {
+        result.current.setField('checklist', [
+          { id: 'item-1', text: 'Stove', completed: true },
+          { id: 'item-2', text: '   ', completed: false },
+          { id: 'item-3', text: '', completed: false },
+        ]);
+      });
+      await submit(result);
+
+      expect(onSave.mock.calls[0][0].checklist).toEqual([{ text: 'Stove', completed: true, _id: 'item-1' }]);
+    });
   });
 
   // The colours arrive after the form is already usable, so the patch that
@@ -149,8 +192,7 @@ describe('useTaskForm', () => {
   it('does not overwrite a colour that was chosen by hand before the colours arrived', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result, rerender } = renderHook(
-      ({ colors }) =>
-        useTaskForm({ open: true, task: EXISTING_TASK, colors, members: [], onSave, onSaved: vi.fn() }),
+      ({ colors }) => useTaskForm({ open: true, task: EXISTING_TASK, colors, onSave, onSaved: vi.fn() }),
       { initialProps: { colors: [] as TaskColorOption[] } }
     );
 
@@ -166,8 +208,7 @@ describe('useTaskForm', () => {
   it('resolves the colour the task was stored with once the colours arrive', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const { result, rerender } = renderHook(
-      ({ colors }) =>
-        useTaskForm({ open: true, task: EXISTING_TASK, colors, members: [], onSave, onSaved: vi.fn() }),
+      ({ colors }) => useTaskForm({ open: true, task: EXISTING_TASK, colors, onSave, onSaved: vi.fn() }),
       { initialProps: { colors: [] as TaskColorOption[] } }
     );
 
@@ -179,9 +220,7 @@ describe('useTaskForm', () => {
   it('reports a failed save instead of leaving the form looking idle', async () => {
     const onSave = vi.fn().mockRejectedValue(new Error('network down'));
     const onSaved = vi.fn();
-    const { result } = renderHook(() =>
-      useTaskForm({ open: true, task: null, colors: [], members: [], onSave, onSaved })
-    );
+    const { result } = renderHook(() => useTaskForm({ open: true, task: BARE_TASK, colors: [], onSave, onSaved }));
 
     act(() => {
       result.current.setField('title', 'Write the migration');
@@ -190,9 +229,7 @@ describe('useTaskForm', () => {
       result.current.setField('color', 'color-blue');
     });
 
-    await act(async () => {
-      await result.current.handleSubmit({ preventDefault: vi.fn() } as never);
-    });
+    await submit(result);
 
     expect(result.current.submitError).toMatch(/could not be saved/i);
     expect(onSaved).not.toHaveBeenCalled();
@@ -233,9 +270,9 @@ describe('useTaskForm', () => {
       const onSave = vi.fn().mockResolvedValue(undefined);
 
       const { result, rerender } = renderHook(
-        ({ open, task }: { open: boolean; task: typeof EXISTING_TASK | null }) =>
-          useTaskForm({ open, task, colors: COLORS, members: [], onSave, onSaved: vi.fn() }),
-        { initialProps: { open: false, task: null as typeof EXISTING_TASK | null } }
+        ({ open, task }: { open: boolean; task: StoredTask | null }) =>
+          useTaskForm({ open, task, colors: COLORS, onSave, onSaved: vi.fn() }),
+        { initialProps: { open: false, task: null as StoredTask | null } }
       );
 
       rerender({ open: true, task: EXISTING_TASK });
@@ -250,9 +287,9 @@ describe('useTaskForm', () => {
       const onSave = vi.fn().mockResolvedValue(undefined);
 
       const { result, rerender } = renderHook(
-        ({ open, task }: { open: boolean; task: typeof EXISTING_TASK | null }) =>
-          useTaskForm({ open, task, colors: COLORS, members: [], onSave, onSaved: vi.fn() }),
-        { initialProps: { open: false, task: null as typeof EXISTING_TASK | null } }
+        ({ open, task }: { open: boolean; task: StoredTask | null }) =>
+          useTaskForm({ open, task, colors: COLORS, onSave, onSaved: vi.fn() }),
+        { initialProps: { open: false, task: null as StoredTask | null } }
       );
       rerender({ open: true, task: EXISTING_TASK });
       await waitFor(() => expect(result.current.values.title).toBe('Half edited title'));
@@ -263,6 +300,26 @@ describe('useTaskForm', () => {
         const stored = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? '{}');
         expect(stored.value?.title).toBe('Typed after restoring');
       });
+    });
+
+    it('is kept under the task and under nothing else while the form is open', async () => {
+      const { result } = setup({ task: EXISTING_TASK, colors: COLORS });
+
+      act(() => result.current.setField('title', 'Typed'));
+
+      await waitFor(() => expect(window.localStorage.getItem(DRAFT_KEY)).not.toBeNull());
+      const keys = Object.keys(window.localStorage).filter(key => key.startsWith('breezyboard:draft:'));
+      expect(keys).toEqual([DRAFT_KEY]);
+    });
+
+    it('is cleared once a save succeeds', async () => {
+      const { result } = setup({ task: { ...EXISTING_TASK, title: 'Saved', owner: ADA._id }, colors: COLORS });
+      act(() => result.current.setField('title', 'Typed'));
+      await waitFor(() => expect(window.localStorage.getItem(DRAFT_KEY)).not.toBeNull());
+
+      await submit(result);
+
+      expect(window.localStorage.getItem(DRAFT_KEY)).toBeNull();
     });
   });
 });

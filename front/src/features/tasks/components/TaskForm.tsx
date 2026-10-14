@@ -12,10 +12,7 @@ import type { MoveTarget } from '../hooks/useTaskMover';
 export const TASK_FORM_ID = 'task-form';
 
 export interface TaskFormProps extends UseTaskModalResult {
-  /**
-   * The board's columns and the one the task is in. Without them the form has
-   * no "Move to" row, which is how a task that does not exist yet is shown.
-   */
+  /** The board's columns and the one the task is in. Without them the form has no "Move to" row. */
   columns?: MoveTarget[];
   columnId?: string;
   onMove?: (target: MoveTarget) => void;
@@ -24,32 +21,35 @@ export interface TaskFormProps extends UseTaskModalResult {
 export interface TaskFormActionsProps {
   isValid: boolean;
   isSubmitting: boolean;
-  onCancel: () => void;
-  /** Present for a task that exists. "Blow it away" is not offered for one that does not. */
+  /** "Blow it away" is offered only when the caller can delete. */
   onDelete?: () => void;
   isDeleting?: boolean;
 }
 
 /**
- * The modal's buttons: "Blow it away" at one end, Cancel and Save at the other.
+ * The modal's buttons: "Blow it away" on the left and one dark "Done" on the
+ * right, which saves and closes.
+ *
+ * There is no Cancel. The close button and Escape leave the modal, and what was
+ * typed stays as a draft until it is saved or the card is blown away.
  *
  * They are rendered by the modal's footer rather than inside the form, so a
  * long form scrolls underneath them instead of carrying them off screen. The
  * `form` attribute is what keeps the submit button the form's own: pressing it
- * and pressing Enter in a field both go through the form's submit handler.
+ * and pressing Enter in a field both go through the form's submit handler,
+ * which is also where a failed save is reported.
  *
- * Deleting is its own action and never submits the form, and the other two
- * are disabled while it is in flight so a save cannot race a delete.
+ * Deleting is its own action and never submits the form, and Done is disabled
+ * while it is in flight so a save cannot race a delete.
  */
 export const TaskFormActions: React.FC<TaskFormActionsProps> = ({
   isValid,
   isSubmitting,
-  onCancel,
   onDelete,
   isDeleting = false,
 }) => (
-  <div className="flex w-full flex-wrap items-center justify-between gap-3">
-    {onDelete ? (
+  <div className="flex w-full items-center justify-between gap-3">
+    {onDelete && (
       <Button
         type="button"
         variant="danger-ghost"
@@ -60,17 +60,10 @@ export const TaskFormActions: React.FC<TaskFormActionsProps> = ({
       >
         Blow it away
       </Button>
-    ) : (
-      <span />
     )}
-    <div className="flex gap-3">
-      <Button type="button" variant="secondary" onClick={onCancel} disabled={isDeleting}>
-        Cancel
-      </Button>
-      <Button type="submit" form={TASK_FORM_ID} disabled={!isValid || isSubmitting || isDeleting}>
-        {isSubmitting ? 'Saving...' : 'Save Changes'}
-      </Button>
-    </div>
+    <Button type="submit" form={TASK_FORM_ID} className="ml-auto" disabled={!isValid || isSubmitting || isDeleting}>
+      {isSubmitting ? 'Saving...' : 'Done'}
+    </Button>
   </div>
 );
 

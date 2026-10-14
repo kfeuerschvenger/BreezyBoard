@@ -22,6 +22,7 @@ export type {
   TaskColorOption,
   TaskFormValues,
   TaskFormErrors,
+  StoredTask,
   UseTaskFormOptions,
   UseTaskFormResult,
 } from './hooks/useTaskForm';

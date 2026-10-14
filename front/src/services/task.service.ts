@@ -36,6 +36,13 @@ export const TaskService = {
     await api.delete(`/tasks/${id}`);
   },
 
+  // A deleted task is kept for a week. This clears the mark and answers with
+  // the task as it was, so the caller can put it back where it stood.
+  async restore(id: string): Promise<Task> {
+    const response = await api.post(`/tasks/${id}/restore`);
+    return response.data.data;
+  },
+
   // A move names the two cards the task was dropped between, not a position.
   // The server derives the ordering key from them, so it is the only thing
   // that ever writes one. Either neighbour may be null: no `afterId` means

@@ -7,7 +7,7 @@ import { byOrder } from '@/features/board';
 import { BoardHeader, boardHueOf } from '@/features/boards';
 import { useColors } from '@/features/colors';
 import { BoardColumns, TaskModal, useBoardData, useDeleteTaskWithUndo, useTaskDragAndDrop } from '@/features/tasks';
-import type { MoveTarget } from '@/features/tasks';
+import type { MoveTarget, StoredTask } from '@/features/tasks';
 import { IconPlus } from '@tabler/icons-react';
 import { Button, LoadingScreen, Icon } from '@/shared/ui';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +21,7 @@ const Board = () => {
   // The task as it was when it was opened. The form is built from this copy
   // and keeps it for as long as the modal is open, and while it leaves after
   // a delete, when the task is no longer on the board to be read from.
-  const [selectedTask, setSelectedTask] = useState<Partial<Task> | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   // Changes each time something asks for the first column's composer.
   const [composerRequest, setComposerRequest] = useState(0);
 
@@ -37,7 +37,7 @@ const Board = () => {
 
   const { deleteTask } = useDeleteTaskWithUndo({ cache });
 
-  const openTask = (task: Partial<Task>) => {
+  const openTask = (task: Task) => {
     setSelectedTask(task);
     setModalOpen(true);
   };
@@ -45,7 +45,7 @@ const Board = () => {
   // What the board holds for the open task now. A "Move to" inside the modal
   // changes its column on the board, and the copy the form was built from
   // does not follow.
-  const liveTask = selectedTask?._id ? tasks.find(task => task._id === selectedTask._id) : undefined;
+  const liveTask = selectedTask ? tasks.find(task => task._id === selectedTask._id) : undefined;
   const moveTargets = useMemo<MoveTarget[]>(() => columns.map(({ id, title }) => ({ id, title })), [columns]);
 
   /**
@@ -108,18 +108,9 @@ const Board = () => {
    *
    * Closing on success is the modal's job too, through onSaved.
    */
-  const saveTask = async (taskData: Partial<Task>) => {
-    if (!boardId) throw new Error('No board was specified in the address.');
-
-    const result = taskData._id
-      ? await TaskService.update(taskData._id, taskData)
-      : await TaskService.create(boardId, taskData);
-
-    if (taskData._id) {
-      cache.replace(result);
-    } else {
-      cache.write([...(cache.read() ?? []), result]);
-    }
+  const saveTask = async (taskData: StoredTask) => {
+    const result = await TaskService.update(taskData._id, taskData);
+    cache.replace(result);
 
     // A task whose checklist is entirely done moves itself to the last
     // column. `status` holds a column id, so comparing it to the literal

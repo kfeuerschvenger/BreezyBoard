@@ -47,7 +47,15 @@ const MEMBERS: User[] = [
 // reliable query. This is an accessibility gap in TaskModal worth fixing.
 const getTitleInput = () => screen.getByPlaceholderText('Enter task title');
 const getDescriptionInput = () => screen.getByPlaceholderText('Enter task description');
-const getSaveButton = () => screen.getByRole('button', { name: 'Save Changes' });
+// The one primary button of the footer. It is found by its name, which is the
+// name a move target named "Done" would share, so a test that has such a column
+// reads the footer's button from the dialog's own footer instead.
+const getSaveButton = () => screen.getByRole('button', { name: 'Done' });
+
+// A stored task with nothing filled in, so a test can say exactly which fields
+// it fills. Hoisted so its identity is stable: the form rebuilds when the task
+// changes.
+const BARE_TASK = { _id: 'task-1', boardId: 'board-1' };
 
 // Waits for the color swatches to paint before a test starts interacting.
 // This used to be load bearing: the reset effect depended on taskColors, so
@@ -65,7 +73,7 @@ const waitForColorsLoaded = async () => {
 
 const renderModal = (onSave = vi.fn()) => {
   const onClose = vi.fn();
-  renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+  renderWithQuery(<TaskModal open task={BARE_TASK} onClose={onClose} onSave={onSave} />);
   return { onSave, onClose };
 };
 
@@ -203,7 +211,7 @@ describe('TaskModal form state versus the async color fetch', () => {
     );
 
     const user = userEvent.setup();
-    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskModal open task={BARE_TASK} onClose={vi.fn()} onSave={vi.fn()} />);
 
     // Let the mount effects settle. The colors request is still pending on
     // purpose: this test types into the form before it resolves.
@@ -263,9 +271,9 @@ describe('TaskModal draft persistence', () => {
     mockedUserService.getById.mockReset();
   });
 
-  const DRAFT_STORAGE_KEY = 'breezyboard:draft:task:new:board-1';
+  const DRAFT_STORAGE_KEY = 'breezyboard:draft:task:task-1';
 
-  it('restores a draft into the form when one exists in storage for a new task', async () => {
+  it('restores a draft into the form when one exists in storage for the task', async () => {
     window.localStorage.setItem(
       DRAFT_STORAGE_KEY,
       JSON.stringify({
@@ -281,7 +289,7 @@ describe('TaskModal draft persistence', () => {
       })
     );
 
-    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
+    renderWithQuery(<TaskModal open task={BARE_TASK} onClose={vi.fn()} onSave={vi.fn()} />);
     await waitForColorsLoaded();
 
     expect(getTitleInput()).toHaveValue('Draft title');
@@ -292,7 +300,7 @@ describe('TaskModal draft persistence', () => {
     const user = userEvent.setup();
     const onSave = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
-    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={onClose} onSave={onSave} />);
+    renderWithQuery(<TaskModal open task={BARE_TASK} onClose={onClose} onSave={onSave} />);
     await waitForColorsLoaded();
 
     await user.type(getTitleInput(), 'Ship the release notes');
@@ -422,13 +430,7 @@ describe('TaskModal title', () => {
   // Asserted as the dialog's accessible name rather than as text on the page,
   // which is both what assistive technology announces and the thing section
   // 10.2 records as having been missing here.
-  it('announces a task with no id as a creation', async () => {
-    renderWithQuery(<TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} />);
-
-    expect(await screen.findByRole('dialog', { name: 'Create New Task' })).toBeInTheDocument();
-  });
-
-  it('announces a task that already exists as an edit', async () => {
+  it('announces the task as an edit, and has no creation to announce', async () => {
     renderWithQuery(
       <TaskModal
         open
@@ -439,6 +441,7 @@ describe('TaskModal title', () => {
     );
 
     expect(await screen.findByRole('dialog', { name: 'Edit Task' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /create/i })).not.toBeInTheDocument();
   });
 });
 
@@ -496,11 +499,14 @@ describe('TaskModal reference data fetching', () => {
     expect(mockedUserService.getBoardMembers).toHaveBeenCalledTimes(2);
   });
 
-  // A task with no board yet has no member list to ask for, and asking would
-  // be a request with an undefined id in the query string.
-  it('asks for no members at all when the task has no board', async () => {
-    renderWithQuery(<TaskModal open task={{}} onClose={vi.fn()} onSave={vi.fn()} />);
-    await waitForColorsLoaded();
+  // A modal that has never been opened holds no task, so there is no board to
+  // ask for members of, and asking would be a request with an undefined id in
+  // the query string.
+  it('asks for no members at all before it has been given a task', async () => {
+    renderWithQuery(<TaskModal open={false} task={null} onClose={vi.fn()} onSave={vi.fn()} />);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
 
     expect(mockedUserService.getBoardMembers).not.toHaveBeenCalled();
   });
@@ -654,13 +660,119 @@ describe('TaskModal on a task that exists', () => {
       expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).not.toBeNull();
     });
 
-    it('is not offered for a task that does not exist yet', async () => {
-      renderWithQuery(
-        <TaskModal open task={{ boardId: 'board-1' }} onClose={vi.fn()} onSave={vi.fn()} onDelete={vi.fn()} />,
-      );
+    it('is not offered when the caller cannot delete', async () => {
+      renderExisting({ onDelete: undefined });
       await waitForColorsLoaded();
 
       expect(screen.queryByRole('button', { name: 'Blow it away' })).not.toBeInTheDocument();
+      expect(getSaveButton()).toBeInTheDocument();
+    });
+  });
+
+  describe('the footer', () => {
+    const footerOf = () => {
+      const done = getSaveButton();
+      const footer = done.parentElement as HTMLElement;
+      return { done, footer };
+    };
+
+    it('has "Blow it away" and a single "Done", and no Cancel and no Save', async () => {
+      renderExisting();
+      await waitForColorsLoaded();
+
+      const { footer } = footerOf();
+      const buttons = within(footer).getAllByRole('button');
+
+      expect(buttons.map(button => button.textContent)).toEqual(['Blow it away', 'Done']);
+      expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+    });
+
+    it('draws the danger action as a ghost with the wind icon and Done as the one dark button', async () => {
+      renderExisting();
+      await waitForColorsLoaded();
+
+      const blow = screen.getByRole('button', { name: 'Blow it away' });
+      const { done } = footerOf();
+
+      expect(blow).toHaveAttribute('type', 'button');
+      expect(blow.querySelector('svg')).not.toBeNull();
+      expect(blow.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(blow).toHaveClass('text-danger');
+      expect(blow).not.toHaveClass('bg-ink');
+      expect(done).toHaveClass('bg-ink');
+      // Done is the form's own submit, so Enter in a field and the button agree.
+      expect(done).toHaveAttribute('type', 'submit');
+      expect(done).toHaveAttribute('form', 'task-form');
+      expect(document.getElementById('task-form')).toBeInstanceOf(HTMLFormElement);
+    });
+
+    it('saves and closes on Done', async () => {
+      const user = userEvent.setup();
+      const { onSave, onClose } = renderExisting();
+      await waitForColorsLoaded();
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(getSaveButton());
+
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ _id: 'task-1', title: 'Pack the stove' }));
+    });
+
+    it('reports a failed save from Done, stays open and keeps the draft', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { onClose, onSave } = renderExisting();
+      onSave.mockRejectedValue(new Error('network down'));
+      await waitForColorsLoaded();
+      await user.type(getTitleInput(), ' twice');
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(getSaveButton());
+
+      const alert = await screen.findByRole('alert');
+      expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(getSaveButton()).toBeEnabled();
+      expect(getTitleInput()).toHaveValue('Pack the stove twice');
+      expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).not.toBeNull();
+    });
+
+    it('is disabled while the form is not valid', async () => {
+      renderExisting({ task: { ...EXISTING, title: '' } });
+      await waitForColorsLoaded();
+
+      expect(getSaveButton()).toBeDisabled();
+    });
+
+    it('is disabled while the delete is in flight, so a save cannot race it', async () => {
+      const user = userEvent.setup();
+      let release: () => void = () => {};
+      const { onDelete } = renderExisting();
+      onDelete.mockReturnValue(new Promise<void>(resolve => (release = resolve)));
+      await waitForColorsLoaded();
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(screen.getByRole('button', { name: 'Blow it away' }));
+
+      expect(getSaveButton()).toBeDisabled();
+      await act(async () => release());
+    });
+
+    // The close button and Escape leave without saving, and the draft stays.
+    it('leaves the draft in place when the modal is closed with the close button', async () => {
+      const user = userEvent.setup();
+      const { onClose, onSave } = renderExisting();
+      await waitForColorsLoaded();
+      await user.type(getTitleInput(), ' twice');
+      await waitFor(() => expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).not.toBeNull());
+
+      await user.click(screen.getByRole('button', { name: 'Close' }));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onSave).not.toHaveBeenCalled();
+      expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).not.toBeNull();
     });
   });
 });
