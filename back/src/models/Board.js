@@ -81,6 +81,8 @@ boardSchema.virtual('taskCount', {
   localField: '_id',
   foreignField: 'boardId',
   count: true,
+  // A soft deleted task is not on the board, so it is not in its count.
+  match: { deletedAt: null },
 });
 
 boardSchema.virtual('memberCount').get(function () {

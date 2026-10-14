@@ -414,7 +414,8 @@ export const summariseBoardTasks = async boards => {
     .map(column => column._id.toString());
 
   const rows = await Task.aggregate([
-    { $match: { boardId: { $in: boards.map(board => board._id) } } },
+    // A soft deleted task is not on the board, so it is in none of its totals.
+    { $match: { boardId: { $in: boards.map(board => board._id) }, deletedAt: null } },
     {
       $group: {
         _id: '$boardId',

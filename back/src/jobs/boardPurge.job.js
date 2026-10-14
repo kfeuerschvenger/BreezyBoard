@@ -1,12 +1,19 @@
 import env from '../config/env.js';
 import { purgeExpiredBoards } from '../services/board.service.js';
+import { purgeExpiredTasks } from '../services/task.service.js';
 import logger from '../utils/logger.js';
 
-const purgeWithConfiguredWindow = () =>
-  purgeExpiredBoards({
+// Tasks go first so that a failure on boards does not leave the task backlog
+// waiting, and the count the job reports is both kinds of removal together.
+const purgeWithConfiguredWindow = async () => {
+  const tasks = await purgeExpiredTasks({ retentionMs: env.BOARD_RETENTION_MS });
+  const boards = await purgeExpiredBoards({
     retentionMs: env.BOARD_RETENTION_MS,
     onError: (error, boardId) => logger.error({ err: error, boardId }, 'Failed to purge a deleted board'),
   });
+
+  return tasks + boards;
+};
 
 /**
  * Removes boards past the retention window, once at start and then on a
@@ -30,7 +37,7 @@ export const startBoardPurgeJob = ({
       const removed = await purge();
 
       if (removed > 0) {
-        logger.info({ removed }, 'Purged deleted boards past retention');
+        logger.info({ removed }, 'Purged deleted boards and tasks past retention');
       }
     } catch (error) {
       logger.error({ err: error }, 'Board purge run failed');

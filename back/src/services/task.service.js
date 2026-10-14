@@ -1,5 +1,6 @@
 import { generateKeyBetween } from 'fractional-indexing';
 
+import env from '../config/env.js';
 import Task from '../models/Task.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
@@ -45,7 +46,10 @@ const assertStatusNamesAColumnOfThisBoard = async (boardId, status) => {
   }
 };
 
-// The key that puts a task at the bottom of a column.
+// The key that puts a task at the bottom of a column. Soft deleted tasks are
+// counted here on purpose: they are invisible to every read, but a restore
+// puts one back under its own key, and a new card minted below the last live
+// key could land on it and share a position with the card that comes back.
 const keyAtEndOfColumn = async (boardId, status) => {
   const last = await Task.findOne({ boardId, status }).sort({ order: -1 }).select('order');
 
@@ -68,7 +72,7 @@ const keyAtEndOfColumn = async (boardId, status) => {
 const keyBetweenNeighbours = async (boardId, status, afterId, beforeId) => {
   const neighbourIds = [afterId, beforeId].filter(Boolean);
   const neighbours = neighbourIds.length
-    ? await Task.find({ _id: { $in: neighbourIds }, boardId, status }).select('order')
+    ? await Task.find({ _id: { $in: neighbourIds }, boardId, status, deletedAt: null }).select('order')
     : [];
 
   const byId = new Map(neighbours.map(task => [task._id.toString(), task.order]));
@@ -131,7 +135,7 @@ export const createTask = async taskData => {
 };
 
 export const getTaskById = async id => {
-  const task = await Task.findById(id).populate('owner', 'firstName lastName avatar').populate('color', 'name value');
+  const task = await Task.findOne({ _id: id, deletedAt: null }).populate('owner', 'firstName lastName avatar').populate('color', 'name value');
   if (!task) {
     throw new ApiError(404, 'Task not found');
   }
@@ -141,7 +145,7 @@ export const getTaskById = async id => {
 export const updateTask = async (id, updateData) => {
   // Only pay for the lookup when the caller is actually changing the column.
   if (updateData.status !== undefined) {
-    const existing = await Task.findById(id).select('boardId');
+    const existing = await Task.findOne({ _id: id, deletedAt: null }).select('boardId');
 
     if (!existing) {
       throw new ApiError(404, 'Task not found');
@@ -150,7 +154,9 @@ export const updateTask = async (id, updateData) => {
     await assertStatusNamesAColumnOfThisBoard(existing.boardId, updateData.status);
   }
 
-  const task = await Task.findByIdAndUpdate(id, updateData, {
+  // The authorization middleware has already read the task, and a delete can
+  // land in between, so the write filters on `deletedAt` itself.
+  const task = await Task.findOneAndUpdate({ _id: id, deletedAt: null }, updateData, {
     new: true,
     runValidators: true,
   })
@@ -164,12 +170,74 @@ export const updateTask = async (id, updateData) => {
   return task;
 };
 
+/**
+ * Soft delete: the task is marked, nothing is removed. Every read and write
+ * treats a marked task as missing, and it keeps its id, dates, column and
+ * position, so `restoreTask` brings back exactly what was deleted. The data
+ * goes for good in `purgeExpiredTasks`.
+ *
+ * The filter on `deletedAt` makes a second delete of the same task a 404
+ * rather than a silent overwrite of the first deletion date, which would
+ * quietly extend the retention window.
+ *
+ * @param {string} id
+ * @returns {Promise<object>} the task, with its deletion date
+ */
 export const deleteTask = async id => {
-  const task = await Task.findByIdAndDelete(id);
+  const task = await Task.findOneAndUpdate({ _id: id, deletedAt: null }, { deletedAt: new Date() }, { new: true });
   if (!task) {
     throw new ApiError(404, 'Task not found');
   }
   return task;
+};
+
+/**
+ * Clears the deletion mark. Idempotent: restoring a task that is not deleted
+ * answers with the task, so a double click on "Catch it" or a retry after a
+ * timeout is not an error. A task deleted longer ago than the retention window
+ * is a 404 whether or not the purge has reached it, the exact complement of
+ * `purgeExpiredTasks`: the purge removes `deletedAt <= cutoff`, this restores
+ * only `deletedAt > cutoff`.
+ *
+ * The task's owner is not checked. The owner may have left the board since the
+ * delete, and the task is restored as it was, with the owner it had.
+ *
+ * @param {string} id
+ * @param {{ retentionMs?: number, now?: Date }} [options]
+ * @returns {Promise<object>} the restored task
+ */
+export const restoreTask = async (id, { retentionMs = env.BOARD_RETENTION_MS, now = new Date() } = {}) => {
+  const cutoff = new Date(now.getTime() - retentionMs);
+
+  const task = await Task.findOneAndUpdate(
+    { _id: id, $or: [{ deletedAt: null }, { deletedAt: { $gt: cutoff } }] },
+    { deletedAt: null },
+    { new: true }
+  )
+    .populate('owner', 'firstName lastName avatar')
+    .populate('color', 'name value');
+
+  if (!task) {
+    throw new ApiError(404, 'Task not found');
+  }
+
+  return task;
+};
+
+/**
+ * Removes every task whose deletion is older than the retention window. A
+ * single `deleteMany` guarded on `deletedAt`, so a restore that lands first
+ * keeps its task: a restored task no longer matches.
+ *
+ * @param {{ retentionMs: number, now?: Date }} options
+ * @returns {Promise<number>} how many tasks were removed
+ */
+export const purgeExpiredTasks = async ({ retentionMs, now = new Date() }) => {
+  const cutoff = new Date(now.getTime() - retentionMs);
+  // `$type` is what lets the planner use the partial index on `deletedAt`.
+  const { deletedCount } = await Task.deleteMany({ deletedAt: { $type: 'date', $lte: cutoff } });
+
+  return deletedCount;
 };
 
 /**
@@ -185,7 +253,7 @@ export const deleteTask = async id => {
  * middle of another column always landed at the bottom of it.
  */
 export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = null } = {}) => {
-  const existing = await Task.findById(taskId).select('boardId');
+  const existing = await Task.findOne({ _id: taskId, deletedAt: null }).select('boardId');
 
   if (!existing) {
     throw new ApiError(404, 'Task not found');
@@ -195,7 +263,11 @@ export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = n
 
   const newOrder = await keyBetweenNeighbours(existing.boardId, newStatus, afterId, beforeId);
 
-  const task = await Task.findByIdAndUpdate(taskId, { status: newStatus, order: newOrder }, { new: true })
+  const task = await Task.findOneAndUpdate(
+    { _id: taskId, deletedAt: null },
+    { status: newStatus, order: newOrder },
+    { new: true }
+  )
     .populate('owner', 'firstName lastName avatar')
     .populate('color', 'name value');
 
@@ -211,7 +283,7 @@ export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = n
 // alongside the tasks so a client can discover `total` either way; only
 // whether `tasks` itself is truncated depends on `limit` being present.
 export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
-  const filter = { boardId };
+  const filter = { boardId, deletedAt: null };
 
   const total = await Task.countDocuments(filter);
 
@@ -244,7 +316,7 @@ export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
 };
 
 export const updateChecklistItem = async (taskId, itemId, updateData) => {
-  const task = await Task.findById(taskId);
+  const task = await Task.findOne({ _id: taskId, deletedAt: null });
   if (!task) {
     throw new ApiError(404, 'Task not found');
   }
@@ -265,7 +337,7 @@ export const updateChecklistItem = async (taskId, itemId, updateData) => {
 };
 
 export const deleteChecklistItem = async (taskId, itemId) => {
-  const task = await Task.findById(taskId);
+  const task = await Task.findOne({ _id: taskId, deletedAt: null });
   if (!task) {
     throw new ApiError(404, 'Task not found');
   }

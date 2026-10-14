@@ -41,6 +41,14 @@ router.put(
   TaskController.updateTask
 );
 router.delete('/:id', validate({ params: idParamSchema }), requireTaskBoardRole('member'), TaskController.deleteTask);
+// The one route that reaches a soft deleted task. It still resolves the
+// caller's role on the task's board first, so a stranger learns nothing.
+router.post(
+  '/:id/restore',
+  validate({ params: idParamSchema }),
+  requireTaskBoardRole('member', { includeDeleted: true }),
+  TaskController.restoreTask
+);
 router.patch(
   '/:id/move',
   validate({ params: idParamSchema, body: moveTaskSchema }),

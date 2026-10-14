@@ -41,7 +41,16 @@ export const deleteTask = async (req, res, next) => {
   }
 };
 
-export const moveTask = async (req, res, next) => {
+export const restoreTask = async (req, res, next) => {
+  try {
+    const task = await taskService.restoreTask(req.params.id);
+    responseHandler(res, 200, task);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const moveTask =async (req, res, next) => {
   try {
     const { status, afterId, beforeId } = req.body;
     const task = await taskService.moveTask(req.params.id, status, { afterId, beforeId });

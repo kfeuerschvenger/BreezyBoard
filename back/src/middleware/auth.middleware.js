@@ -265,34 +265,41 @@ export const requireBoardRole =
  * not-found bugs much harder to diagnose. Revisit if ids ever become
  * guessable or sequential.
  *
+ * A soft-deleted task is a missing task, as a soft-deleted board is a missing
+ * board. The restore route alone opts in with `includeDeleted`, and still
+ * resolves the role on the board first.
+ *
  * @param {'member' | 'owner'} minimumRole
+ * @param {{ includeDeleted?: boolean }} [options]
  * @returns {import('express').RequestHandler}
  */
-export const requireTaskBoardRole = minimumRole => async (req, _res, next) => {
-  try {
-    const taskId = req.params.id || req.params.taskId;
-    const task = await Task.findById(taskId);
+export const requireTaskBoardRole =
+  (minimumRole, { includeDeleted = false } = {}) =>
+  async (req, _res, next) => {
+    try {
+      const taskId = req.params.id || req.params.taskId;
+      const task = await Task.findById(taskId);
 
-    if (!task) {
-      throw new ApiError(404, 'Task not found');
+      if (!task || (task.deletedAt && !includeDeleted)) {
+        throw new ApiError(404, 'Task not found');
+      }
+
+      const board = await Board.findById(task.boardId);
+
+      if (!board || board.deletedAt) {
+        throw new ApiError(404, 'Board not found');
+      }
+
+      const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
+
+      if (!meetsMinimumRole(role, minimumRole)) {
+        throw new ApiError(403, 'Not authorized to access this task');
+      }
+
+      req.task = task;
+      req.board = board;
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    const board = await Board.findById(task.boardId);
-
-    if (!board || board.deletedAt) {
-      throw new ApiError(404, 'Board not found');
-    }
-
-    const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
-
-    if (!meetsMinimumRole(role, minimumRole)) {
-      throw new ApiError(403, 'Not authorized to access this task');
-    }
-
-    req.task = task;
-    req.board = board;
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+  };
