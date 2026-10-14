@@ -17,6 +17,7 @@
 
 import { chromium } from 'playwright';
 import { AxeBuilder } from '@axe-core/playwright';
+import { settled } from './observe.mjs';
 
 const FRONT = process.env.E2E_FRONT_URL ?? 'http://localhost:5173';
 const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
@@ -120,10 +121,15 @@ if (!register.ok()) {
  * never what anybody sees. A ratchet built on a number that flaps is worse
  * than no ratchet, because the first false red teaches everyone to ignore
  * it.
+ *
+ * It waits on what the page reports: no CSS animation or transition still
+ * running, and no inline style or class still being rewritten, which is how
+ * framer-motion writes its frames. A fixed wait is a guess at that, and a
+ * stalled renderer outlasts the guess.
  */
-const settle = async () => {
+const settle = async (label = 'the page to stop animating before it is scanned') => {
   await page.waitForLoadState('networkidle').catch(() => {});
-  await page.waitForTimeout(900);
+  await settled(page, { label });
 };
 
 const scan = async surface => {
@@ -168,7 +174,7 @@ await scan('login');
 // finding P3-4 missed, which is exactly what an unscanned state buys you. It
 // is scanned now, open.
 await page.getByRole('button', { name: 'Forgot it?' }).click();
-await page.waitForTimeout(400);
+await settled(page, { within: '[role="dialog"]', label: 'the forgot password dialog to finish opening' });
 await scan('login, forgot password open');
 
 // The confirmation replaces the form inside the same dialog, so it is a state
@@ -178,7 +184,7 @@ await scan('login, forgot password open');
 await page.getByRole('dialog', { name: 'Forgot password' }).getByLabel('Email address').fill(`axe-nobody-${Date.now()}@example.test`);
 await page.getByRole('button', { name: 'Send reset link' }).click();
 await page.getByRole('dialog', { name: 'Forgot password' }).getByRole('status').waitFor();
-await page.waitForTimeout(400);
+await settled(page, { within: '[role="dialog"]', label: 'the confirmation to finish replacing the form' });
 await scan('login, forgot password confirmation');
 
 await page.goto(`${FRONT}/register`);
@@ -227,7 +233,7 @@ await page.getByRole('dialog', { name: 'Navigation' }).waitFor({ state: 'detache
 await page.setViewportSize({ width: 1440, height: 900 });
 
 await page.getByRole('button', { name: 'New board' }).first().click();
-await page.waitForTimeout(400);
+await settled(page, { within: '[role="dialog"]', label: 'the create board dialog to finish opening' });
 await scan('dashboard, create board modal open');
 
 const boardName = `Axe Board ${Date.now()}`;
@@ -235,7 +241,7 @@ await page.getByLabel(/board name/i).fill(boardName);
 await page.getByRole('button', { name: /^create board$/i }).last().click();
 await page.getByText(boardName).first().click();
 await page.waitForURL(/\/board\/[a-f0-9]{24}$/);
-await page.waitForTimeout(400);
+await settled(page, { label: 'the board page to stop animating' });
 // A board with no card at all: the banner above the columns and "Still air" in
 // each of them.
 await scan('board, empty');
@@ -250,7 +256,7 @@ await scan('board, composer open');
 
 await composer.press('Enter');
 await page.getByRole('button', { name: 'Axe card', exact: true }).waitFor();
-await page.waitForTimeout(700);
+await settled(page, { label: 'the new card to finish landing' });
 await scan('board, with a card');
 
 // A card held in the air: it is collapsed where it was, a gap is open where it
@@ -265,7 +271,7 @@ await page.locator('[id^="DndLiveRegion"]', { hasText: 'Picked up' }).waitFor();
 await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 0)));
 await page.keyboard.press('ArrowRight');
 await page.locator('[id^="DndLiveRegion"]', { hasText: 'Up Next' }).waitFor();
-await page.waitForTimeout(400);
+await settled(page, { label: 'the held card and its gap to come to rest' });
 await scan('board, a card held with the keyboard');
 await page.keyboard.press('Escape');
 await page.locator('[id^="DndLiveRegion"]', { hasText: 'cancelled' }).waitFor();
@@ -277,7 +283,7 @@ await page.locator('[id^="DndLiveRegion"]', { hasText: 'cancelled' }).waitFor();
 await page.getByRole('button', { name: 'Axe card', exact: true }).click();
 const taskDialog = page.getByRole('dialog', { name: 'Edit Task' });
 await taskDialog.waitFor();
-await page.waitForTimeout(400);
+await settled(page, { within: '[role="dialog"]', label: 'the task modal to finish opening' });
 check('the task modal is a modal dialog', await taskDialog.getAttribute('aria-modal'), 'true');
 check(
   'the close button is in the accessibility tree, outside the hidden gradient',
@@ -317,8 +323,8 @@ await page.setViewportSize({ width: 1440, height: 900 });
 // either side of it, so every state of an item is on screen: a column to move
 // to and the current one, disabled.
 await page.keyboard.press('Escape');
-await page.waitForTimeout(400);
-const token = (await register.json()).data.token;
+await settled(page, { label: 'the task modal to finish leaving' });
+const token =(await register.json()).data.token;
 const authorised = { headers: { Authorization: `Bearer ${token}` } };
 const boardId = page.url().match(/board\/([a-f0-9]{24})/)[1];
 const board = (await (await page.request.get(`${API}/boards/${boardId}`, authorised)).json()).data;
@@ -378,7 +384,7 @@ check(
 await page.getByRole('menuitem', { name: 'Add members' }).click();
 await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
 await page.getByRole('textbox', { name: 'Search team members' }).waitFor();
-await page.waitForTimeout(600);
+await settled(page, { within: '[role="dialog"]', label: 'the add members dialog to finish opening' });
 await scan('board, add members dialog open');
 await page.keyboard.press('Escape');
 await page.getByRole('dialog', { name: 'Add Members' }).waitFor({ state: 'hidden' });
@@ -444,7 +450,7 @@ await scan('board not found');
 // knows about.
 await page.goto(`${FRONT}/profile`);
 await page.getByText('Profile Settings').waitFor();
-await page.waitForTimeout(400);
+await settled(page, { label: 'the profile page to stop animating' });
 await scan('profile');
 
 await browser.close();

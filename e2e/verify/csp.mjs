@@ -40,7 +40,12 @@ const form = page.locator('form').first();
 await form.getByLabel('Email address', { exact: true }).fill(user.email);
 await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
-await page.waitForTimeout(3000);
+// The dashboard is what the sign in produces, and the network going quiet is
+// what says every request the page makes has been made and answered, so the
+// assertions below count them all. A dashboard that never appears is reported
+// by the line below, not waited on forever.
+await page.getByText('Your boards').waitFor({ timeout: 15000 }).catch(() => {});
+await page.waitForLoadState('networkidle').catch(() => {});
 log('url after login:', page.url());
 log('dashboard visible:', (await page.locator('body').innerText()).includes('Your boards'));
 
