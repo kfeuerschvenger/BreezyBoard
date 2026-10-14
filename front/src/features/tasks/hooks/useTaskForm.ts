@@ -17,6 +17,8 @@ export interface TaskFormValues {
   color: string;
   owner: string;
   checklist: ChecklistItemData[];
+  /** Text typed in the checklist's "Add an item" field and not yet added: it is saved as an item on submit and is part of the draft. */
+  pendingItem: string;
 }
 
 /** The description is optional, so it never has an error of its own. */
@@ -58,6 +60,7 @@ const EMPTY_VALUES: TaskFormValues = {
   color: '',
   owner: '',
   checklist: [],
+  pendingItem: '',
 };
 
 const newItemId = (): string => (crypto?.randomUUID ? crypto.randomUUID() : Date.now().toString());
@@ -145,6 +148,7 @@ export function useTaskForm({
           text: item.text,
           completed: item.completed,
         })) ?? [],
+      pendingItem: '',
     };
 
     // A saved draft, when one exists, wins over rebuilding from the task
@@ -156,7 +160,8 @@ export function useTaskForm({
     // when the throttle's trailing write fires, so a page lost in between
     // loses the draft.
     awaitingHydration.current = true;
-    setValues(restoredDraft ?? fromTask);
+    // A draft written before the pending item was kept lacks the field.
+    setValues(restoredDraft ? { ...restoredDraft, pendingItem: restoredDraft.pendingItem ?? '' } : fromTask);
     setErrors({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
@@ -233,6 +238,12 @@ export function useTaskForm({
       // A row with no text is not sent: the server refuses an empty item, and
       // an Enter pressed in a field that has just been emptied submits the
       // form before that field has been left and removed.
+      //
+      // Text left in the "Add an item" field is added as the last item: a
+      // person who types an item and presses Done means it to be saved. It is
+      // added to the payload and not to the form's list, so a failed save leaves
+      // the field as typed and a retry cannot add it twice.
+      const pending = values.pendingItem.trim();
       const payload: StoredTask = {
         _id: task._id,
         boardId: task.boardId,
@@ -241,13 +252,16 @@ export function useTaskForm({
         priority: values.priority,
         color: values.color,
         owner: values.owner,
-        checklist: values.checklist
-          .filter(item => item.text.trim() !== '')
-          .map(item => ({
-            text: item.text,
-            completed: item.completed,
-            ...(item.id && !item.id.startsWith('temp-') && { _id: item.id }),
-          })),
+        checklist: [
+          ...values.checklist
+            .filter(item => item.text.trim() !== '')
+            .map(item => ({
+              text: item.text,
+              completed: item.completed,
+              ...(item.id && !item.id.startsWith('temp-') && { _id: item.id }),
+            })),
+          ...(pending ? [{ text: pending, completed: false }] : []),
+        ],
       };
 
       await onSave(payload);

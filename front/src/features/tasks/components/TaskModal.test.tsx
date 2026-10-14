@@ -47,9 +47,8 @@ const MEMBERS: User[] = [
 // reliable query. This is an accessibility gap in TaskModal worth fixing.
 const getTitleInput = () => screen.getByPlaceholderText('Enter task title');
 const getDescriptionInput = () => screen.getByPlaceholderText('Enter task description');
-// The one primary button of the footer. It is found by its name, which is the
-// name a move target named "Done" would share, so a test that has such a column
-// reads the footer's button from the dialog's own footer instead.
+// The one primary button of the footer. A "Move to" button is named "Move to"
+// and its column, so a column called Done does not share this name.
 const getSaveButton = () => screen.getByRole('button', { name: 'Done' });
 
 // A stored task with nothing filled in, so a test can say exactly which fields
@@ -587,7 +586,14 @@ describe('TaskModal on a task that exists', () => {
       const group = screen.getByRole('group', { name: /move to/i });
       const buttons = within(group).getAllByRole('button');
 
+      // The text stays the column's title, and the name begins "Move to", which
+      // contains the visible text as WCAG 2.5.3 asks.
       expect(buttons.map(button => button.textContent)).toEqual(['To Do', 'In motion', 'Landed']);
+      expect(buttons.map(button => button.getAttribute('aria-label'))).toEqual([
+        'Move to To Do',
+        'Move to In motion',
+        'Move to Landed',
+      ]);
       expect(buttons.map(button => button.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false']);
     });
 
@@ -596,11 +602,21 @@ describe('TaskModal on a task that exists', () => {
       const { onMove } = renderExisting();
       await waitForColorsLoaded();
 
-      await user.click(screen.getByRole('button', { name: 'In motion' }));
+      await user.click(screen.getByRole('button', { name: 'Move to In motion' }));
       expect(onMove).not.toHaveBeenCalled();
 
-      await user.click(screen.getByRole('button', { name: 'Landed' }));
+      await user.click(screen.getByRole('button', { name: 'Move to Landed' }));
       expect(onMove).toHaveBeenCalledWith({ id: 'col-done', title: 'Landed' });
+    });
+
+    it('never shares an accessible name with the footer when a column is called Done', async () => {
+      renderExisting({
+        columns: [...COLUMNS, { id: 'col-d', title: 'Done' }],
+      });
+      await waitForColorsLoaded();
+
+      expect(screen.getAllByRole('button', { name: 'Done' })).toEqual([getSaveButton()]);
+      expect(screen.getByRole('button', { name: 'Move to Done' })).toHaveTextContent(/^Done$/);
     });
 
     it('is not drawn when the modal is not told the board columns', async () => {
@@ -625,6 +641,83 @@ describe('TaskModal on a task that exists', () => {
       await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
       expect(onSave.mock.calls[0][0]).toMatchObject({ _id: 'task-1', title: 'Pack the stove' });
       expect(onSave.mock.calls[0][0]).not.toHaveProperty('status');
+    });
+
+    const ADD_FIELD = 'Add an item';
+
+    it('adds the text left in the "Add an item" field as the last item when Done is pressed', async () => {
+      const user = userEvent.setup();
+      const { onSave } = renderExisting({
+        task: { ...EXISTING, checklist: [{ _id: 'item-1', text: 'Buy gas', completed: true }] },
+      });
+      await waitForColorsLoaded();
+      await user.type(screen.getByRole('textbox', { name: ADD_FIELD }), '  Pack the stove  ');
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(getSaveButton());
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0].checklist).toEqual([
+        { _id: 'item-1', text: 'Buy gas', completed: true },
+        { text: 'Pack the stove', completed: false },
+      ]);
+    });
+
+    it('ignores a blank "Add an item" field when Done is pressed', async () => {
+      const user = userEvent.setup();
+      const { onSave } = renderExisting();
+      await waitForColorsLoaded();
+      await user.type(screen.getByRole('textbox', { name: ADD_FIELD }), '   ');
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(getSaveButton());
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0].checklist).toEqual([]);
+    });
+
+    it('keeps the pending text in the field and in the draft when the save fails, and adds it once on a retry', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { onSave } = renderExisting();
+      onSave.mockRejectedValueOnce(new Error('network down'));
+      await waitForColorsLoaded();
+      await user.type(screen.getByRole('textbox', { name: ADD_FIELD }), 'Pack the stove');
+      await waitFor(() => expect(getSaveButton()).toBeEnabled());
+
+      await user.click(getSaveButton());
+      await screen.findByRole('alert');
+
+      expect(screen.getByRole('textbox', { name: ADD_FIELD })).toHaveValue('Pack the stove');
+      expect(screen.queryByRole('textbox', { name: 'Checklist item 1' })).not.toBeInTheDocument();
+      expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).toContain('Pack the stove');
+
+      await user.click(getSaveButton());
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+      expect(onSave.mock.calls[1][0].checklist).toEqual([{ text: 'Pack the stove', completed: false }]);
+    });
+
+    it('restores the pending text from a draft', async () => {
+      window.localStorage.setItem(
+        'breezyboard:draft:task:task-1',
+        JSON.stringify({
+          savedAt: Date.now(),
+          value: {
+            title: 'Pack the stove',
+            description: '',
+            priority: 'medium',
+            color: 'color-blue',
+            owner: 'user-ada',
+            checklist: [],
+            pendingItem: 'Half typed',
+          },
+        }),
+      );
+      renderExisting();
+      await waitForColorsLoaded();
+
+      expect(screen.getByRole('textbox', { name: ADD_FIELD })).toHaveValue('Half typed');
     });
   });
 

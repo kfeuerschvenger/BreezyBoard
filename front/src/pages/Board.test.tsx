@@ -367,11 +367,8 @@ describe('Board page adding and saving a task', () => {
       return save;
     };
 
-    /** The footer's button, which shares its name with a column called Done. */
-    const getDone = (dialog: HTMLElement) =>
-      within(dialog)
-        .getAllByRole('button', { name: 'Done' })
-        .find(button => button.getAttribute('type') === 'submit') as HTMLElement;
+    /** The footer's button: the only one named Done, since a column's is named "Move to Done". */
+    const getDone = (dialog: HTMLElement) => within(dialog).getByRole('button', { name: 'Done' });
 
     it('opens for editing, and not for creating, when a card is pressed', async () => {
       const user = userEvent.setup();
@@ -426,14 +423,12 @@ describe('Board page adding and saving a task', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Edit Task' });
       expect(within(dialog).getByText('Launch Plan · To Do')).toBeInTheDocument();
 
-      // The footer's "Done" shares its name with the column, so the column's
-      // button is read from the "Move to" group.
       const moveTo = within(dialog).getByRole('group', { name: /move to/i });
-      await user.click(within(moveTo).getByRole('button', { name: 'Done' }));
+      await user.click(within(moveTo).getByRole('button', { name: 'Move to Done' }));
 
       await waitFor(() => expect(mockedTaskService.move).toHaveBeenCalledWith('task-1', 'col-done', expect.anything(), expect.anything()));
       expect(await within(dialog).findByText('Launch Plan · Done')).toBeInTheDocument();
-      expect(within(moveTo).getByRole('button', { name: 'Done' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(moveTo).getByRole('button', { name: 'Move to Done' })).toHaveAttribute('aria-pressed', 'true');
       // The modal is still open: moving is not saving and does not close it.
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
@@ -448,7 +443,7 @@ describe('Board page adding and saving a task', () => {
       await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
       const dialog = await screen.findByRole('dialog');
       const moveTo = within(dialog).getByRole('group', { name: /move to/i });
-      await user.click(within(moveTo).getByRole('button', { name: 'Done' }));
+      await user.click(within(moveTo).getByRole('button', { name: 'Move to Done' }));
       await within(dialog).findByText('Launch Plan · Done');
       await screen.findByRole('radio', { name: 'Blue' });
       const title = screen.getByPlaceholderText('Enter task title');

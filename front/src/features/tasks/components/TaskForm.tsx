@@ -155,7 +155,12 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       )}
     </Field>
 
-    <Checklist items={values.checklist} onChange={checklist => setField('checklist', checklist)} />
+    <Checklist
+      items={values.checklist}
+      onChange={checklist => setField('checklist', checklist)}
+      pending={values.pendingItem}
+      onPendingChange={text => setField('pendingItem', text)}
+    />
 
     {submitError && (
       <div role="alert" className="rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
