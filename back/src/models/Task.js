@@ -82,6 +82,15 @@ const taskSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // Set when a task is deleted, cleared when it is restored. A task with a
+    // date here is invisible to every read and write path, and keeps its id,
+    // its dates, its column and its `order`, so a restore puts the card back
+    // exactly where it was. The purge job removes it for good once the date is
+    // older than the retention window.
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -97,6 +106,10 @@ const taskSchema = new mongoose.Schema(
 // last key in a column, whether a named neighbour really sits in this column
 // of this board, and the cascade that deletes a board's tasks with it.
 taskSchema.index({ boardId: 1, status: 1, order: 1 });
+
+// Serves the purge scan for tasks past retention. Partial, so the index holds
+// only the few tasks currently in the deleted state.
+taskSchema.index({ deletedAt: 1 }, { partialFilterExpression: { deletedAt: { $type: 'date' } } });
 
 const Task = mongoose.model('Task', taskSchema);
 
