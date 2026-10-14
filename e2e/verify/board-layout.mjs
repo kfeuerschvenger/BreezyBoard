@@ -76,8 +76,8 @@ const [firstColumn, , , lastColumn] = boardColumns;
 // Enough cards in the first column to overflow it at any of the viewports
 // below, and nothing in the others, so the empty state is on screen too.
 const TASKS = 14;
-for (let i = 1; i <= TASKS; i += 1) {
-  await req("POST", `/tasks/board/${boardId}`, token, {
+for (let i = 1; i <= TASKS; i += 1) { // NOSONAR javascript:S9382 sequential on purpose: the server mints each position at the end of the column, so the order of the requests is the order of the cards
+  await req("POST", `/tasks/board/${boardId}`, token, { // NOSONAR javascript:S9382
     title: `Layout task ${i}`,
     status: firstColumn._id,
     color: taskColors.body.data[0]._id,
@@ -166,18 +166,18 @@ const VIEWPORTS = [
   { name: "wide desktop 1920", width: 1920, height: 1080, overflows: false },
 ];
 
-for (const viewport of VIEWPORTS) {
+for (const viewport of VIEWPORTS) { // NOSONAR javascript:S9382 sequential on purpose: one shared page whose viewport is resized for each width, so the widths cannot overlap
   log(`\n--- ${viewport.name} ---`);
-  await page.setViewportSize({
+  await page.setViewportSize({ // NOSONAR javascript:S9382
     width: viewport.width,
     height: viewport.height,
   });
-  await page.goto(`${FRONT}/board/${boardId}`);
-  await page.getByRole("region", { name: "Board columns" }).waitFor();
-  await page.getByText("Layout task 1", { exact: true }).waitFor();
-  await settle();
+  await page.goto(`${FRONT}/board/${boardId}`); // NOSONAR javascript:S9382
+  await page.getByRole("region", { name: "Board columns" }).waitFor(); // NOSONAR javascript:S9382
+  await page.getByText("Layout task 1", { exact: true }).waitFor(); // NOSONAR javascript:S9382
+  await settle(); // NOSONAR javascript:S9382
 
-  const m = await measure();
+  const m = await measure(); // NOSONAR javascript:S9382
 
   check(
     "the page does not scroll sideways",
@@ -245,8 +245,8 @@ for (const viewport of VIEWPORTS) {
     level: 2,
     name: boardColumns[0].title,
   });
-  const before = await heading.boundingBox();
-  await page.evaluate(() => {
+  const before = await heading.boundingBox(); // NOSONAR javascript:S9382
+  await page.evaluate(() => { // NOSONAR javascript:S9382
     const row = document.querySelector(
       '[role="region"][aria-label="Board columns"]',
     );
@@ -256,7 +256,7 @@ for (const viewport of VIEWPORTS) {
       .parentElement.querySelector(".overflow-y-auto");
     body.scrollTop = body.scrollHeight;
   });
-  const after = await heading.boundingBox();
+  const after = await heading.boundingBox(); // NOSONAR javascript:S9382
   check(
     "the column header stays in view while its body scrolls",
     Boolean(before && after) &&
@@ -267,7 +267,7 @@ for (const viewport of VIEWPORTS) {
   );
   check(
     "the last card is reachable by scrolling the column",
-    await page.getByText(`Layout task ${TASKS}`, { exact: true }).isVisible(),
+    await page.getByText(`Layout task ${TASKS}`, { exact: true }).isVisible(), // NOSONAR javascript:S9382
   );
 
   check(
@@ -277,10 +277,10 @@ for (const viewport of VIEWPORTS) {
   );
   // The composer is the foot of the column, outside the scrolling body, so a
   // column of fourteen cards still has its way of adding a card in view.
-  const composerBox = await page
+  const composerBox = await page // NOSONAR javascript:S9382
     .getByRole("button", { name: `Add a card to ${boardColumns[0].title}` })
     .boundingBox();
-  const columnBox = await page
+  const columnBox = await page // NOSONAR javascript:S9382
     .getByRole("heading", { level: 2, name: boardColumns[0].title })
     .evaluate((columnHeading) => {
       const box = columnHeading.closest('div[class*="shrink-0"]').parentElement.getBoundingClientRect();
@@ -311,19 +311,19 @@ const emptyBoard = await req("POST", "/boards", token, {
 });
 const emptyId = emptyBoard.body.data._id;
 
-for (const viewport of VIEWPORTS) {
-  await page.setViewportSize({
+for (const viewport of VIEWPORTS) { // NOSONAR javascript:S9382 sequential on purpose: one shared page whose viewport is resized for each width, so the widths cannot overlap
+  await page.setViewportSize({ // NOSONAR javascript:S9382
     width: viewport.width,
     height: viewport.height,
   });
-  await page.goto(`${FRONT}/board/${emptyId}`);
-  await page.getByRole("region", { name: "Board columns" }).waitFor();
-  await settle();
+  await page.goto(`${FRONT}/board/${emptyId}`); // NOSONAR javascript:S9382
+  await page.getByRole("region", { name: "Board columns" }).waitFor(); // NOSONAR javascript:S9382
+  await settle(); // NOSONAR javascript:S9382
 
   const banner = page.getByRole("heading", { level: 2, name: /a fresh board/i });
   const add = page.getByRole("button", { name: "Add your first card", exact: true });
-  const addBox = await add.boundingBox();
-  const state = await page.evaluate(() => {
+  const addBox = await add.boundingBox(); // NOSONAR javascript:S9382
+  const state = await page.evaluate(() => { // NOSONAR javascript:S9382
     const doc = document.documentElement;
     const row = document.querySelector(
       '[role="region"][aria-label="Board columns"]',
@@ -343,7 +343,7 @@ for (const viewport of VIEWPORTS) {
 
   check(
     `${viewport.name}: the empty board banner and its button are on screen`,
-    (await banner.isVisible()) &&
+    (await banner.isVisible()) && // NOSONAR javascript:S9382
       Boolean(addBox) &&
       addBox.y + addBox.height <= viewport.height &&
       addBox.x + addBox.width <= viewport.width,
@@ -396,9 +396,9 @@ await page.mouse.move(startX, startY);
 await page.mouse.down();
 // dnd-kit needs the pointer events spread over time: a synchronous burst of
 // moves is coalesced and the sensor never sees the drag start.
-for (let step = 1; step <= 8; step += 1) {
-  await page.mouse.move(startX + step * 4, startY, { steps: 2 });
-  await page.waitForTimeout(40); // NOSONAR javascript:S2925 paces the pointer, dnd-kit coalesces a burst of moves
+for (let step = 1; step <= 8; step += 1) { // NOSONAR javascript:S9382 sequential on purpose: one pointer, and each move is the next point of the path
+  await page.mouse.move(startX + step * 4, startY, { steps: 2 }); // NOSONAR javascript:S9382
+  await page.waitForTimeout(40); // NOSONAR javascript:S2925 javascript:S9382 paces the pointer, dnd-kit coalesces a burst of moves
 }
 // Hold at the right edge of the screen so the container scrolls under the
 // pointer. The scroll is waited for, not timed: a row that never moves is

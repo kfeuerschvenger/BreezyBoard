@@ -107,8 +107,8 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(page).toHaveURL(/\/$/);
     await page.getByRole('main').getByRole('link', { name: title, exact: true }).click();
     await expect(page).toHaveURL(boardUrl(boardId));
-    for (const task of ['First task', 'Second task', 'Third task']) {
-      await expect(page.getByText(task)).toBeVisible();
+    for (const task of ['First task', 'Second task', 'Third task']) { // NOSONAR typescript:S9382 sequential on purpose: the assertions read the same page, in task order
+      await expect(page.getByText(task)).toBeVisible(); // NOSONAR typescript:S9382
     }
   });
 

@@ -107,8 +107,8 @@ await req('DELETE', `/boards/${sibling.body.data._id}`, token);
 log('');
 const taskIds = [];
 const keys = {};
-for (const title of ['First task', 'Second task', 'Third task']) {
-  const task = await req('POST', `/tasks/board/${boardId}`, token, {
+for (const title of ['First task', 'Second task', 'Third task']) { // NOSONAR javascript:S9382 sequential on purpose: the server mints each position at the end of the column, so the order of the requests is the order of the tasks
+  const task = await req('POST', `/tasks/board/${boardId}`, token, { // NOSONAR javascript:S9382
     title,
     status: firstColumn._id,
     priority: 'medium',
@@ -206,15 +206,15 @@ log('\n--- a deleted board and its tasks are unreachable, and restore brings the
 check('DELETE /boards/:id succeeds', (await req('DELETE', `/boards/${boardId}`, token)).status, 200);
 check('the board is gone', (await req('GET', `/boards/${boardId}`, token)).status, 404);
 
-for (const [index, taskId] of taskIds.entries()) {
-  check(`task ${index + 1} is unreachable`, (await req('GET', `/tasks/${taskId}`, token)).status, 404);
+for (const [index, taskId] of taskIds.entries()) { // NOSONAR javascript:S9382 sequential on purpose: one check line per task, in task order
+  check(`task ${index + 1} is unreachable`, (await req('GET', `/tasks/${taskId}`, token)).status, 404); // NOSONAR javascript:S9382
 }
 
 check('POST /boards/:id/restore succeeds', (await req('POST', `/boards/${boardId}/restore`, token)).status, 200);
 check('the board is back', (await req('GET', `/boards/${boardId}`, token)).status, 200);
 
-for (const [index, taskId] of taskIds.entries()) {
-  check(`task ${index + 1} is back with it`, (await req('GET', `/tasks/${taskId}`, token)).status, 200);
+for (const [index, taskId] of taskIds.entries()) { // NOSONAR javascript:S9382 sequential on purpose: one check line per task, in task order
+  check(`task ${index + 1} is back with it`, (await req('GET', `/tasks/${taskId}`, token)).status, 200); // NOSONAR javascript:S9382
 }
 
 const failed = results.filter(r => !r).length;
