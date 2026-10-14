@@ -316,12 +316,23 @@ export const TaskCardOverlay: React.FC<Pick<TaskCardViewProps, 'task' | 'color' 
 );
 
 /**
- * How long a leaving card is given before it is taken off the board whether or
- * not its animation reported an end. The animation is 460 milliseconds, and
- * reduced motion collapses it to an instant that still reports one. This is
- * for a browser that never runs it, such as a tab in the background.
+ * How long a leaving card is given, counted from the moment its animation
+ * starts, before it is taken off the board whether or not the animation
+ * reported an end. The animation is 460 milliseconds, and reduced motion
+ * collapses it to an instant that still reports one. The rest is slack for a
+ * frame that runs long, so that a busy page does not cut the exit short.
  */
 export const LEAVING_FALLBACK_MS = 800;
+
+/**
+ * How long a leaving card waits for its animation to start at all. The
+ * animation's clock starts at the first frame the browser paints after the
+ * picture mounts, which on a busy page is several hundred milliseconds later,
+ * so this is far longer than the animation. It is for a browser that never
+ * runs it, such as a tab in the background, which would otherwise keep the
+ * picture on the board for good.
+ */
+export const LEAVING_START_GUARD_MS = 3000;
 
 export interface TaskCardLeavingProps extends Pick<TaskCardViewProps, 'task' | 'color' | 'done'> {
   /** The card has finished leaving, and nothing of it needs to stay on the board. */
@@ -349,10 +360,19 @@ export const TaskCardLeaving: React.FC<TaskCardLeavingProps> = ({ task, color, d
     const onEnd = (event: Event) => {
       if (event.target === node) finish();
     };
+    // The backstop is re-armed when the animation really starts, so a late
+    // first frame does not eat into the 460 milliseconds it is there to protect.
+    let fallback = window.setTimeout(finish, LEAVING_START_GUARD_MS);
+    const onStart = (event: Event) => {
+      if (event.target !== node) return;
+      window.clearTimeout(fallback);
+      fallback = window.setTimeout(finish, LEAVING_FALLBACK_MS);
+    };
+    node.addEventListener('animationstart', onStart);
     node.addEventListener('animationend', onEnd);
-    const fallback = window.setTimeout(finish, LEAVING_FALLBACK_MS);
 
     return () => {
+      node.removeEventListener('animationstart', onStart);
       node.removeEventListener('animationend', onEnd);
       window.clearTimeout(fallback);
     };
