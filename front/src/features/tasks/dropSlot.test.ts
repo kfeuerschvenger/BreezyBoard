@@ -95,6 +95,21 @@ describe('pointerSlot', () => {
     expect(slot).toEqual({ columnId: 'todo', index: 2 });
   });
 
+  // A reading of the screen that still includes the held card, in the frame
+  // before it collapses, lists one midpoint too many. The index is bounded by
+  // the cards the column really has, or the gap would be drawn past its end.
+  it('bounds the index by the cards the column has, whatever the screen reading says', () => {
+    const slot = pointerSlot({
+      snapshot,
+      activeId: 'a',
+      overId: 'c',
+      held: { top: 900, height: 40 },
+      midpointsOf: () => [30, 90, 150],
+    });
+
+    expect(slot).toEqual({ columnId: 'todo', index: 2 });
+  });
+
   it('puts a card over an empty column at its start', () => {
     const slot = pointerSlot({ snapshot, activeId: 'a', overId: 'empty', held, midpointsOf: () => [] });
 

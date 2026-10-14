@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import type { DragEndEvent, DragMoveEvent, DragStartEvent } from '@dnd-kit/core';
+import type { DragEndEvent, DragMoveEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core';
 import { TaskService } from '@/services';
 import type { Task } from '@/models';
 import { useTaskDragAndDrop } from './useTaskDragAndDrop';
@@ -360,6 +360,19 @@ describe('useTaskDragAndDrop where a held card would land', () => {
 
     expect(result.current.slot).toEqual({ columnId: TODO, index: 1 });
     expect(measureMidpoints).toHaveBeenCalledWith(TODO, 'task-first');
+  });
+
+  // The droppable under the card can change with no movement, when opening the
+  // gap moves the columns and their rectangles are measured again.
+  it('reads the slot again when the droppable under the card changes without a move', () => {
+    const { result } = renderMeasured();
+    act(() => result.current.onDragStart(dragStart('task-first')));
+    act(() => result.current.onDragMove(pointerMove('task-first', 'task-second', 500)));
+    expect(result.current.slot?.columnId).toBe(TODO);
+
+    act(() => result.current.onDragOver(pointerMove('task-first', 'task-done', 80) as unknown as DragOverEvent));
+
+    expect(result.current.slot).toEqual({ columnId: DONE, index: 1 });
   });
 
   it('lets go of the slot when the drag is cancelled', () => {
