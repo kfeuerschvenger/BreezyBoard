@@ -1,13 +1,14 @@
-import type { Task, User as UserModel } from '@/models';
+import type { User as UserModel } from '@/models';
 import { useBoardMembers } from '@/features/users';
 import { useColors } from '@/features/colors';
 import { useTaskForm } from './useTaskForm';
-import type { TaskColorOption, UseTaskFormResult } from './useTaskForm';
+import type { StoredTask, TaskColorOption, UseTaskFormResult } from './useTaskForm';
 
 export interface UseTaskModalOptions {
   open: boolean;
-  task: Partial<Task> | null;
-  onSave: (task: Partial<Task>) => Promise<void>;
+  /** Null while the modal has never been opened. */
+  task: StoredTask | null;
+  onSave: (task: StoredTask) => Promise<void>;
   /** Called after a save the server accepted, so the caller can close. */
   onSaved: () => void;
 }
@@ -19,8 +20,8 @@ export interface UseTaskModalResult extends UseTaskFormResult {
 }
 
 // Stable identities for the two lists while their requests are in flight or
-// have failed. `useTaskForm` keys three effects on these, so a fresh literal
-// would give every render a new one and re-run all three.
+// have failed. `useTaskForm` keys two effects on the colours, so a fresh
+// literal would give every render a new one and re-run both.
 const NO_COLORS: TaskColorOption[] = [];
 const NO_MEMBERS: UserModel[] = [];
 
@@ -37,7 +38,7 @@ export function useTaskModal({ open, task, onSave, onSaved }: UseTaskModalOption
   const { data: colors = NO_COLORS, isPending: isLoadingColors } = useColors('task');
   const { data: members = NO_MEMBERS } = useBoardMembers(task?.boardId);
 
-  const form = useTaskForm({ open, task, colors, members, onSave, onSaved });
+  const form = useTaskForm({ open, task, colors, onSave, onSaved });
 
   return { ...form, colors, members, isLoadingColors };
 }

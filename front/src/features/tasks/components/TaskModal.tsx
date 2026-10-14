@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { IconLayoutKanban } from '@tabler/icons-react';
-import type { Task } from '@/models';
 import { useBreeze } from '@/features/breeze';
 import { Cover, Icon, Modal, ModalClose, WindLayer } from '@/shared/ui';
 import type { Hue } from '@/shared/ui';
+import type { StoredTask } from '../hooks/useTaskForm';
 import { useTaskModal } from '../hooks/useTaskModal';
 import type { MoveTarget } from '../hooks/useTaskMover';
 import { TaskForm, TaskFormActions } from './TaskForm';
@@ -11,8 +11,10 @@ import { TaskForm, TaskFormActions } from './TaskForm';
 export interface TaskModalProps {
   open: boolean;
   onClose: () => void;
-  task?: Partial<Task> | null;
-  onSave: (task: Partial<Task>) => Promise<void>;
+  /** The stored task being edited. Null until the modal is first opened. */
+  task?: StoredTask | null;
+  /** Saves the form's task. Rejects when it could not be saved, so the modal can say so and stay open. */
+  onSave: (task: StoredTask) => Promise<void>;
   /** The name of the board, for the pill on the header strip. */
   boardTitle?: string;
   /** The hue of the board, which the header strip is drawn in. */
@@ -23,8 +25,10 @@ export interface TaskModalProps {
   columnId?: string;
   onMove?: (target: MoveTarget) => void;
   /** Deletes the task. Rejects when it could not be deleted, so the modal can say so. */
-  onDelete?: (task: Partial<Task>) => Promise<void>;
+  onDelete?: (task: StoredTask) => Promise<void>;
 }
+
+const HEADING = 'Edit Task';
 
 const DELETE_FAILED = 'The task could not be blown away. Check your connection and try again.';
 
@@ -83,8 +87,9 @@ const TaskModalHeader: React.FC<TaskModalHeaderProps> = ({ heading, boardTitle, 
 };
 
 /**
- * The task as a dialog around the task form: the header strip, the form and
- * the form's buttons.
+ * A stored task as a dialog around the task form: the header strip, the form
+ * and the form's buttons. It edits and never creates: a card is made from its
+ * column's composer.
  *
  * It is a centered dialog from the medium breakpoint up and a bottom sheet
  * below it. Section 12.6 asks a page to read as composition, and the same
@@ -114,12 +119,10 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const exists = Boolean(task?._id);
-  const heading = exists ? 'Edit Task' : 'Create New Task';
   const columnTitle = columns?.find(column => column.id === columnId)?.title;
 
   const handleDelete =
-    exists && onDelete && task
+    onDelete && task
       ? async () => {
           setDeleteError(null);
           setIsDeleting(true);
@@ -140,14 +143,13 @@ const TaskModal: React.FC<TaskModalProps> = ({
     <Modal
       open={open}
       onClose={onClose}
-      title={heading}
+      title={HEADING}
       placement="sheet"
-      header={<TaskModalHeader heading={heading} boardTitle={boardTitle} columnTitle={columnTitle} hue={hue} onClose={onClose} />}
+      header={<TaskModalHeader heading={HEADING} boardTitle={boardTitle} columnTitle={columnTitle} hue={hue} onClose={onClose} />}
       footer={
         <TaskFormActions
           isValid={editor.isValid}
           isSubmitting={editor.isSubmitting}
-          onCancel={onClose}
           onDelete={handleDelete}
           isDeleting={isDeleting}
         />

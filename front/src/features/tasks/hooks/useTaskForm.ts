@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { Task, User as UserModel } from '@/models';
+import type { Task } from '@/models';
 import { useDraft } from '@/shared/hooks/useDraft';
 import type { ChecklistItemData } from '../components/Checklist';
 import type { TaskPriority } from '../components/PrioritySelect';
@@ -22,13 +22,19 @@ export interface TaskFormValues {
 /** The description is optional, so it never has an error of its own. */
 export type TaskFormErrors = Partial<Record<'title' | 'owner' | 'color', string>>;
 
+/**
+ * A task the form can edit: one that is stored, so it has an id and a board.
+ * The form has no way to make a task; a card is made from its column's composer.
+ */
+export type StoredTask = Partial<Task> & Pick<Task, '_id' | 'boardId'>;
+
 export interface UseTaskFormOptions {
   open: boolean;
-  task: Partial<Task> | null;
+  /** Null while the form is closed and has never been opened. */
+  task: StoredTask | null;
   /** Arrives asynchronously, so the colour is patched rather than preselected. */
   colors: TaskColorOption[];
-  members: UserModel[];
-  onSave: (task: Partial<Task>) => Promise<void>;
+  onSave: (task: StoredTask) => Promise<void>;
   /** Called after a save the server accepted, so the caller can close. */
   onSaved: () => void;
 }
@@ -77,7 +83,7 @@ const ownerIdOf = (owner: Task['owner'] | undefined): string => {
  * Owns everything about the task form's state: the values, the errors, the
  * draft, and the submission.
  *
- * It owns them together on purpose. Four effects write to these values, and
+ * It owns them together on purpose. Three effects write to these values, and
  * splitting them between a hook and its caller is what produces the defect
  * this form has hit twice, where one writer rebuilds the whole object and
  * discards what another had just put in it.
@@ -91,7 +97,6 @@ export function useTaskForm({
   open,
   task,
   colors,
-  members,
   onSave,
   onSaved,
 }: UseTaskFormOptions): UseTaskFormResult {
@@ -112,7 +117,7 @@ export function useTaskForm({
   // Persists an in-progress edit across a reload or an accidental close.
   // Gated to null while the modal is closed so nothing is read or written
   // for a form nobody has open.
-  const draftKey = open ? `task:${task?._id ?? 'new:' + (task?.boardId ?? 'unknown')}` : null;
+  const draftKey = open && task ? `task:${task._id}` : null;
   const draft = useDraft<TaskFormValues>(draftKey);
 
   // Rebuild the form when a different task is opened.
@@ -168,20 +173,6 @@ export function useTaskForm({
     });
   }, [task, colors]);
 
-  // Preselect for a form opened with no task at all. Distinct from the patch
-  // above, which covers a task that exists and has a colour to resolve.
-  useEffect(() => {
-    if (task || colors.length === 0) return;
-    setValues(previous => (previous.color ? previous : { ...previous, color: colors[0]._id }));
-  }, [task, colors]);
-
-  // A board with exactly one member has only one possible owner, so choosing
-  // it is not a decision worth asking for.
-  useEffect(() => {
-    if (task || members.length !== 1) return;
-    setValues(previous => (previous.owner ? previous : { ...previous, owner: members[0]._id }));
-  }, [task, members]);
-
   // Autosave on every change while the form is open. Depends on draft.write,
   // which is stable per draft key, rather than on the whole draft object, so
   // it does not re-fire on every unrelated render.
@@ -230,41 +221,41 @@ export function useTaskForm({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!validate() || isSubmitting) return;
+    if (!task || !validate() || isSubmitting) return;
 
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      const payload: Partial<Task> = {
+      // The payload carries no column. The form does not edit it, the task can
+      // have been moved from "Move to" while the form was open, and the copy
+      // this form was built from would put it back.
+      //
+      // A row with no text is not sent: the server refuses an empty item, and
+      // an Enter pressed in a field that has just been emptied submits the
+      // form before that field has been left and removed.
+      const payload: StoredTask = {
+        _id: task._id,
+        boardId: task.boardId,
         title: values.title,
         description: values.description,
         priority: values.priority,
         color: values.color,
         owner: values.owner,
-        checklist: values.checklist.map(item => ({
-          text: item.text,
-          completed: item.completed,
-          ...(item.id && !item.id.startsWith('temp-') && { _id: item.id }),
-        })),
+        checklist: values.checklist
+          .filter(item => item.text.trim() !== '')
+          .map(item => ({
+            text: item.text,
+            completed: item.completed,
+            ...(item.id && !item.id.startsWith('temp-') && { _id: item.id }),
+          })),
       };
-
-      if (task && task._id) {
-        // A saved task keeps the column it is in now, which the form does not
-        // edit: it can have been moved from "Move to" while the form was open,
-        // and the copy this form was built from would put it back.
-        payload._id = task._id;
-        payload.boardId = task.boardId;
-      } else if (task) {
-        payload.boardId = task.boardId;
-        payload.status = task.status;
-      }
 
       await onSave(payload);
       draft.clear();
       onSaved();
     } catch (error) {
       console.error('Error saving task:', error);
-      // A failed save used to look identical to an idle form. Say so.
+      // A failed save must not look identical to an idle form. Say so.
       setSubmitError('The task could not be saved. Check your connection and try again.');
     } finally {
       setIsSubmitting(false);
