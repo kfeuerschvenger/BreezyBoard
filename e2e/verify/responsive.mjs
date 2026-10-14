@@ -22,8 +22,8 @@
 //   - text clipped with an ellipsis or a line clamp can still be read in full
 //     through a title
 //
-// Then the task drawer, which is a different shape of claim: below the medium
-// breakpoint it is a bottom sheet and above it a side panel, its actions stay
+// Then the task modal, which is a different shape of claim: below the medium
+// breakpoint it is a bottom sheet and above it a centered dialog, its actions stay
 // inside the viewport while its body scrolls, and shrinking the viewport the
 // way an on-screen keyboard does keeps the actions and the focused field on
 // screen.
@@ -55,7 +55,7 @@ const VIEWPORTS = [
 /** The small breakpoint, where the registration name fields share a row. */
 const SMALL = 640;
 
-/** The medium breakpoint: the drawer is a bottom sheet strictly below it. */
+/** The medium breakpoint: the task modal is a bottom sheet strictly below it. */
 const MD = 768;
 
 /** The large breakpoint: from here up the sidebar is a column, below it a panel. */
@@ -550,7 +550,7 @@ const authed = [
     },
   },
   {
-    name: 'board, edit task drawer',
+    name: 'board, edit task modal',
     open: async () => {
       await page.goto(`${FRONT}/board/${boardId}`);
       await page.getByText('Short task', { exact: true }).waitFor();
@@ -698,10 +698,10 @@ for (const viewport of VIEWPORTS) {
   }
 }
 
-log('\n--- the task drawer is a bottom sheet on a phone and a side panel on a desktop ---');
+log('\n--- the task modal is a bottom sheet on a phone and a centered dialog from the medium breakpoint ---');
 
-/** Geometry of the open drawer and of its two actions, read in one round trip. */
-const drawerGeometry = () =>
+/** Geometry of the open modal, its header strip and its actions, read in one round trip. */
+const modalGeometry = () =>
   page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"]');
     const box = dialog.getBoundingClientRect();
@@ -712,10 +712,17 @@ const drawerGeometry = () =>
     const buttons = [...dialog.querySelectorAll('button')];
     const save = buttons.find(b => /save/i.test(b.textContent));
     const cancel = buttons.find(b => /cancel/i.test(b.textContent));
+    const blow = buttons.find(b => /blow it away/i.test(b.textContent));
+    const close = buttons.find(b => b.getAttribute('aria-label') === 'Close');
+    const strip = dialog.firstElementChild.getBoundingClientRect();
+    const moves = [...dialog.querySelectorAll('[role="group"] [aria-pressed]')];
+    const smallest = Math.min(...moves.map(b => Math.min(b.offsetWidth, b.offsetHeight)));
     const scroller = [...dialog.querySelectorAll('*')].find(
       el => ['auto', 'scroll'].includes(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1
     );
-    const heading = dialog.querySelector('h2');
+    // The header strip stands for the title: the dialog's own h2 is visually
+    // hidden, and a visually hidden box sits one pixel outside its parent.
+    const heading = dialog.firstElementChild;
     return {
       vw: document.documentElement.clientWidth,
       vh: window.innerHeight,
@@ -723,6 +730,14 @@ const drawerGeometry = () =>
       pageWide: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       save: save && rect(save),
       cancel: cancel && rect(cancel),
+      blow: blow && rect(blow),
+      close: close && rect(close),
+      strip: { top: strip.top, bottom: strip.bottom, height: strip.height },
+      moveButtons: {
+        count: moves.length,
+        pressed: moves.filter(b => b.getAttribute('aria-pressed') === 'true').length,
+        smallest,
+      },
       scrolls: Boolean(scroller),
       heading: heading && rect(heading),
       active: document.activeElement && rect(document.activeElement),
@@ -742,24 +757,38 @@ for (const viewport of VIEWPORTS) {
   await settle(page);
   await dialogStill(page);
 
-  const g = await drawerGeometry();
+  const g = await modalGeometry();
   const label = `at ${viewport.width}`;
   if (viewport.width < MD) {
-    check(`${label}: the drawer is a bottom sheet, full width and anchored to the bottom`,
+    check(`${label}: the modal is a bottom sheet, full width and anchored to the bottom`,
       Math.abs(g.box.left) < 1 && Math.abs(g.box.right - g.vw) < 1 && Math.abs(g.box.bottom - g.vh) < 1,
       `x ${Math.round(g.box.left)} to ${Math.round(g.box.right)}, bottom ${Math.round(g.box.bottom)} of ${g.vh}`);
     check(`${label}: the sheet leaves the top of the page visible`,
       g.box.top >= g.vh * 0.08 - 1,
       `top at ${Math.round(g.box.top)} of ${g.vh}`);
   } else {
-    check(`${label}: the drawer is a side panel against the right edge`,
-      Math.abs(g.box.right - g.vw) < 1 && g.box.left > 0 && Math.abs(g.box.top) < 1 && Math.abs(g.box.bottom - g.vh) < 1,
-      `x ${Math.round(g.box.left)} to ${Math.round(g.box.right)}, y ${Math.round(g.box.top)} to ${Math.round(g.box.bottom)}`);
+    check(`${label}: the modal is centered across the page, inside it, and no wider than its cap`,
+      Math.abs((g.box.left + g.box.right) / 2 - g.vw / 2) < 1 &&
+        g.box.left > 0 && g.box.right < g.vw &&
+        g.box.right - g.box.left <= 673,
+      `x ${Math.round(g.box.left)} to ${Math.round(g.box.right)} of ${g.vw}`);
+    check(`${label}: the modal is centered down the page and inside it`,
+      Math.abs(g.box.top - (g.vh - g.box.bottom)) < 1 && g.box.top >= 0 && g.box.bottom <= g.vh,
+      `y ${Math.round(g.box.top)} to ${Math.round(g.box.bottom)} of ${g.vh}`);
+    check(`${label}: it is not a sheet, so the rows below it are not covered by a flat bottom edge`,
+      g.box.bottom < g.vh - 1,
+      `bottom ${Math.round(g.box.bottom)} of ${g.vh}`);
   }
-  check(`${label}: the drawer does not scroll the page sideways`, g.pageWide <= 0, `overflows by ${g.pageWide}px`);
-  check(`${label}: Save and Cancel are inside the viewport`,
-    within(g.save, g.vw, g.vh) && within(g.cancel, g.vw, g.vh),
-    `save ${g.save && Math.round(g.save.bottom)}, cancel ${g.cancel && Math.round(g.cancel.bottom)} of ${g.vh}`);
+  check(`${label}: the modal does not scroll the page sideways`, g.pageWide <= 0, `overflows by ${g.pageWide}px`);
+  check(`${label}: Save, Cancel and Blow it away are inside the viewport`,
+    within(g.save, g.vw, g.vh) && within(g.cancel, g.vw, g.vh) && within(g.blow, g.vw, g.vh),
+    `save ${g.save && Math.round(g.save.bottom)}, cancel ${g.cancel && Math.round(g.cancel.bottom)}, blow ${g.blow && Math.round(g.blow.bottom)} of ${g.vh}`);
+  check(`${label}: the header strip is 100px and the close button is on it`,
+    Math.abs(g.strip.height - 100) < 1 && g.close.top >= g.strip.top - 0.5 && g.close.bottom <= g.strip.bottom + 0.5,
+    `strip ${Math.round(g.strip.height)}px, close y ${Math.round(g.close.top)} to ${Math.round(g.close.bottom)}`);
+  check(`${label}: Move to has one pressed column and every column button is a target of 24px or more`,
+    g.moveButtons.pressed === 1 && g.moveButtons.smallest >= 24 && (viewport.width >= MD || g.moveButtons.smallest >= 44),
+    `pressed ${g.moveButtons.pressed}, smallest ${Math.round(g.moveButtons.smallest)}px over ${g.moveButtons.count}`);
 
   // The body scrolls inside the panel and the actions do not move with it.
   const bottomBefore = g.save?.bottom;
@@ -788,7 +817,7 @@ for (const viewport of VIEWPORTS) {
   if (viewport.height <= 844) {
     check(`${label}: the form scrolls inside the panel`, scrolled !== null && scrolled > 0, `scrollTop ${scrolled}`);
   }
-  const after = await drawerGeometry();
+  const after = await modalGeometry();
   check(`${label}: the title and the actions stay put while the form scrolls`,
     within(after.heading, after.vw, after.vh) &&
       within(after.save, after.vw, after.vh) &&
@@ -803,7 +832,7 @@ for (const viewport of VIEWPORTS) {
     await page.setViewportSize({ width: viewport.width, height: keyboardHeight });
     await page.getByRole('textbox', { name: /^Title/ }).focus();
     await page.waitForTimeout(300);
-    const k = await drawerGeometry();
+    const k = await modalGeometry();
     check(`${label}: with half the height gone the sheet fits and the actions stay reachable`,
       k.box.top >= -0.5 && k.box.bottom <= k.vh + 0.5 && within(k.save, k.vw, k.vh) && within(k.cancel, k.vw, k.vh),
       `sheet y ${Math.round(k.box.top)} to ${Math.round(k.box.bottom)} of ${k.vh}`);
@@ -812,7 +841,7 @@ for (const viewport of VIEWPORTS) {
 
   // Dialog semantics survive the layout change.
   await page.setViewportSize(viewport);
-  check(`${label}: focus is inside the dialog`, (await drawerGeometry()).activeInside);
+  check(`${label}: focus is inside the dialog`, (await modalGeometry()).activeInside);
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   check(`${label}: Escape closes it and focus returns to the control that opened it`,

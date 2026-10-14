@@ -1954,6 +1954,101 @@ const toMs = value => Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 100
   check(`${mode}: the landing flag is gone once the card has settled`, await pg.locator('[data-landed]').count(), 0);
   void context;
 }
+
+log('\n--- the task modal, signed in at 1440 ---');
+
+// A card with an owner, a priority and a checklist half done, opened in the
+// page that has reduced motion, so the wind is absent from the header strip
+// and the text on it is measured against the gradient alone.
+await boardPage.getByRole('button', { name: 'Gate high task', exact: true }).click();
+const taskModal = boardPage.getByRole('dialog', { name: 'Edit Task' });
+await taskModal.waitFor();
+await boardPage.waitForTimeout(700);
+
+const modalStyle = await styleOf(taskModal, ['borderTopLeftRadius', 'boxShadow', 'backgroundColor', 'width']);
+check('the panel is white with the modal radius, the modal shadow and the 672 pixel cap', `${modalStyle.borderTopLeftRadius} ${modalStyle.boxShadow.includes('0px 40px 80px -30px')} ${await paintOf(boardPage, modalStyle.backgroundColor) === '255,255,255'} ${modalStyle.width}`, '26px true true 672px');
+check('the dialog is named, modal, and has a visually hidden h2 for its sections', `${await taskModal.getAttribute('aria-modal')} ${await taskModal.locator(':scope > div').first().locator('h2.sr-only').count()}`, 'true 1');
+
+const strip = await taskModal.locator(':scope > div').first().evaluate(el => ({
+  height: Math.round(el.offsetHeight),
+  image: getComputedStyle(el.querySelector('[aria-hidden="true"]')).backgroundImage,
+  hiddenChildren: [...el.querySelectorAll('[aria-hidden="true"]')].filter(hidden => hidden.querySelector('button')).length,
+}));
+check('the header strip is 100 pixels tall', strip.height, 100);
+check('the header strip is the gradient of the board hue', strip.image.includes('oklch(0.5 0.13 150)'), true);
+check('no control sits inside the hidden gradient', strip.hiddenChildren, 0);
+check('without wind under reduced motion the strip draws none', await taskModal.locator(':scope > div').first().locator('div.pointer-events-none').count(), 0);
+
+const place = taskModal.locator('[data-task-place]');
+check('the pill names the board and the column', (await place.innerText()).trim(), `Board gate · ${gateBoardColumns[0].title}`);
+const placeStyle = await styleOf(place, ['fontSize', 'fontWeight', 'backgroundColor']);
+check('the pill is 13 pixels, 600, on white glass at 82 percent', `${placeStyle.fontSize} ${placeStyle.fontWeight} ${placeStyle.backgroundColor}`, '13px 600 rgba(255, 255, 255, 0.82)');
+
+// Text and glyphs on the strip, against the darkest pixel behind them.
+for (const [label, locator, token, minimum] of [
+  ['the place pill text', place.locator('span').last(), '--color-ink', 4.5],
+  ['the close glyph', taskModal.getByRole('button', { name: 'Close' }), '--color-ink-secondary', 3],
+]) {
+  const behind = await extremeBehind(boardPage, locator, 'darkest');
+  await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, minimum]]);
+}
+
+await reportPairs(boardPage, [
+  ['a column button that is not pressed, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
+  ['its border, on the panel', '--color-line-control', '--color-surface', 3],
+  ['the pressed column button, white on ink', '#ffffff', '--color-ink', 4.5],
+  ['the chosen priority outline, on the panel', '--color-coral-edge', '--color-surface', 3],
+  ['the chosen priority text, on its tint', '--color-coral-deep', '--color-coral-tint', 4.5],
+  ['the unchosen priority text, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
+  ['the checklist count, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
+  ['a finished checklist item, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
+  ['the Add Item link, on the panel', '--color-link', '--color-surface', 4.5],
+  ['the checklist progress fill, on the track', '--color-green-edge', ['--color-surface', '--color-line-07'], 3],
+  ['Blow it away, on the footer', '--color-danger', '--color-surface-subtle', 4.5],
+  ['the checklist remove glyph, on the panel', '--color-danger', '--color-surface', 3],
+]);
+
+// What the row of columns and the chips are made of.
+const pressedStyle = await styleOf(taskModal.getByRole('button', { name: gateBoardColumns[0].title, exact: true }), ['backgroundColor', 'color', 'height', 'borderTopLeftRadius']);
+check('the pressed column is filled with ink, in white, 34 pixels tall with the small button radius', `${await paintOf(boardPage, pressedStyle.backgroundColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-ink'))} ${await paintOf(boardPage, pressedStyle.color)} ${pressedStyle.height} ${pressedStyle.borderTopLeftRadius}`, 'true 255,255,255 34px 10px');
+const idleColumn = await styleOf(taskModal.getByRole('button', { name: gateBoardColumns[1].title, exact: true }), ['borderTopColor', 'borderTopWidth']);
+// The border is 1.5 pixels in the source and computes to 1 at a device pixel
+// ratio of 1, which is how the browser rounds a border width.
+check('a column that is not pressed carries the control border', `${await paintOf(boardPage, idleColumn.borderTopColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-line-control'))} ${idleColumn.borderTopWidth}`, 'true 1px');
+const chosenPriority = await styleOf(taskModal.locator('label:has(input[value="high"])'), ['backgroundColor', 'color', 'borderTopColor', 'height']);
+check('the chosen priority is the coral tint, deep text and edge outline', `${await paintOf(boardPage, chosenPriority.backgroundColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-coral-tint'))} ${await paintOf(boardPage, chosenPriority.color) === await paintOf(boardPage, await tokenValue(boardPage, '--color-coral-deep'))} ${await paintOf(boardPage, chosenPriority.borderTopColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-coral-edge'))}`, 'true true true');
+check('the chosen priority has its check and the others none', `${await taskModal.locator('label:has(input[value="high"]) svg').evaluate(svg => getComputedStyle(svg).display)} ${await taskModal.locator('label:has(input[value="low"]) svg').evaluate(svg => getComputedStyle(svg).display)}`, 'block none');
+check('a priority chip is 36 pixels tall from the medium breakpoint', chosenPriority.height, '36px');
+
+const checklistBar = await taskModal.getByRole('progressbar', { name: 'Checklist progress' }).evaluate(el => ({ now: el.getAttribute('aria-valuenow'), max: el.getAttribute('aria-valuemax'), text: el.getAttribute('aria-valuetext'), height: Math.round(el.offsetHeight), image: getComputedStyle(el.firstElementChild).backgroundImage }));
+check('the checklist bar is 6 pixels tall, one of two done, in words', `${checklistBar.height} ${checklistBar.now}/${checklistBar.max} ${checklistBar.text}`, '6 1/2 1 of 2 done');
+check('the checklist bar runs from the sky edge to the green edge', checklistBar.image.includes('oklch(0.6 0.1 232)') && checklistBar.image.includes('oklch(0.6 0.1 150)'), true);
+const doneItem = await taskModal.getByRole('textbox', { name: 'Checklist item 1' }).evaluate(el => ({ decoration: getComputedStyle(el).textDecorationLine, color: getComputedStyle(el).color }));
+check('a finished checklist item is struck through in the secondary ink', `${doneItem.decoration} ${await paintOf(boardPage, doneItem.color) === await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-secondary'))}`, 'line-through true');
+
+// Targets and rings, measured at rest.
+const targetSizes = await taskModal.evaluate(dialog => {
+  const size = el => [Math.round(el.offsetWidth), Math.round(el.offsetHeight)].join('x');
+  return {
+    close: size(dialog.querySelector('button[aria-label="Close"]')),
+    save: size([...dialog.querySelectorAll('button')].find(b => /save changes/i.test(b.textContent))),
+    blow: size([...dialog.querySelectorAll('button')].find(b => /blow it away/i.test(b.textContent))),
+    owner: size(dialog.querySelector('[role="combobox"]')),
+  };
+});
+check('the close button is a 36 pixel disc', targetSizes.close, '36x36');
+check('Save Changes and Blow it away are 44 pixels tall', `${targetSizes.save.split('x')[1]} ${targetSizes.blow.split('x')[1]}`, '44 44');
+check('the owner field is 48 pixels tall', targetSizes.owner.split('x')[1], '48');
+const moveFocus = await focusRing(boardPage, taskModal.getByRole('button', { name: gateBoardColumns[1].title, exact: true }));
+check('a column button has the 2 pixel focus ring', moveFocus, 'solid 2px 2px');
+const blowFocus = await focusRing(boardPage, taskModal.getByRole('button', { name: 'Blow it away' }));
+check('Blow it away has the 2 pixel focus ring', blowFocus, 'solid 2px 2px');
+await boardPage.keyboard.press('Escape');
+await boardPage.getByRole('dialog').waitFor({ state: 'detached' });
+await boardPage.evaluate(() => {
+  for (const key of Object.keys(window.localStorage)) if (key.startsWith('breezyboard:draft:')) window.localStorage.removeItem(key);
+});
+
 await boardContext.close();
 
 // With motion on.
@@ -2131,6 +2226,130 @@ await normalPage.keyboard.press('Escape');
 await normalDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 check('the dialog unmounts after its exit with motion on', await normalDialog.count(), 0);
 await normal.close();
+
+log('\n--- the task modal: its entrance with motion on and reduced, and the layer that leaves ---');
+
+// The board is heavy to paint and a frame can take 100 to 200 milliseconds, so
+// a count of frames says nothing about elapsed time here. The opening is read
+// on the first frame the dialog exists, where its initial values are on it: a
+// panel that travels starts translated and scaled, and both start transparent.
+// Under reduced motion the same initial values are there for that first frame
+// and the transform is collapsed to its rest value by the frames after it, not
+// played over 350 milliseconds, so the next three frames are read as well.
+const modalPage = async (reducedMotion, viewport) => {
+  const modalContext = await browser.newContext({ viewport, reducedMotion });
+  const pg = await signIn(modalContext);
+  await pg.goto(gateBoardUrl);
+  await pg.getByRole('region', { name: 'Board columns' }).waitFor();
+  await pg.getByText('Gate medium task', { exact: true }).waitFor();
+  await pg.waitForTimeout(900);
+  return { pg, modalContext };
+};
+
+const sampleModalOpening = pg =>
+  pg.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        document.querySelector('[data-task-open]').click();
+        const started = performance.now();
+        const frames = [];
+        const step = () => {
+          const dialog = document.querySelector('[role="dialog"]');
+          if (dialog) {
+            const style = getComputedStyle(dialog);
+            frames.push({ opacity: Number(style.opacity), transform: style.transform });
+            if (frames.length === 4) return resolve(frames);
+          } else if (performance.now() - started > 3000) {
+            return reject(new Error('the dialog never mounted'));
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
+  );
+
+/** The translation along y of a `matrix(...)`, and the scale along x. */
+const matrixOf = transform => {
+  const parts = transform.match(/matrix\(([^)]+)\)/)?.[1].split(',').map(Number);
+  return parts ? { scale: parts[0], ty: parts[5] } : { scale: 1, ty: 0 };
+};
+
+// Closed from inside the page and read on the first frame where the wrapper
+// reports that it takes no pointer, while the panel is still leaving: the
+// wrapper fixed over the screen has to let a pointer through to what is behind
+// it, or the first press after a save lands on it. If it is gone before it ever
+// said so, `stillMounted` is false and the wrapper never made that claim.
+const sampleLeaving = pg =>
+  pg.evaluate(
+    () =>
+      new Promise(resolve => {
+        const panel = document.querySelector('[role="dialog"]');
+        const wrapper = panel.parentElement;
+        const scrim = panel.previousElementSibling;
+        const box = document.querySelector('[data-task-card]').getBoundingClientRect();
+        const started = performance.now();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        const step = () => {
+          const caught = wrapper.isConnected && getComputedStyle(wrapper).pointerEvents === 'none';
+          if (caught || !wrapper.isConnected || performance.now() - started > 3000) {
+            const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+            return resolve({
+              stillMounted: wrapper.isConnected,
+              wrapper: getComputedStyle(wrapper).pointerEvents,
+              scrim: getComputedStyle(scrim).pointerEvents,
+              panel: getComputedStyle(panel).pointerEvents,
+              hitIsInsideWrapper: wrapper.contains(hit),
+              hitIsTheCard: Boolean(hit?.closest('[data-task-card]')),
+            });
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
+  );
+
+for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) {
+  const { pg, modalContext } = await modalPage(reducedMotion, { width: 1440, height: 900 });
+  const frames = await sampleModalOpening(pg);
+  const opening = frames[0];
+  await pg.getByRole('dialog').waitFor({ state: 'visible' });
+  check(`${mode}, at 1440: the modal fades in, starting transparent`, opening.opacity < 1, true);
+  if (reducedMotion === 'no-preference') {
+    check(`${mode}, at 1440: the modal starts raised and scaled down`, isIdentity(opening.transform), false);
+  } else {
+    check(`${mode}, at 1440: the modal is at rest within three frames of appearing, and does not travel`, frames.some(frame => isIdentity(frame.transform)), true);
+  }
+  await pg.waitForTimeout(700);
+  const leaving = await sampleLeaving(pg);
+  check(`${mode}, at 1440: it is still mounted while it leaves`, leaving.stillMounted, true);
+  check(`${mode}, at 1440: while it leaves the wrapper, the scrim and the panel take no pointer`, `${leaving.wrapper} ${leaving.scrim} ${leaving.panel}`, 'none none none');
+  check(`${mode}, at 1440: while it leaves a press lands on the card behind it`, `${leaving.hitIsInsideWrapper} ${leaving.hitIsTheCard}`, 'false true');
+  await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: 2000 });
+  check(`${mode}, at 1440: the dialog unmounts after its exit`, await pg.getByRole('dialog').count(), 0);
+  await modalContext.close();
+}
+
+for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) {
+  const { pg, modalContext } = await modalPage(reducedMotion, { width: 390, height: 844 });
+  const frames = await sampleModalOpening(pg);
+  await pg.getByRole('dialog').waitFor({ state: 'visible' });
+  const { scale, ty } = matrixOf(frames[0].transform);
+  if (reducedMotion === 'no-preference') {
+    check(`${mode}, at 390: the sheet starts below the bottom edge and does not scale`, `${ty > 0} ${scale}`, 'true 1');
+  } else {
+    check(`${mode}, at 390: the sheet is at rest within three frames of appearing`, frames.some(frame => isIdentity(frame.transform)), true);
+  }
+  await pg.waitForTimeout(700);
+  const settled = await pg.getByRole('dialog').evaluate(el => {
+    const box = el.getBoundingClientRect();
+    return { bottom: Math.round(box.bottom), height: Math.round(innerHeight) };
+  });
+  check(`${mode}, at 390: the sheet comes to rest against the bottom edge`, settled.bottom, settled.height);
+  const leaving = await sampleLeaving(pg);
+  check(`${mode}, at 390: while the sheet leaves it takes no pointer`, `${leaving.stillMounted} ${leaving.wrapper} ${leaving.scrim} ${leaving.panel}`, 'true none none none');
+  await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: 2000 });
+  await modalContext.close();
+}
 
 await browser.close();
 

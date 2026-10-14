@@ -95,6 +95,24 @@ await page.waitForFunction(
   [draftKey, SENTENCE],
 );
 
+// Every write to the task's draft key from here on is recorded, with the
+// title it held. The page is reloaded next, so the recorder is installed as an
+// init script and runs before the application does.
+await page.addInitScript(key => {
+  window.__draftWrites = [];
+  const original = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (name, value) {
+    if (name === key) {
+      try {
+        window.__draftWrites.push(JSON.parse(value).value.title);
+      } catch {
+        window.__draftWrites.push(null);
+      }
+    }
+    return original.call(this, name, value);
+  };
+}, draftKey);
+
 // Losing the page entirely, the way a session timeout or a crashed tab would.
 await page.reload({ waitUntil: 'networkidle' });
 await page.getByRole('button', { name: 'Card with a draft', exact: true }).waitFor();
@@ -107,6 +125,20 @@ log(`  restored description: ${JSON.stringify(description)}`);
 
 check('the title survived losing the page', title === 'Half edited title', title);
 check('the description survived losing the page', description === SENTENCE, description);
+
+// Opening a task rebuilds the form in the render after the dialog opens, and
+// the autosave must not write the empty form it was built with over the draft
+// it is about to restore. A tab lost inside the window between the two writes
+// lost the draft.
+await page.waitForTimeout(800);
+const writes = await page.evaluate(() => window.__draftWrites);
+log(`  titles written while opening the card: ${JSON.stringify(writes)}`);
+check('opening a card writes its draft at least once', writes.length > 0, String(writes.length));
+check(
+  'opening a card never writes the empty form over its draft',
+  writes.every(written => written === 'Half edited title'),
+  JSON.stringify(writes),
+);
 
 // Finish the edit properly, then confirm the draft is not left behind.
 await page.getByRole('button', { name: /save changes/i }).click();

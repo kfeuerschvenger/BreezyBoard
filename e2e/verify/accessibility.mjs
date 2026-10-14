@@ -56,7 +56,10 @@ const BASELINE = {
   // shared Modal, whose close control is an IconButton that cannot be rendered
   // without a label.
   //
-  // The board, its task drawer (at a desktop and a phone width), the board
+  // The board, its task modal (a centered dialog at a desktop width and a
+  // bottom sheet at a phone width, with the Move to row, the priority chips,
+  // the checklist and its progress bar on screen), the toast that follows
+  // blowing a card away, the board
   // not found page, the delete confirmation, the edit dialog and the profile
   // have no line: each scans clean.
   //
@@ -267,15 +270,30 @@ await scan('board, a card held with the keyboard');
 await page.keyboard.press('Escape');
 await page.locator('[id^="DndLiveRegion"]', { hasText: 'cancelled' }).waitFor();
 
-// A task is edited in the drawer until slice 7 replaces it with a modal.
+// A task is edited in a modal: centered at a desktop width, a bottom sheet on
+// a phone. The header strip's gradient is decoration and is hidden from
+// assistive technology, which would take the close button with it if the
+// button were inside it, so that is asserted beside the scan.
 await page.getByRole('button', { name: 'Axe card', exact: true }).click();
-await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
+const taskDialog = page.getByRole('dialog', { name: 'Edit Task' });
+await taskDialog.waitFor();
 await page.waitForTimeout(400);
-await scan('board, task drawer open');
+check('the task modal is a modal dialog', await taskDialog.getAttribute('aria-modal'), 'true');
+check(
+  'the close button is in the accessibility tree, outside the hidden gradient',
+  await taskDialog.getByRole('button', { name: 'Close' }).evaluate(button => button.closest('[aria-hidden="true"]') === null),
+  true,
+);
+check(
+  'Move to is a named group with one column pressed',
+  `${await taskDialog.getByRole('group', { name: 'Move to' }).count()} ${await taskDialog.getByRole('group', { name: 'Move to' }).locator('[aria-pressed="true"]').count()}`,
+  '1 1',
+);
+await page.getByRole('button', { name: 'Add Item' }).click();
+await scan('board, task modal open');
 
 await page.setViewportSize({ width: 390, height: 844 });
-await page.getByRole('button', { name: 'Add Item' }).click();
-await scan('board, task drawer open, phone');
+await scan('board, task modal open, phone');
 await page.setViewportSize({ width: 1440, height: 900 });
 
 // The "Move to" menu is a popup in a portal, so nothing scanned with it
@@ -313,6 +331,19 @@ await page.getByRole('button', { name: 'Move Axe menu task to another column' })
 await page.getByRole('menu', { name: 'Move Axe menu task to' }).waitFor();
 await scan('board, move menu open');
 await page.keyboard.press('Escape');
+
+// Blowing a card away closes the modal and raises the toast with Catch it, the
+// one live region a card's delete mounts. It is scanned showing, over the
+// board the person is left on, and the card is caught again so what follows
+// finds the board as it was.
+await page.getByRole('button', { name: 'Axe menu task', exact: true }).click();
+await page.getByRole('dialog', { name: 'Edit Task' }).getByRole('button', { name: 'Blow it away' }).click();
+await page.getByRole('dialog').waitFor({ state: 'detached' });
+await page.getByTestId('toast').waitFor();
+check('the toast that follows a delete offers Catch it', await page.getByTestId('toast').getByRole('button', { name: 'Catch it' }).count(), 1);
+await scan('board, blown away toast showing');
+await page.getByTestId('toast').getByRole('button', { name: 'Catch it' }).click();
+await page.getByRole('button', { name: 'Axe menu task', exact: true }).waitFor();
 
 // The board's own menu has three items for the owner: Edit board, Add members
 // and Delete board. Its popup is in a portal like the "Move to" menu's and

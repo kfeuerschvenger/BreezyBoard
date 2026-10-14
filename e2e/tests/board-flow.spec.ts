@@ -29,8 +29,11 @@ test.describe('board core loop', () => {
     });
 
     await test.step('the board renders its template columns', async () => {
+      // By heading, not by text: the create board dialog is still leaving and
+      // lists the same four names, so a text match can be satisfied by it
+      // before the board has rendered.
       for (const column of ['Backlog', 'Up Next', 'In Progress', 'Done']) {
-        await expect(page.getByText(column, { exact: true }).first()).toBeVisible();
+        await expect(page.getByRole('heading', { level: 2, name: column, exact: true })).toBeVisible();
       }
       expect(await columnCount(page, 'Backlog')).toBe(0);
     });
@@ -54,7 +57,7 @@ test.describe('board core loop', () => {
       await waitUntilSettled(page.locator('[role="article"]').first());
 
       const from = await handle.boundingBox();
-      const to = await page.getByText('In Progress', { exact: true }).first().boundingBox();
+      const to = await page.getByRole('heading', { level: 2, name: 'In Progress', exact: true }).boundingBox();
       expect(from, 'the drag handle must be rendered').not.toBeNull();
       expect(to, 'the target column must be rendered').not.toBeNull();
 
@@ -106,7 +109,7 @@ test.describe('board core loop', () => {
 
     await test.step('the card opens for editing', async () => {
       await page.locator('[role="article"]').first().click();
-      await expect(page.getByText('Edit Task')).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Edit Task' })).toBeVisible();
     });
 
     expect(pageErrors, 'no uncaught exception may reach the window').toEqual([]);
@@ -242,6 +245,68 @@ test.describe('board core loop', () => {
     });
 
     expect(pageErrors, 'using the menu must not throw').toEqual([]);
+  });
+
+  /**
+   * The task modal's two actions that happen at once and never go through its
+   * form: Move to and Blow it away. The reload at the end is what proves the
+   * card was made again on the server and not just drawn again.
+   */
+  test('a task is moved from its modal, blown away, and caught again', async ({ page, authedUser }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(String(error)));
+
+    await logInThroughTheUi(page, authedUser);
+    const boardName = `E2E Modal ${Date.now()}`;
+    await page.getByRole('button', { name: /create board/i }).first().click();
+    await page.getByLabel(/board name/i).fill(boardName);
+    await page.getByRole('button', { name: /^create board$/i }).last().click();
+    await page.getByText(boardName).first().click();
+    await addCard(page, 'Backlog', 'Modal task');
+
+    const dialog = page.getByRole('dialog', { name: 'Edit Task' });
+
+    await test.step('the card opens in a centered modal that names its place', async () => {
+      await page.getByRole('button', { name: 'Modal task', exact: true }).click();
+      await expect(dialog).toBeVisible();
+      await expect(dialog.locator('[data-task-place]')).toContainText('Backlog');
+      const box = (await dialog.boundingBox())!;
+      const viewport = page.viewportSize()!;
+      expect(box.x + box.width / 2, 'centered across').toBeCloseTo(viewport.width / 2, 0);
+      expect(box.y + box.height, 'not a sheet at this width').toBeLessThan(viewport.height);
+    });
+
+    await test.step('Move to moves the card at once and leaves the modal open', async () => {
+      await dialog.getByRole('button', { name: 'In Progress', exact: true }).click();
+
+      await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
+      expect(await columnCount(page, 'Backlog')).toBe(0);
+      await expect(dialog.getByRole('button', { name: 'In Progress', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(dialog.locator('[data-task-place]')).toContainText('In Progress');
+      await expect(dialog).toBeVisible();
+    });
+
+    await test.step('Blow it away closes the modal and the card goes', async () => {
+      await dialog.getByRole('button', { name: 'Blow it away' }).click();
+
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toHaveCount(0);
+      await expect.poll(() => columnCount(page, 'In Progress')).toBe(0);
+      await expect(page.getByText('Card blown away.')).toBeVisible();
+    });
+
+    await test.step('Catch it brings it back to the column it was in, and the server has it', async () => {
+      await page.getByRole('button', { name: 'Catch it' }).click();
+
+      await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toBeVisible();
+      await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
+
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toBeVisible();
+      await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
+    });
+
+    expect(pageErrors, 'the modal must not throw').toEqual([]);
   });
 
   /**
