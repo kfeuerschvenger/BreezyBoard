@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CollisionDetection, DndContextProps, DragEndEvent, DragMoveEvent, DragStartEvent } from '@dnd-kit/core';
+import type {
+  CollisionDetection,
+  DndContextProps,
+  DragEndEvent,
+  DragMoveEvent,
+  DragOverEvent,
+  DragStartEvent,
+} from '@dnd-kit/core';
 import { KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import type { Task } from '@/models';
 import { dropTargetOf, pointerSlot, sameSlot } from '../dropSlot';
@@ -50,6 +57,7 @@ export interface UseTaskDragAndDropResult {
   accessibility: NonNullable<DndContextProps['accessibility']>;
   onDragStart: (event: DragStartEvent) => void;
   onDragMove: (event: DragMoveEvent) => void;
+  onDragOver: (event: DragOverEvent) => void;
   onDragEnd: (event: DragEndEvent) => Promise<void>;
   onDragCancel: () => void;
   /**
@@ -169,6 +177,11 @@ export function useTaskDragAndDrop({
 
   const onDragMove = (event: DragMoveEvent) => publish(slotOf(String(event.active.id), event));
 
+  // The droppable under the held card can change with no movement at all, when
+  // opening the gap moves the columns and their rectangles are measured again.
+  // The slot is read again then, or the gap would stay where the card was.
+  const onDragOver = (event: DragOverEvent) => publish(slotOf(String(event.active.id), event));
+
   const release = () => {
     // After the monitors have run. dnd-kit calls this hook's handler and then
     // the announcements, and the drop announcement reads the keyboard's slot,
@@ -230,6 +243,7 @@ export function useTaskDragAndDrop({
     accessibility,
     onDragStart,
     onDragMove,
+    onDragOver,
     onDragEnd,
     onDragCancel,
     mover,
