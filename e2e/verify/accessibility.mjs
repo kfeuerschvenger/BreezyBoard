@@ -77,6 +77,14 @@ const BASELINE = {
 const log = (...a) => console.log(...a);
 const results = [];
 
+// A plain assertion beside the axe scans, for what axe has no rule for: that a
+// menu offers its items in order, or that a breadcrumb has the one link.
+const check = (label, got, expected) => {
+  const ok = got === expected;
+  results.push(ok);
+  log(`${ok ? 'PASS' : 'FAIL'}  ${label}  -> ${got} (expected ${expected})`);
+};
+
 const user = {
   firstName: 'Axe',
   lastName: 'Gate',
@@ -305,6 +313,43 @@ await page.getByRole('button', { name: 'Move Axe menu task to another column' })
 await page.getByRole('menu', { name: 'Move Axe menu task to' }).waitFor();
 await scan('board, move menu open');
 await page.keyboard.press('Escape');
+
+// The board's own menu has three items for the owner: Edit board, Add members
+// and Delete board. Its popup is in a portal like the "Move to" menu's and
+// would carry the same `region` finding, once for each of its items, so the
+// popup is not scanned and the order of its items is asserted instead. Its
+// Add members item opens the same dialog the Home tile's menu does, scanned
+// with the search results on screen.
+await page.getByRole('button', { name: /^options for /i }).click();
+await page.getByRole('menu').waitFor();
+const boardMenuItems = await page.getByRole('menuitem').allInnerTexts();
+check(
+  'the board menu offers Edit board, Add members and Delete board, in that order',
+  boardMenuItems.map(item => item.trim()).join('|'),
+  'Edit board|Add members|Delete board',
+);
+await page.getByRole('menuitem', { name: 'Add members' }).click();
+await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
+await page.getByRole('textbox', { name: 'Search team members' }).waitFor();
+await page.waitForTimeout(600);
+await scan('board, add members dialog open');
+await page.keyboard.press('Escape');
+await page.getByRole('dialog', { name: 'Add Members' }).waitFor({ state: 'hidden' });
+
+// The breadcrumb above the board is a navigation with one link, the way back
+// to Home, and its last entry is the board as text. The link is scanned with
+// the page, and its name and place are asserted here.
+const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+check(
+  'the breadcrumb on a board has one link, named Home and leading to /',
+  `${await crumbs.getByRole('link').count()} ${await crumbs.getByRole('link', { name: 'Home' }).getAttribute('href')}`,
+  '1 /',
+);
+check(
+  'the last entry of the breadcrumb is the board, as text marked as the current page',
+  `${await crumbs.locator('[aria-current="page"]').count()} ${await crumbs.locator('[aria-current="page"] a').count()}`,
+  '1 0',
+);
 
 // The edit dialog is a modal over the board page. It is scanned with the
 // board's own colours loaded, so the swatch radios are on screen: a radio

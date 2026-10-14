@@ -1704,7 +1704,7 @@ const makeGateTask = (title, column, extra = {}) =>
   });
 await makeGateTask('Gate high task', 0, { priority: 'high', checklist: [{ text: 'a', completed: true }, { text: 'b', completed: false }] });
 await makeGateTask('Gate low task', 0, { priority: 'low' });
-await makeGateTask('Gate medium task', 1, { priority: 'medium' });
+await makeGateTask('Gate medium task', 1, { priority: 'medium', description: 'Written under the title, and not printed on the card' });
 await makeGateTask('Gate landed task', 3, { priority: 'low', checklist: [{ text: 'a', completed: true }] });
 const gateBoardUrl = `${FRONT}/board/${gateBoardData._id}`;
 
@@ -1767,6 +1767,7 @@ for (const [label, locator, token] of [
   ['the Still air title', boardPage.getByText('Still air').first(), '--color-ink-secondary'],
   ['the Still air line', boardPage.getByText('Drop a card here or add one below.').first(), '--color-ink-tertiary'],
   ['the composer button', boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }), '--color-ink-secondary'],
+  ['the breadcrumb link to Home', boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Home' }), '--color-ink-secondary'],
 ]) {
   const behind = await extremeBehind(boardPage, locator, 'darkest');
   await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
@@ -1778,6 +1779,9 @@ await reportPairs(boardPage, [
   ['the title of a card that has landed on the card', '--color-ink-secondary', '--color-surface', 4.5],
   ['an unfinished checklist figure on the card', '--color-ink-secondary', '--color-surface', 4.5],
   ['a finished checklist figure on the card', '--color-green-deep', '--color-surface', 4.5],
+  // The description marker is a graphic that carries information, so 1.4.11
+  // asks 3:1 of it. It is drawn in the secondary ink, which clears 4.5.
+  ['the description marker on the card', '--color-ink-secondary', '--color-surface', 3],
   ['the low priority chip', '--color-green-deep', '--color-green-tint', 4.5],
   ['the medium priority chip', '--color-sand-deep', '--color-sand-tint', 4.5],
   ['the high priority chip', '--color-coral-deep', '--color-coral-tint', 4.5],
@@ -1795,6 +1799,29 @@ const cardStyle = await styleOf(boardPage.locator('[data-task-card]').first(), [
 check('a card has the card radius and padding 12 by 14', `${cardStyle.borderTopLeftRadius} ${cardStyle.paddingTop} ${cardStyle.paddingLeft}`, '16px 12px 14px');
 check('a card is white with the resting shadow', `${await paintOf(boardPage, cardStyle.backgroundColor)} ${cardStyle.boxShadow.includes('0px 8px 20px -16px')}`, '255,255,255 true');
 check('cards are 10 pixels apart', cardStyle.marginBottom, '10px');
+
+// The description is never printed, and a card that has one carries a small
+// icon in its meta row: decorative to the eye, a hint to assistive technology,
+// and not part of the card's name.
+const describedCard = boardPage.locator('[data-task-card]', { hasText: 'Gate medium task' });
+const marker = describedCard.locator('[data-task-description]');
+check('exactly one card on the board has a description marker', await boardPage.locator('[data-task-description]').count(), 1);
+check('the marker is a 14 pixel icon hidden from assistive technology, with a hint beside it', await marker.evaluate(el => `${el.querySelector('svg').getAttribute('aria-hidden')} ${el.querySelector('svg').getBoundingClientRect().width} ${el.querySelector('.sr-only').textContent}`), 'true 14 Has a description');
+check('the marker is drawn in the secondary ink', await paintOf(boardPage, await marker.evaluate(el => getComputedStyle(el).color)), await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-secondary')));
+check('the card is still named by its title alone', await describedCard.getAttribute('aria-labelledby').then(id => boardPage.locator(`[id="${id}"]`).textContent()), 'Gate medium task');
+check('the description text is not on the page', await boardPage.getByText('Written under the title').count(), 0);
+
+// The breadcrumb's way back to Home: a link with a keyboard focus ring and a
+// target of at least 24 pixels, leaving the board's own name as text.
+const homeCrumb = boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Home' });
+check('the breadcrumb link to Home is 32 pixels tall at a desktop width, above the 24 pixel minimum', await homeCrumb.evaluate(el => Math.round(el.getBoundingClientRect().height)), 32);
+check('a keyboard focused breadcrumb link draws a 2px outline offset by 2px', await (async () => {
+  await homeCrumb.focus();
+  await boardPage.keyboard.press('Shift+Tab');
+  await boardPage.keyboard.press('Tab');
+  return homeCrumb.evaluate(el => { const s = getComputedStyle(el); return `${s.outlineStyle} ${s.outlineWidth} ${s.outlineOffset}`; });
+})(), 'solid 2px 2px');
+check('the board name in the breadcrumb is text, not a link', await boardPage.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]').evaluate(el => `${el.tagName} ${el.closest('a') === null}`), 'LI true');
 const landedColumn = boardPage.locator('[data-column]').nth(3);
 check('the last column has the arrival icon and a green dot, and keeps its own name', `${await landedColumn.locator('h2 ~ svg').count()} ${await landedColumn.getByRole('heading', { level: 2 }).textContent()}`, `1 ${gateBoardColumns[3].title}`);
 check('the card in the last column is drawn as done, in the secondary text', await paintOf(boardPage, await landedColumn.getByRole('button', { name: 'Gate landed task', exact: true }).evaluate(el => getComputedStyle(el).color)), await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-secondary')));
