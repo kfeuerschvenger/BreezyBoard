@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { restoreMatchMedia, stubMatchMedia } from '@/test/matchMedia';
 import { AuthService, BoardService, ColorService, TemplateService, UserService } from '@/services';
@@ -68,6 +68,12 @@ const makeBoard = (id: string, title: string, hue = 'sky'): Board =>
 
 const ROADMAP = makeBoard('board-1', 'Roadmap', 'coral');
 const LAUNCH = makeBoard('board-2', 'Launch plan', 'teal');
+
+/** Prints the address, so a test can read where a link took the router. */
+const LocationProbe = () => {
+  const { pathname, hash } = useLocation();
+  return <p data-testid="location">{`${pathname}${hash}`}</p>;
+};
 
 const renderShell = (path = '/', page: React.ReactNode = <p>page content</p>) =>
   renderWithQuery(
@@ -300,31 +306,73 @@ describe('the header', () => {
     expect(within(breadcrumb()).getByText('Home')).not.toHaveAttribute('aria-current');
   });
 
-  it('makes the section a link back to Home on a board, and leaves the board as text', async () => {
+  it('reads Home, Boards, then the board on a board: two links and the board as text', async () => {
     renderShell('/board/board-1');
     const board = await within(breadcrumb()).findByText('Roadmap');
 
     const home = within(breadcrumb()).getByRole('link', { name: 'Home' });
+    const boards = within(breadcrumb()).getByRole('link', { name: 'Boards' });
 
     expect(home).toHaveAttribute('href', '/');
+    expect(boards).toHaveAttribute('href', '/#boards');
     expect(home).not.toHaveAttribute('aria-current');
-    expect(within(breadcrumb()).getAllByRole('link')).toEqual([home]);
+    expect(boards).not.toHaveAttribute('aria-current');
+    expect(within(breadcrumb()).getAllByRole('link')).toEqual([home, boards]);
     expect(board.closest('a')).toBeNull();
     expect(board).toHaveAttribute('aria-current', 'page');
+    expect(within(breadcrumb()).getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'Home',
+      'Boards',
+      'Roadmap',
+    ]);
+  });
+
+  it('keeps the separators out of the accessibility tree', async () => {
+    renderShell('/board/board-1');
+    await within(breadcrumb()).findByText('Roadmap');
+
+    const separators = breadcrumb().querySelectorAll('li[aria-hidden="true"]');
+
+    expect(separators).toHaveLength(2);
+    expect(within(breadcrumb()).getAllByRole('listitem')).toHaveLength(3);
   });
 
   // 44 pixels tall on touch and 32 from the large breakpoint, never the bare
   // line of text: a class assertion because jsdom loads no stylesheet.
-  it('gives the link a focus ring and a target that is not the line of text', async () => {
+  it('gives both links a focus ring and a target that is not the line of text', async () => {
+    renderShell('/board/board-1');
+    await within(breadcrumb()).findByText('Roadmap');
+
+    for (const name of ['Home', 'Boards']) {
+      expect(within(breadcrumb()).getByRole('link', { name })).toHaveClass('focus-ring', 'min-h-11', 'lg:min-h-8');
+    }
+  });
+
+  it('lets the board name shrink and truncate before either link does', async () => {
+    renderShell('/board/board-1');
+    const board = await within(breadcrumb()).findByText('Roadmap');
+
+    expect(board).toHaveClass('min-w-0', 'truncate');
+    expect(board).toHaveAttribute('title', 'Roadmap');
+    for (const name of ['Home', 'Boards']) {
+      expect(within(breadcrumb()).getByRole('link', { name }).closest('li')).toHaveClass('shrink-0');
+    }
+  });
+
+  // jsdom loads no stylesheet, so the classes are what can be asserted. The
+  // real widths are measured by `responsive.mjs` at 320 and 390 pixels.
+  it('gives the name the room below the small breakpoint: Home is an icon that keeps its name, Boards is not drawn', async () => {
     renderShell('/board/board-1');
     await within(breadcrumb()).findByText('Roadmap');
 
     const home = within(breadcrumb()).getByRole('link', { name: 'Home' });
+    const boards = within(breadcrumb()).getByRole('link', { name: 'Boards' });
 
-    expect(home).toHaveClass('focus-ring', 'min-h-11', 'lg:min-h-8');
+    expect(within(home).getByText('Home')).toHaveClass('sr-only', 'sm:not-sr-only');
+    expect(boards.closest('li')).toHaveClass('hidden', 'sm:flex');
   });
 
-  it('goes to the home page when the link is pressed', async () => {
+  it('goes to the home page when Home is pressed', async () => {
     const user = userEvent.setup();
     renderShell('/board/board-1');
     await within(breadcrumb()).findByText('Roadmap');
@@ -333,6 +381,18 @@ describe('the header', () => {
 
     await waitFor(() => expect(within(breadcrumb()).queryByRole('link')).not.toBeInTheDocument());
     expect(within(breadcrumb()).getByText('Home')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('goes to the home page when Boards is pressed, with the fragment of the grid in the address', async () => {
+    const user = userEvent.setup();
+    renderShell('/board/board-1', <LocationProbe />);
+    await within(breadcrumb()).findByText('Roadmap');
+
+    await user.click(within(breadcrumb()).getByRole('link', { name: 'Boards' }));
+
+    await waitFor(() => expect(within(breadcrumb()).queryByRole('link')).not.toBeInTheDocument());
+    expect(within(breadcrumb()).getByText('Home')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('location')).toHaveTextContent('/#boards');
   });
 
   it('keeps the section as text on the pages that are not a board', async () => {

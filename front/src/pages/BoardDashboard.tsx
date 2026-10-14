@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { IconFolder, IconPlus } from '@tabler/icons-react';
 import {
   BoardCard,
@@ -37,10 +38,41 @@ const lineFor = (boardCount: number): string =>
     ? 'Clear skies: no boards yet. Start one and catch an idea.'
     : "The wind's in your favor. Pick up where you left off.";
 
+/** The fragment that names the grid of boards: the target of the breadcrumb's "Boards" entry. */
+const BOARDS_HASH = '#boards';
+
+/**
+ * Takes the person to the grid of boards when the address names it.
+ *
+ * React Router changes the address on a hash link and leaves the scroll
+ * alone, so the page does it: the heading scrolls into view, smoothly unless
+ * the operating system asks for reduced motion, and takes focus without a
+ * second scroll, so the next Tab starts inside the grid and a screen reader
+ * starts reading at "Your boards". It runs again on every navigation to the
+ * fragment, `key` included, because the same address pressed twice is a new
+ * navigation that the hash alone would not show. `ready` holds it back until
+ * the grid is on screen.
+ */
+const useScrollToBoards = (ready: boolean) => {
+  const { hash, key } = useLocation();
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!ready || hash !== BOARDS_HASH || !heading.current) return;
+
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    heading.current.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    heading.current.focus({ preventScroll: true });
+  }, [ready, hash, key]);
+
+  return heading;
+};
+
 const BoardDashboard: React.FC = () => {
   const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
 
   const dashboard = useBoardDashboard();
+  const boardsHeading = useScrollToBoards(!dashboard.isLoading && !dashboard.error);
   const addMembers = useAddMembersFlow();
   const menu = useBoardMenu();
   const shell = useShell();
@@ -102,9 +134,14 @@ const BoardDashboard: React.FC = () => {
         firstBoard={firstBoard ? { _id: firstBoard._id, title: firstBoard.title || 'Untitled Board' } : undefined}
       />
 
-      <section aria-labelledby="home-boards-heading">
+      <section id="boards" aria-labelledby="home-boards-heading">
         <div className="mb-4 flex items-baseline justify-between gap-4">
-          <h2 id="home-boards-heading" className="font-heading text-2xl font-[650] tracking-[-0.02em] text-ink">
+          <h2
+            id="home-boards-heading"
+            ref={boardsHeading}
+            tabIndex={-1}
+            className="font-heading text-2xl font-[650] tracking-[-0.02em] text-ink outline-none"
+          >
             Your boards
           </h2>
           <span className="font-mono text-xs text-ink-tertiary">
