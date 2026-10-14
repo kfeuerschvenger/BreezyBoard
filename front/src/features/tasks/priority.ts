@@ -27,11 +27,11 @@ export const PRIORITY_HUE: Record<TaskPriority, 'green' | 'sand' | 'coral'> = {
   high: 'coral',
 };
 
-/** The hue's tint and deep step as the variant a checked radio inside a label needs. */
+/** The hue's tint, deep and edge steps as the variant a checked radio inside a label needs. */
 export const PRIORITY_SELECTED_CLASSES: Record<TaskPriority, string> = {
-  low: 'has-[:checked]:bg-green-tint has-[:checked]:text-green-deep',
-  medium: 'has-[:checked]:bg-sand-tint has-[:checked]:text-sand-deep',
-  high: 'has-[:checked]:bg-coral-tint has-[:checked]:text-coral-deep',
+  low: 'has-[:checked]:bg-green-tint has-[:checked]:text-green-deep has-[:checked]:border-green-edge',
+  medium: 'has-[:checked]:bg-sand-tint has-[:checked]:text-sand-deep has-[:checked]:border-sand-edge',
+  high: 'has-[:checked]:bg-coral-tint has-[:checked]:text-coral-deep has-[:checked]:border-coral-edge',
 };
 
 /** Anything unrecognised reads as the least urgent rather than crashing. */

@@ -22,9 +22,6 @@ export type { FieldControlProps, FieldProps } from './Field';
 export { Modal, ModalClose } from './Modal';
 export type { ModalCloseProps, ModalPlacement, ModalProps, ModalSize } from './Modal';
 
-export { Drawer } from './Drawer';
-export type { DrawerProps, DrawerSize } from './Drawer';
-
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 

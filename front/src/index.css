@@ -533,7 +533,7 @@
  * animation and transition collapsed to an instant and played once. The
  * duration is one hundredth of a millisecond rather than zero, so
  * `animationend` and `transitionend` still fire and code that waits on them,
- * such as a drawer that unmounts when its close animation completes, keeps
+ * such as a modal that unmounts when its close animation completes, keeps
  * working.
  */
 @media (prefers-reduced-motion: reduce) {

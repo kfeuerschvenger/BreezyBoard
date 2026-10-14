@@ -157,7 +157,7 @@ describe('BoardColumns', () => {
       expect(moveToColumn).toHaveBeenCalledWith(task, { id: 'col-c', title: 'Done' });
     });
 
-    it('does not open the task drawer when the menu is used', async () => {
+    it('does not open the task modal when the menu is used', async () => {
       const onTaskClick = vi.fn();
       render(
         <BoardColumns

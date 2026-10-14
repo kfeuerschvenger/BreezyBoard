@@ -15,7 +15,7 @@ export const colorKeys = {
 /**
  * The colour palettes are seeded reference data: a fixed list that no part of
  * the product writes to. `staleTime: Infinity` states that, so opening a
- * fourth drawer costs nothing and a window regaining focus does not refetch a
+ * fourth task modal costs nothing and a window regaining focus does not refetch a
  * list that cannot have changed.
  *
  * `enabled` is for a consumer that is mounted all the time and needs the list

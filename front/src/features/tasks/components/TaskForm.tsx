@@ -1,38 +1,76 @@
 import React from 'react';
-import { IconPalette, IconUser } from '@tabler/icons-react';
+import { IconPalette, IconWind } from '@tabler/icons-react';
 import { Button, Field, Input, SwatchPicker, Textarea, Icon } from '@/shared/ui';
 import { UserPicker } from '@/features/users';
 import { Checklist } from './Checklist';
 import { PrioritySelect } from './PrioritySelect';
-import type { UseTaskDrawerResult } from '../hooks/useTaskDrawer';
+import { TaskMoveToPicker } from './TaskMoveToPicker';
+import type { UseTaskModalResult } from '../hooks/useTaskModal';
+import type { MoveTarget } from '../hooks/useTaskMover';
 
 /** The id the form carries, so buttons outside it can submit it. */
 export const TASK_FORM_ID = 'task-form';
 
-export type TaskFormProps = UseTaskDrawerResult;
+export interface TaskFormProps extends UseTaskModalResult {
+  /**
+   * The board's columns and the one the task is in. Without them the form has
+   * no "Move to" row, which is how a task that does not exist yet is shown.
+   */
+  columns?: MoveTarget[];
+  columnId?: string;
+  onMove?: (target: MoveTarget) => void;
+}
 
 export interface TaskFormActionsProps {
   isValid: boolean;
   isSubmitting: boolean;
   onCancel: () => void;
+  /** Present for a task that exists. "Blow it away" is not offered for one that does not. */
+  onDelete?: () => void;
+  isDeleting?: boolean;
 }
 
 /**
- * The form's two buttons.
+ * The modal's buttons: "Blow it away" at one end, Cancel and Save at the other.
  *
- * They are rendered by the drawer's footer rather than inside the form, so a
+ * They are rendered by the modal's footer rather than inside the form, so a
  * long form scrolls underneath them instead of carrying them off screen. The
  * `form` attribute is what keeps the submit button the form's own: pressing it
  * and pressing Enter in a field both go through the form's submit handler.
+ *
+ * Deleting is its own action and never submits the form, and the other two
+ * are disabled while it is in flight so a save cannot race a delete.
  */
-export const TaskFormActions: React.FC<TaskFormActionsProps> = ({ isValid, isSubmitting, onCancel }) => (
-  <div className="flex w-full gap-3">
-    <Button type="submit" form={TASK_FORM_ID} disabled={!isValid || isSubmitting} className="flex-1 justify-center">
-      {isSubmitting ? 'Saving...' : 'Save Changes'}
-    </Button>
-    <Button type="button" variant="secondary" onClick={onCancel}>
-      Cancel
-    </Button>
+export const TaskFormActions: React.FC<TaskFormActionsProps> = ({
+  isValid,
+  isSubmitting,
+  onCancel,
+  onDelete,
+  isDeleting = false,
+}) => (
+  <div className="flex w-full flex-wrap items-center justify-between gap-3">
+    {onDelete ? (
+      <Button
+        type="button"
+        variant="danger-ghost"
+        onClick={onDelete}
+        isLoading={isDeleting}
+        disabled={isSubmitting}
+        leftIcon={isDeleting ? undefined : <Icon as={IconWind} size={18} aria-hidden="true" />}
+      >
+        Blow it away
+      </Button>
+    ) : (
+      <span />
+    )}
+    <div className="flex gap-3">
+      <Button type="button" variant="secondary" onClick={onCancel} disabled={isDeleting}>
+        Cancel
+      </Button>
+      <Button type="submit" form={TASK_FORM_ID} disabled={!isValid || isSubmitting || isDeleting}>
+        {isSubmitting ? 'Saving...' : 'Save Changes'}
+      </Button>
+    </div>
   </div>
 );
 
@@ -40,9 +78,13 @@ export const TaskFormActions: React.FC<TaskFormActionsProps> = ({ isValid, isSub
  * The task form's fields, given everything it renders.
  *
  * It holds no state of its own and asks for no data: both come from
- * `useTaskDrawer`, which is what lets the drawer around it be a title and a
+ * `useTaskModal`, which is what lets the modal around it be a header and a
  * shell. The one exception is `UserPicker`, which resolves the name of an
  * owner the member list does not contain and owns that lookup itself.
+ *
+ * The order is the order a person decides in: what it is called, where it is,
+ * how urgent it is and who has it, what colour it is, what it says, and what
+ * is left to do.
  */
 export const TaskForm: React.FC<TaskFormProps> = ({
   values,
@@ -53,6 +95,9 @@ export const TaskForm: React.FC<TaskFormProps> = ({
   colors,
   members,
   isLoadingColors,
+  columns,
+  columnId,
+  onMove,
 }) => (
   <form id={TASK_FORM_ID} onSubmit={handleSubmit} className="space-y-6">
     <Field label="Title" required error={errors.title}>
@@ -68,37 +113,28 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       )}
     </Field>
 
-    <Field label="Description">
-      {props => (
-        <Textarea
-          {...props}
-          value={values.description}
-          onChange={event => setField('description', event.target.value)}
-          rows={3}
-          placeholder="Enter task description"
-          className="font-body"
-        />
-      )}
-    </Field>
+    {columns && columnId && onMove && <TaskMoveToPicker columns={columns} currentColumnId={columnId} onMove={onMove} />}
 
-    <Field label="Owner" required error={errors.owner} icon={<Icon as={IconUser} size={16} className="text-ink-tertiary" />}>
-      {props => (
-        <UserPicker
-          value={values.owner}
-          onChange={ownerId => setField('owner', ownerId)}
-          members={members}
-          controlProps={props}
-        />
-      )}
-    </Field>
+    <div className="grid gap-6 sm:grid-cols-2">
+      <PrioritySelect value={values.priority} onChange={priority => setField('priority', priority)} />
 
-    <PrioritySelect value={values.priority} onChange={priority => setField('priority', priority)} />
+      <Field label="Owner" required error={errors.owner}>
+        {props => (
+          <UserPicker
+            value={values.owner}
+            onChange={ownerId => setField('owner', ownerId)}
+            members={members}
+            controlProps={props}
+          />
+        )}
+      </Field>
+    </div>
 
     <SwatchPicker
       name="color"
       legend={
         <>
-          <Icon as={IconPalette} size={16} className="inline mr-1" aria-hidden="true" />
+          <Icon as={IconPalette} size={16} className="mr-1 inline" aria-hidden="true" />
           Color *
         </>
       }
@@ -112,6 +148,19 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       error={errors.color}
       isLoading={isLoadingColors}
     />
+
+    <Field label="Description">
+      {props => (
+        <Textarea
+          {...props}
+          value={values.description}
+          onChange={event => setField('description', event.target.value)}
+          rows={3}
+          placeholder="Enter task description"
+          className="font-body"
+        />
+      )}
+    </Field>
 
     <Checklist items={values.checklist} onChange={checklist => setField('checklist', checklist)} />
 

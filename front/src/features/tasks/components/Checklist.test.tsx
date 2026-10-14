@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { Checklist, type ChecklistItemData } from './Checklist';
 
 // The checklist had no coverage of its own while it lived inside the task
-// drawer, because reaching it meant driving the whole drawer. Standing on its
+// modal, because reaching it meant driving the whole modal. Standing on its
 // own is what makes these four edits reachable, and they are the reason the
 // component was worth lifting out.
 //
@@ -87,6 +87,26 @@ describe('Checklist', () => {
     renderChecklist();
 
     expect(screen.getAllByRole('button', { name: /delete checklist item/i })).toHaveLength(ITEMS.length);
+  });
+
+  it('shows how far along it is as a named progress bar, and none for an empty list', () => {
+    const { unmount } = render(<Checklist items={ITEMS} onChange={vi.fn()} />);
+
+    const bar = screen.getByRole('progressbar', { name: 'Checklist progress' });
+    expect(bar).toHaveAttribute('aria-valuenow', '1');
+    expect(bar).toHaveAttribute('aria-valuemax', '2');
+    expect(bar).toHaveAttribute('aria-valuetext', '1 of 2 done');
+    unmount();
+
+    render(<Checklist items={[]} onChange={vi.fn()} />);
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('gives each row a text field named by its position, so the fields tell apart', () => {
+    renderChecklist();
+
+    expect(screen.getByRole('textbox', { name: 'Checklist item 1' })).toHaveValue('Write the migration');
+    expect(screen.getByRole('textbox', { name: 'Checklist item 2' })).toHaveValue('Check the indexes');
   });
 
   it('names the other two controls of a row as well', () => {

@@ -67,7 +67,7 @@ const layerBoundaries = [
     // A component renders; it does not fetch. Data access lives in the
     // feature's hooks. This is what survives of the container and
     // presentational split now that hooks do the separating: the rule, not
-    // a TaskDrawerContainer plus TaskDrawerView file pair at every level.
+    // a TaskModalContainer plus TaskModalView file pair at every level.
     files: ['src/shared/ui/**/*.{ts,tsx}', 'src/features/*/components/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [

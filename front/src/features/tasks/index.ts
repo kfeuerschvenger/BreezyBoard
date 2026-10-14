@@ -13,8 +13,8 @@ export {
   TASK_PRIORITIES,
 } from './priority';
 export type { TaskPriority } from './priority';
-export { default as TaskDrawer } from './components/TaskDrawer';
-export type { TaskDrawerProps } from './components/TaskDrawer';
+export { default as TaskModal } from './components/TaskModal';
+export type { TaskModalProps } from './components/TaskModal';
 export { TaskForm } from './components/TaskForm';
 export type { TaskFormProps } from './components/TaskForm';
 export { useTaskForm, resolveColorId } from './hooks/useTaskForm';
@@ -46,5 +46,11 @@ export { useBoardData } from './hooks/useBoardData';
 export type { ColumnData, UseBoardDataResult } from './hooks/useBoardData';
 export { useTaskDragAndDrop } from './hooks/useTaskDragAndDrop';
 export type { TaskCache, UseTaskDragAndDropOptions, UseTaskDragAndDropResult } from './hooks/useTaskDragAndDrop';
-export { useTaskDrawer } from './hooks/useTaskDrawer';
-export type { UseTaskDrawerOptions, UseTaskDrawerResult } from './hooks/useTaskDrawer';
+export { useTaskModal } from './hooks/useTaskModal';
+export type { UseTaskModalOptions, UseTaskModalResult } from './hooks/useTaskModal';
+export { useDeleteTaskWithUndo } from './hooks/useDeleteTaskWithUndo';
+export type {
+  DeletionCache,
+  UseDeleteTaskWithUndoOptions,
+  UseDeleteTaskWithUndoResult,
+} from './hooks/useDeleteTaskWithUndo';

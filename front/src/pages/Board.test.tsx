@@ -9,13 +9,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { BoardService, TaskService, ColorService, UserService } from '@/services';
 import type { Board as BoardModel, Color, Task, User } from '@/models';
 
-// Board always mounts a TaskDrawer child (it just keeps it closed until a
-// task is clicked), and that drawer loads colors on mount regardless of
+// Board always mounts a TaskModal child (it just keeps it closed until a
+// task is clicked), and that modal loads colors on mount regardless of
 // its open state. Every case below stubs ColorService/UserService too so
 // that side effect never reaches the real, unmocked axios client.
 vi.mock('@/services', () => ({
   BoardService: { getById: vi.fn(), update: vi.fn(), delete: vi.fn(), restore: vi.fn() },
-  TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn() },
+  TaskService: { getByBoard: vi.fn(), move: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   ColorService: { getByType: vi.fn() },
   UserService: { getBoardMembers: vi.fn(), getById: vi.fn() },
 }));
@@ -334,7 +334,7 @@ describe('Board page adding and saving a task', () => {
     });
   });
 
-  describe('through the drawer, for a card that exists', () => {
+  describe('through the modal, for a card that exists', () => {
     const existing = makeTask({
       _id: 'task-1',
       title: 'Write the spec',
@@ -370,7 +370,7 @@ describe('Board page adding and saving a task', () => {
       expect(await screen.findByRole('dialog', { name: 'Edit Task' })).toBeInTheDocument();
     });
 
-    it('saves the edit and closes the drawer when the server accepts it', async () => {
+    it('saves the edit and closes the modal when the server accepts it', async () => {
       const user = userEvent.setup();
       mockedTaskService.update.mockResolvedValue({ ...existing, title: 'Write the release notes' });
 
@@ -385,11 +385,11 @@ describe('Board page adding and saving a task', () => {
       expect(await screen.findByRole('button', { name: 'Write the release notes' })).toBeInTheDocument();
     });
 
-    // The drawer knows how to report a failed save and is tested doing it. It
+    // The modal knows how to report a failed save and is tested doing it. It
     // can only do so if the failure reaches it, and a page handler that catches
     // everything and returns normally tells it the save succeeded: it clears
     // the draft and closes, and the work is gone with nothing ever written.
-    it('keeps the drawer open and says so when the server refuses the edit', async () => {
+    it('keeps the modal open and says so when the server refuses the edit', async () => {
       const user = userEvent.setup();
       mockedTaskService.update.mockRejectedValue(new Error('refused'));
       vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -401,6 +401,73 @@ describe('Board page adding and saving a task', () => {
       expect(within(alert).getByText(/could not be saved/i)).toBeInTheDocument();
       expect(screen.getByRole('dialog')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Enter task title')).toHaveValue('Write the release notes');
+    });
+
+    it('names the board and the column on the header strip, and follows a move made from inside', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.getByBoard.mockResolvedValue([existing]);
+      mockedTaskService.move.mockResolvedValue({ ...existing, status: 'col-done', order: 'a0' });
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit Task' });
+      expect(within(dialog).getByText('Launch Plan · To Do')).toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+
+      await waitFor(() => expect(mockedTaskService.move).toHaveBeenCalledWith('task-1', 'col-done', expect.anything(), expect.anything()));
+      expect(await within(dialog).findByText('Launch Plan · Done')).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Done' })).toHaveAttribute('aria-pressed', 'true');
+      // The modal is still open: moving is not saving and does not close it.
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('does not put a card back in the column it was opened in when it is saved after a move', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.getByBoard.mockResolvedValue([existing]);
+      mockedTaskService.move.mockResolvedValue({ ...existing, status: 'col-done', order: 'a0' });
+      mockedTaskService.update.mockResolvedValue({ ...existing, status: 'col-done', title: 'Write the release notes' });
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+      const dialog = await screen.findByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+      await within(dialog).findByText('Launch Plan · Done');
+      await screen.findByRole('radio', { name: 'Blue' });
+      const title = screen.getByPlaceholderText('Enter task title');
+      await user.clear(title);
+      await user.type(title, 'Write the release notes');
+      const save = screen.getByRole('button', { name: 'Save Changes' });
+      await waitFor(() => expect(save).toBeEnabled());
+
+      await user.click(save);
+
+      await waitFor(() => expect(mockedTaskService.update).toHaveBeenCalled());
+      expect(mockedTaskService.update.mock.calls[0][1]).not.toHaveProperty('status');
+    });
+
+    it('blows the card away, closes, and brings it back with Catch it', async () => {
+      const user = userEvent.setup();
+      mockedTaskService.getByBoard.mockResolvedValue([existing]);
+      mockedTaskService.delete.mockResolvedValue(undefined);
+      mockedTaskService.create.mockResolvedValue({ ...existing, _id: 'task-2' });
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
+      await user.click(await screen.findByRole('button', { name: 'Blow it away' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(mockedTaskService.delete).toHaveBeenCalledWith('task-1');
+      expect(screen.queryByRole('button', { name: 'Write the spec' })).not.toBeInTheDocument();
+      expect(await screen.findByText('Card blown away.')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Catch it' }));
+
+      expect(await screen.findByRole('button', { name: 'Write the spec' })).toBeInTheDocument();
+      expect(mockedTaskService.create).toHaveBeenCalledWith(
+        BOARD_ID,
+        expect.objectContaining({ title: 'Write the spec', status: 'col-todo' }),
+      );
     });
   });
 });
