@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { IconGripVertical, IconPlus, IconTrash } from '@tabler/icons-react';
 import { Icon, ProgressBar } from '@/shared/ui';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -35,6 +35,9 @@ const newItemId = (): string => (crypto?.randomUUID ? crypto.randomUUID() : Date
 
 /** A square control box: 44 pixels on a phone, where it is touched, and 28 where a pointer is precise. */
 const TARGET = 'flex h-11 w-11 shrink-0 items-center justify-center md:h-7 md:w-7';
+
+const TEXT_INPUT =
+  'min-w-0 flex-1 rounded-control border-[1.5px] border-line-control bg-surface px-3 py-2 text-sm text-ink transition-[border-color,box-shadow] duration-200 placeholder:text-ink-tertiary focus:border-focus focus:shadow-focus focus:outline-none';
 
 const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, position, onUpdate, onDelete }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -75,9 +78,12 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, pos
         value={item.text}
         onChange={event => onUpdate(item.id, 'text', event.target.value)}
         aria-label={`Checklist item ${position}`}
-        className={`min-w-0 flex-1 rounded-control border-[1.5px] border-line-control bg-surface px-3 py-2 text-sm transition-[border-color,box-shadow] duration-200 placeholder:text-ink-tertiary focus:border-focus focus:shadow-focus focus:outline-none ${
-          item.completed ? 'text-ink-secondary line-through' : 'text-ink'
-        }`}
+        // An item emptied and left is removed, so editing cannot leave the
+        // blank row that adding never creates.
+        onBlur={event => {
+          if (!event.target.value.trim()) onDelete(item.id);
+        }}
+        className={`${TEXT_INPUT} ${item.completed ? 'text-ink-secondary line-through' : 'text-ink'}`}
         placeholder="Enter checklist item"
       />
       <button
@@ -108,8 +114,27 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
     })
   );
 
+  // What has been typed in the field at the foot and not yet added. It is the
+  // field's own and never part of the list, so a list never holds a row that
+  // has no text.
+  const [draft, setDraft] = useState('');
+
   const handleAdd = () => {
-    onChange([...items, { id: newItemId(), text: '', completed: false }]);
+    const text = draft.trim();
+    if (!text) return;
+
+    onChange([...items, { id: newItemId(), text, completed: false }]);
+    setDraft('');
+  };
+
+  // Enter adds the item and does not submit the form the checklist sits in,
+  // which is what an Enter in any other text field of it would do. A key that
+  // confirms an input method's composition is not an Enter of ours.
+  const handleDraftKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+
+    event.preventDefault();
+    handleAdd();
   };
 
   const handleUpdate = (id: string, field: 'text' | 'completed', value: string | boolean) => {
@@ -150,14 +175,6 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
             </span>
           )}
         </h3>
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="focus-ring flex min-h-11 cursor-pointer items-center gap-1 rounded px-1 text-sm font-semibold text-link hover:text-ink md:min-h-7"
-        >
-          <Icon as={IconPlus} size={16} aria-hidden="true" />
-          Add Item
-        </button>
       </div>
 
       {items.length > 0 && (
@@ -188,6 +205,21 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
           </div>
         </SortableContext>
       </DndContext>
+
+      <div className={`flex items-center gap-1 p-1 ${items.length > 0 ? 'mt-1' : ''}`}>
+        <span className={`${TARGET} text-ink-tertiary`}>
+          <Icon as={IconPlus} size={16} aria-hidden="true" />
+        </span>
+        <input
+          type="text"
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={handleDraftKeyDown}
+          aria-label="Add an item"
+          placeholder="Add an item, press Enter"
+          className={`${TEXT_INPUT} h-11 md:h-auto`}
+        />
+      </div>
     </div>
   );
 };
