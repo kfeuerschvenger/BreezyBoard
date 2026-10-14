@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
-import TaskCard, { LEAVING_FALLBACK_MS, TaskCardLeaving, TaskCardOverlay } from './TaskCard';
+import TaskCard, { LEAVING_FALLBACK_MS, LEAVING_START_GUARD_MS, TaskCardLeaving, TaskCardOverlay } from './TaskCard';
 import { BreezeContext } from '@/features/breeze/breezeContext';
 import type { BreezeContextValue } from '@/features/breeze/breezeContext';
 import { swayAnimation, swayOf } from '@/features/breeze';
@@ -522,16 +522,62 @@ describe('TaskCardLeaving', () => {
 
   // A browser that never runs the animation, a tab in the background for one,
   // would leave the picture on the board for good.
-  it('is taken off the board anyway when no animation ever reports an end', () => {
+  it('is taken off the board anyway when the animation never starts', () => {
     vi.useFakeTimers();
     try {
       const { onGone } = renderLeaving();
+
+      vi.advanceTimersByTime(LEAVING_START_GUARD_MS - 1);
+      expect(onGone).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(onGone).toHaveBeenCalledWith('task-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The animation's clock starts at the first frame the browser paints, which on
+  // a busy page comes hundreds of milliseconds after the picture mounts. A
+  // backstop counted from the mount would take the picture away partway through
+  // its 460 milliseconds, so the backstop is counted from the animation's own
+  // start.
+  it('lets a late animation play out, counting the backstop from its start', () => {
+    vi.useFakeTimers();
+    try {
+      const { onGone } = renderLeaving();
+
+      vi.advanceTimersByTime(LEAVING_FALLBACK_MS + 500);
+      act(() => {
+        leavingCard().dispatchEvent(new Event('animationstart', { bubbles: true }));
+      });
 
       vi.advanceTimersByTime(LEAVING_FALLBACK_MS - 1);
       expect(onGone).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(1);
+      expect(onGone).toHaveBeenCalledTimes(1);
       expect(onGone).toHaveBeenCalledWith('task-1');
+
+      vi.advanceTimersByTime(LEAVING_START_GUARD_MS);
+      expect(onGone).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not take a start inside the picture for the start of its own animation', () => {
+    vi.useFakeTimers();
+    try {
+      const { onGone } = renderLeaving();
+
+      vi.advanceTimersByTime(LEAVING_START_GUARD_MS - 100);
+      act(() => {
+        leavingCard().querySelector('h3')!.dispatchEvent(new Event('animationstart', { bubbles: true }));
+      });
+
+      vi.advanceTimersByTime(100);
+      expect(onGone).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
