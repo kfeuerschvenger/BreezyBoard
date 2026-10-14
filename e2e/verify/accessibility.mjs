@@ -141,7 +141,7 @@ const scan = async surface => {
 
   log(`\n--- ${surface} ---`);
 
-  for (const rule of [...rules].sort()) {
+  for (const rule of [...rules].sort((a, b) => a.localeCompare(b))) {
     const found = counted[rule] ?? 0;
     const budget = allowed[rule] ?? 0;
     const ok = found <= budget;
@@ -326,7 +326,7 @@ await page.keyboard.press('Escape');
 await settled(page, { label: 'the task modal to finish leaving' });
 const token =(await register.json()).data.token;
 const authorised = { headers: { Authorization: `Bearer ${token}` } };
-const boardId = page.url().match(/board\/([a-f0-9]{24})/)[1];
+const boardId = /board\/([a-f0-9]{24})/.exec(page.url())[1];
 const board = (await (await page.request.get(`${API}/boards/${boardId}`, authorised)).json()).data;
 const palette = (await (await page.request.get(`${API}/colors?type=task`, authorised)).json()).data;
 const created = await page.request.post(`${API}/tasks/board/${boardId}`, {

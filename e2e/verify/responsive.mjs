@@ -62,12 +62,12 @@ const MD = 768;
 /** The large breakpoint: from here up the sidebar is a column, below it a panel. */
 const LARGE = 1024;
 
-const req = async (method, path, token, body) => {
+const req = async (method, path, bearer, body) => {
   const response = await fetch(API + path, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -189,7 +189,7 @@ const audit = target =>
         el.getAttribute('aria-label') ||
         el.getAttribute('name') ||
         el.getAttribute('placeholder') ||
-        el.textContent.trim().replace(/\s+/g, ' ');
+        el.textContent.trim().replaceAll(/\s+/g, ' ');
       return `${el.tagName.toLowerCase()}${name ? ` "${name.slice(0, 32)}"` : ''}`;
     };
 
@@ -731,7 +731,7 @@ const modalGeometry = () =>
     };
   });
 
-const within = (r, vw, vh) => Boolean(r) && r.left >= -0.5 && r.right <= vw + 0.5 && r.top >= -0.5 && r.bottom <= vh + 0.5;
+const within = (r, vw, vh) => r?.left >= -0.5 && r.right <= vw + 0.5 && r.top >= -0.5 && r.bottom <= vh + 0.5;
 
 for (const viewport of VIEWPORTS) {
   await page.setViewportSize(viewport);

@@ -287,7 +287,7 @@ test.describe('board core loop', () => {
       await expect(dialog).toBeVisible();
     });
 
-    const cardId = await page.locator('[data-task-card]', { hasText: 'Modal task' }).getAttribute('data-task-card');
+    const cardId = await page.locator('[data-task-card]', { hasText: 'Modal task' }).evaluate(card => card.dataset.taskCard);
 
     await test.step('the footer is Blow it away and one Done, with no Cancel', async () => {
       await expect(dialog.getByRole('button', { name: 'Blow it away' })).toBeVisible();
@@ -314,7 +314,7 @@ test.describe('board core loop', () => {
       await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toBeVisible();
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
       expect(
-        await page.locator('[data-task-card]', { hasText: 'Modal task' }).getAttribute('data-task-card'),
+        await page.locator('[data-task-card]', { hasText: 'Modal task' }).evaluate(card => card.dataset.taskCard),
         'the same card, not a new one',
       ).toBe(cardId);
 
@@ -322,7 +322,7 @@ test.describe('board core loop', () => {
       await expect(page.getByRole('heading', { name: 'Modal task', level: 3 })).toBeVisible();
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
       expect(
-        await page.locator('[data-task-card]', { hasText: 'Modal task' }).getAttribute('data-task-card'),
+        await page.locator('[data-task-card]', { hasText: 'Modal task' }).evaluate(card => card.dataset.taskCard),
         'and it is still the card the server had',
       ).toBe(cardId);
     });

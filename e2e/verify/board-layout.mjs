@@ -25,12 +25,12 @@ const check = (label, ok, detail = "") => {
   log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? `  -> ${detail}` : ""}`);
 };
 
-const req = async (method, path, token, body) => {
+const req = async (method, path, bearer, body) => {
   const response = await fetch(API + path, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -282,8 +282,8 @@ for (const viewport of VIEWPORTS) {
     .boundingBox();
   const columnBox = await page
     .getByRole("heading", { level: 2, name: boardColumns[0].title })
-    .evaluate((heading) => {
-      const box = heading.closest('div[class*="shrink-0"]').parentElement.getBoundingClientRect();
+    .evaluate((columnHeading) => {
+      const box = columnHeading.closest('div[class*="shrink-0"]').parentElement.getBoundingClientRect();
       return { top: box.top, bottom: box.bottom };
     });
   check(

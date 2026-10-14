@@ -123,8 +123,10 @@ export async function columnCount(page: Page, columnTitle: string): Promise<numb
   if ((await heading.count()) === 0) return -1;
 
   const text = await heading.first().locator('..').innerText();
-  const match = /(\d+)\s*$/.exec(text);
-  return match ? Number(match[1]) : -1;
+  // Trimmed first: a trailing `\s*` after a greedy `\d+` backtracks in
+  // quadratic time on a long run of digits and spaces.
+  const match = /\d+$/.exec(text.trimEnd());
+  return match ? Number(match[0]) : -1;
 }
 
 /**

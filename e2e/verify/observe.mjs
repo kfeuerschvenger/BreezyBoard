@@ -79,8 +79,8 @@ export const settled = async (target, options = {}) => {
         });
         const unfinished = root =>
           root.getAnimations({ subtree: true }).filter(animation => {
-            const timing = animation.effect?.getComputedTiming();
-            return timing && timing.iterations !== Infinity && animation.playState === 'running';
+            const iterations = animation.effect?.getComputedTiming().iterations;
+            return iterations !== undefined && iterations !== Infinity && animation.playState === 'running';
           });
         const tick = () => {
           const now = performance.now();
