@@ -36,9 +36,13 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('heading', { level: 1, name: 'Renamed on the board page' })).toBeVisible();
 
-    // The sidebar's Home link is a client side navigation, so what the dashboard
-    // shows here is what the cache holds, not what a fresh load would fetch.
-    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    // The breadcrumb's Home entry is a client side navigation, so what the
+    // dashboard shows here is what the cache holds, not what a fresh load would
+    // fetch. Its last entry, the board, is text and not a link.
+    const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(breadcrumb.getByRole('link')).toHaveCount(1);
+    await breadcrumb.getByRole('link', { name: 'Home', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Your boards' })).toBeVisible();
     await expect(page.getByRole('main').getByRole('link', { name: 'Renamed on the board page', exact: true })).toBeVisible();
     await expect(page.getByText('A new description')).toBeVisible();
     // The sidebar names the board from the same cache.
@@ -169,6 +173,41 @@ test.describe('editing and deleting a board from its page', () => {
     await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click();
     await expect(page.getByRole('status')).toContainText(`Restored "${title}"`);
     await expect(page.getByRole('main').getByRole('link', { name: title, exact: true })).toBeVisible();
+  });
+});
+
+test.describe('adding members from the board page', () => {
+  test('the owner adds a person from the board menu, and the board stores them', async ({ page, authedUser }) => {
+    const boardId = await seedBoard(page, authedUser.token!, [['Shared task']]);
+
+    const base = makeUser();
+    const lastName = `Joiner${Date.now()}`;
+    const newcomer = { ...base, lastName };
+    const registered = await page.request.post(`${API_URL}/auth/register`, { data: newcomer });
+    expect(registered.ok(), `Registration failed with ${registered.status()}`).toBe(true);
+    const newcomerId = (await registered.json()).data.user.id;
+
+    await logInThroughTheUi(page, authedUser);
+    await page.goto(boardUrl(boardId));
+    await page.getByRole('heading', { level: 1 }).waitFor();
+
+    await chooseFromBoardMenu(page, 'Add members');
+    const dialog = page.getByRole('dialog', { name: 'Add Members' });
+    await dialog.getByRole('textbox', { name: 'Search team members' }).fill(lastName);
+    // The server stores names in lower case, so the row is matched without case.
+    await dialog.getByRole('button', { name: new RegExp(lastName, 'i') }).click();
+    await dialog.getByRole('button', { name: 'Add 1 Member' }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect
+      .poll(async () => {
+        const stored = await page.request.get(`${API_URL}/boards/${boardId}`, {
+          headers: { Authorization: `Bearer ${authedUser.token}` },
+        });
+        const members = (await stored.json()).data.members as Array<string | { _id: string }>;
+        return members.map(member => (typeof member === 'string' ? member : member._id));
+      })
+      .toContain(newcomerId);
   });
 });
 
