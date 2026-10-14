@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
-import { IconCircleCheckFilled, IconGripVertical, IconListCheck } from '@tabler/icons-react';
+import { IconAlignLeft, IconCircleCheckFilled,IconGripVertical, IconListCheck } from '@tabler/icons-react';
 import { swayAnimation, swayOf, useBreeze } from '@/features/breeze';
 import { Avatar, Chip, Icon } from '@/shared/ui';
 import type { Task } from '@/models';
@@ -99,6 +99,8 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
 
   // Anything unrecognised reads as the least urgent rather than crashing.
   const priority = asTaskPriority(task.priority);
+
+  const hasDescription = Boolean(task.description?.trim());
 
   const owner = typeof task.owner === 'object' && task.owner ? task.owner : null;
   const ownerName = owner ? `${owner.firstName ?? ''} ${owner.lastName ?? ''}`.trim() : '';
@@ -236,8 +238,16 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
         </div>
       </div>
 
-      {(totalItems > 0 || owner) && (
+      {(totalItems > 0 || owner || hasDescription) && (
         <div className="flex items-center gap-3 text-xs">
+          {/* The text is not printed, only the fact that there is some. The words are read inside the card, not in its name. */}
+          {hasDescription && (
+            <span data-task-description className="flex items-center text-ink-secondary">
+              <Icon as={IconAlignLeft} size={14} aria-hidden="true" />
+              <span className="sr-only">Has a description</span>
+            </span>
+          )}
+
           {totalItems > 0 && (
             <span
               data-checklist-progress

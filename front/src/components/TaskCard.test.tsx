@@ -63,6 +63,36 @@ describe('TaskCard rendering', () => {
     expect(screen.queryByText('For this cycle.')).not.toBeInTheDocument();
   });
 
+  describe('the description marker', () => {
+    const marker = () => card().querySelector('[data-task-description]');
+
+    it('shows a decorative icon with a hint for assistive technology when there is a description', () => {
+      renderCard(makeTask({ description: 'For this cycle.' }));
+
+      expect(marker()).toBeInTheDocument();
+      expect(marker()?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(marker()?.querySelector('.sr-only')).toHaveTextContent('Has a description');
+    });
+
+    it('keeps the card named by its title alone', () => {
+      renderCard(makeTask({ description: 'For this cycle.' }));
+
+      expect(card()).toHaveAccessibleName('Write the release notes');
+    });
+
+    it.each([undefined, '', '   '])('draws nothing for a description of %j', description => {
+      renderCard(makeTask({ description }));
+
+      expect(marker()).not.toBeInTheDocument();
+    });
+
+    it('draws it in the secondary ink, which holds contrast on the card', () => {
+      renderCard(makeTask({ description: 'For this cycle.' }));
+
+      expect(marker()).toHaveClass('text-ink-secondary');
+    });
+  });
+
   it('names the owner for assistive technology and draws their avatar', () => {
     renderCard(makeTask({ owner: ADA }));
 
