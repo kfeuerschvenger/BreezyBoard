@@ -40,7 +40,7 @@ test.describe('editing and deleting a board from its page', () => {
     // dashboard shows here is what the cache holds, not what a fresh load would
     // fetch. Its last entry, the board, is text and not a link.
     const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' });
-    await expect(breadcrumb.getByRole('link')).toHaveCount(1);
+    await expect(breadcrumb.getByRole('link')).toHaveCount(2);
     await breadcrumb.getByRole('link', { name: 'Home', exact: true }).click();
     await expect(page.getByRole('heading', { level: 2, name: 'Your boards' })).toBeVisible();
     await expect(page.getByRole('main').getByRole('link', { name: 'Renamed on the board page', exact: true })).toBeVisible();
@@ -56,6 +56,28 @@ test.describe('editing and deleting a board from its page', () => {
     });
     const { color } = (await stored.json()).data;
     expect(color._id, 'the colour change was saved, not only shown').not.toBe(originalColor);
+  });
+
+  test('the breadcrumb reads Home, Boards, board, and Boards lands on the grid of boards', async ({ page, authedUser }) => {
+    const boardId = await seedBoard(page, authedUser.token!, [['Keep me']]);
+    await logInThroughTheUi(page, authedUser);
+    await page.goto(boardUrl(boardId));
+    const title = await page.getByRole('heading', { level: 1 }).innerText();
+
+    const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(breadcrumb.getByRole('listitem')).toHaveText(['Home', 'Boards', title]);
+    await expect(breadcrumb.getByRole('link', { name: 'Home', exact: true })).toHaveAttribute('href', '/');
+    await expect(breadcrumb.getByRole('link', { name: 'Boards', exact: true })).toHaveAttribute('href', '/#boards');
+    await expect(breadcrumb.locator('[aria-current="page"]')).toHaveText(title);
+
+    await breadcrumb.getByRole('link', { name: 'Boards', exact: true }).click();
+
+    // The fragment is in the address, the grid's heading has focus and is on screen.
+    await expect(page).toHaveURL(/\/#boards$/);
+    const heading = page.getByRole('heading', { level: 2, name: 'Your boards' });
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport();
+    await expect(page.locator('section#boards')).toContainText(title);
   });
 
   test('a board deleted from its page can be undone, with its tasks', async ({ page, authedUser }) => {

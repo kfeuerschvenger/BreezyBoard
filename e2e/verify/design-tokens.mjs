@@ -1768,6 +1768,7 @@ for (const [label, locator, token] of [
   ['the Still air line', boardPage.getByText('Drop a card here or add one below.').first(), '--color-ink-tertiary'],
   ['the composer button', boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }), '--color-ink-secondary'],
   ['the breadcrumb link to Home', boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Home' }), '--color-ink-secondary'],
+  ['the breadcrumb link to Boards', boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Boards' }), '--color-ink-secondary'],
 ]) {
   const behind = await extremeBehind(boardPage, locator, 'darkest');
   await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
@@ -1811,16 +1812,20 @@ check('the marker is drawn in the secondary ink', await paintOf(boardPage, await
 check('the card is still named by its title alone', await describedCard.getAttribute('aria-labelledby').then(id => boardPage.locator(`[id="${id}"]`).textContent()), 'Gate medium task');
 check('the description text is not on the page', await boardPage.getByText('Written under the title').count(), 0);
 
-// The breadcrumb's way back to Home: a link with a keyboard focus ring and a
-// target of at least 24 pixels, leaving the board's own name as text.
-const homeCrumb = boardPage.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Home' });
-check('the breadcrumb link to Home is 32 pixels tall at a desktop width, above the 24 pixel minimum', await homeCrumb.evaluate(el => Math.round(el.getBoundingClientRect().height)), 32);
-check('a keyboard focused breadcrumb link draws a 2px outline offset by 2px', await (async () => {
-  await homeCrumb.focus();
-  await boardPage.keyboard.press('Shift+Tab');
-  await boardPage.keyboard.press('Tab');
-  return homeCrumb.evaluate(el => { const s = getComputedStyle(el); return `${s.outlineStyle} ${s.outlineWidth} ${s.outlineOffset}`; });
-})(), 'solid 2px 2px');
+// The breadcrumb's two links, Home and Boards: each with a keyboard focus ring
+// and a target of at least 24 pixels, leaving the board's own name as text.
+const crumbNav = boardPage.getByRole('navigation', { name: 'Breadcrumb' });
+for (const name of ['Home', 'Boards']) {
+  const crumb = crumbNav.getByRole('link', { name });
+  check(`the breadcrumb link to ${name} is 32 pixels tall at a desktop width, above the 24 pixel minimum`, await crumb.evaluate(el => Math.round(el.getBoundingClientRect().height)), 32);
+  check(`a keyboard focused breadcrumb link to ${name} draws a 2px outline offset by 2px`, await (async () => {
+    await crumb.focus();
+    await boardPage.keyboard.press('Shift+Tab');
+    await boardPage.keyboard.press('Tab');
+    return crumb.evaluate(el => { const s = getComputedStyle(el); return `${s.outlineStyle} ${s.outlineWidth} ${s.outlineOffset}`; });
+  })(), 'solid 2px 2px');
+}
+check('the two breadcrumb separators are in the tertiary ink', await crumbNav.locator('li[aria-hidden="true"]').evaluateAll(items => items.map(li => getComputedStyle(li).color)).then(async colors => (await Promise.all(colors.map(c => paintOf(boardPage, c)))).join('|')), [await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-tertiary')), await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-tertiary'))].join('|'));
 check('the board name in the breadcrumb is text, not a link', await boardPage.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]').evaluate(el => `${el.tagName} ${el.closest('a') === null}`), 'LI true');
 const landedColumn = boardPage.locator('[data-column]').nth(3);
 check('the last column has the arrival icon and a green dot, and keeps its own name', `${await landedColumn.locator('h2 ~ svg').count()} ${await landedColumn.getByRole('heading', { level: 2 }).textContent()}`, `1 ${gateBoardColumns[3].title}`);

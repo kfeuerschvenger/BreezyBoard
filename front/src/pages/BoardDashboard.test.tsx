@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import BoardDashboard from './BoardDashboard';
 import { ShellContext } from '@/app/layouts/shell/shellContext';
@@ -79,9 +79,9 @@ const BOARDS: Board[] = [
 
 const openCreateBoard = vi.fn();
 
-const renderDashboard = () =>
+const renderDashboard = (entry = '/') =>
   renderWithQuery(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
       <ShellContext.Provider value={{ headerSlot: null, openCreateBoard }}>
         <BoardDashboard />
       </ShellContext.Provider>
@@ -570,5 +570,96 @@ describe('BoardDashboard deletion', () => {
     await user.click(screen.getByRole('button', { name: 'Options for Hiring' }));
 
     expect(screen.getByRole('button', { name: /^Delete$/ })).toBeEnabled();
+  });
+});
+
+
+// The breadcrumb's "Boards" entry leads here as `/#boards`. React Router changes
+// the address and leaves the scroll alone, so the page scrolls and focuses.
+describe('BoardDashboard grid fragment', () => {
+  const scrollIntoView = vi.fn();
+  const matchMedia = (reduced: boolean) =>
+    vi.fn().mockImplementation((query: string) => ({
+      matches: reduced && query.includes('reduce'),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+
+  const originalScroll = Element.prototype.scrollIntoView;
+  const originalMatchMedia = window.matchMedia;
+
+  beforeEach(() => {
+    scrollIntoView.mockReset();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.matchMedia = matchMedia(false) as unknown as typeof window.matchMedia;
+  });
+
+  afterEach(() => {
+    Element.prototype.scrollIntoView = originalScroll;
+    window.matchMedia = originalMatchMedia;
+  });
+
+  it('gives the grid section the id the fragment names, labelled by its heading', async () => {
+    renderDashboard();
+
+    const heading = await screen.findByRole('heading', { name: 'Your boards' });
+
+    expect(heading.closest('section')).toHaveAttribute('id', 'boards');
+    expect(heading).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('scrolls the heading into view smoothly and focuses it when the address names the grid', async () => {
+    renderDashboard('/#boards');
+
+    const heading = await screen.findByRole('heading', { name: 'Your boards' });
+
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(scrollIntoView.mock.contexts[0]).toBe(heading);
+  });
+
+  it('scrolls without animation when the operating system asks for reduced motion', async () => {
+    window.matchMedia = matchMedia(true) as unknown as typeof window.matchMedia;
+
+    renderDashboard('/#boards');
+    await screen.findByRole('heading', { name: 'Your boards' });
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' }));
+  });
+
+  it('waits for the grid instead of scrolling the loading screen', async () => {
+    renderDashboard('/#boards');
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    await screen.findByRole('heading', { name: 'Your boards' });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+  });
+
+  it('leaves the scroll and the focus alone for an address with no fragment or another one', async () => {
+    renderDashboard('/#elsewhere');
+
+    const heading = await screen.findByRole('heading', { name: 'Your boards' });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(heading).not.toHaveFocus();
+  });
+
+  it('scrolls again when the person is already on Home and follows the link a second time', async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <MemoryRouter initialEntries={['/#boards']}>
+        <ShellContext.Provider value={{ headerSlot: null, openCreateBoard }}>
+          <Link to={{ pathname: '/', hash: '#boards' }}>Boards link</Link>
+          <BoardDashboard />
+        </ShellContext.Provider>
+      </MemoryRouter>
+    );
+    await screen.findByRole('heading', { name: 'Your boards' });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole('link', { name: 'Boards link' }));
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
   });
 });

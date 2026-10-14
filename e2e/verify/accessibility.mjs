@@ -78,7 +78,7 @@ const log = (...a) => console.log(...a);
 const results = [];
 
 // A plain assertion beside the axe scans, for what axe has no rule for: that a
-// menu offers its items in order, or that a breadcrumb has the one link.
+// menu offers its items in order, or that a breadcrumb has its two links.
 const check = (label, got, expected) => {
   const ok = got === expected;
   results.push(ok);
@@ -336,19 +336,26 @@ await scan('board, add members dialog open');
 await page.keyboard.press('Escape');
 await page.getByRole('dialog', { name: 'Add Members' }).waitFor({ state: 'hidden' });
 
-// The breadcrumb above the board is a navigation with one link, the way back
-// to Home, and its last entry is the board as text. The link is scanned with
-// the page, and its name and place are asserted here.
+// The breadcrumb above the board reads Home, Boards, then the board. Home and
+// Boards are links, to the page and to its grid of boards, and the last entry
+// is the board as text. The separators are hidden from assistive technology.
+// The links are scanned with the page, and their names and places are
+// asserted here.
 const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
 check(
-  'the breadcrumb on a board has one link, named Home and leading to /',
-  `${await crumbs.getByRole('link').count()} ${await crumbs.getByRole('link', { name: 'Home' }).getAttribute('href')}`,
-  '1 /',
+  'the breadcrumb on a board has two links, Home to / and Boards to /#boards',
+  `${await crumbs.getByRole('link').count()} ${await crumbs.getByRole('link', { name: 'Home', exact: true }).getAttribute('href')} ${await crumbs.getByRole('link', { name: 'Boards', exact: true }).getAttribute('href')}`,
+  '2 / /#boards',
 );
 check(
   'the last entry of the breadcrumb is the board, as text marked as the current page',
   `${await crumbs.locator('[aria-current="page"]').count()} ${await crumbs.locator('[aria-current="page"] a').count()}`,
   '1 0',
+);
+check(
+  'the breadcrumb separators are hidden from assistive technology and the entries are three',
+  `${await crumbs.locator('li[aria-hidden="true"]').count()} ${await crumbs.getByRole('listitem').count()}`,
+  '2 3',
 );
 
 // The edit dialog is a modal over the board page. It is scanned with the

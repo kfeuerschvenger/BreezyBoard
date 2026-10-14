@@ -445,6 +445,49 @@ const authed = [
     },
   },
   {
+    // Home, Boards and the board's name share the strip with the menu button
+    // and the header's action. Below the small breakpoint Home is an icon and
+    // Boards is left out, because the name would otherwise have no width. The name is the one entry that may give way,
+    // and it gives way by truncating with its full text in `title`; the two
+    // links stay whole, as tall as a touch target below the large breakpoint,
+    // and inside the navigation.
+    name: 'board, breadcrumb',
+    open: async () => {
+      await page.goto(`${FRONT}/board/${boardId}`);
+      await page.getByText('Short task', { exact: true }).waitFor();
+      const width = page.viewportSize().width;
+      const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+      const box = await crumbs.evaluate(nav => {
+        const rect = el => {
+          const r = el.getBoundingClientRect();
+          return { left: Math.round(r.left), right: Math.round(r.right), height: Math.round(r.height) };
+        };
+        const name = nav.querySelector('[aria-current="page"]');
+        return {
+          nav: rect(nav),
+          links: [...nav.querySelectorAll('a')].filter(a => a.getBoundingClientRect().width > 0).map(a => ({ text: a.textContent.trim(), ...rect(a), wide: a.scrollWidth > a.clientWidth })),
+          name: { ...rect(name), clipped: name.scrollWidth > name.clientWidth, title: name.getAttribute('title') },
+        };
+      });
+      check(`board breadcrumb at ${width}: ${width >= SMALL ? 'Home and Boards are both links' : 'Home is the one link, Boards is left out'}`, box.links.map(l => l.text).join('|'), width >= SMALL ? 'Home|Boards' : 'Home');
+      check(
+        `board breadcrumb at ${width}: both links are whole and inside the navigation`,
+        box.links.every(l => !l.wide && l.right <= box.nav.right + 8 && l.left >= box.nav.left - 8),
+        JSON.stringify(box.links)
+      );
+      check(
+        `board breadcrumb at ${width}: both links are ${width >= LARGE ? 32 : 44} pixels tall`,
+        box.links.every(l => l.height === (width >= LARGE ? 32 : 44)),
+        JSON.stringify(box.links.map(l => l.height))
+      );
+      check(
+        `board breadcrumb at ${width}: the board name is the entry that gives way, stays at least 48 pixels wide and says so in full`,
+        box.name.right <= box.nav.right + 1 && box.name.right - box.name.left >= 48 && (box.name.clipped || width >= MD) && box.name.title.startsWith('A board with'),
+        JSON.stringify(box.name)
+      );
+    },
+  },
+  {
     name: 'board, move menu',
     open: async () => {
       await page.goto(`${FRONT}/board/${boardId}`);
