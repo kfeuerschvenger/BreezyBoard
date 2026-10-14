@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DndContext } from '@dnd-kit/core';
 import { SortableContext } from '@dnd-kit/sortable';
-import TaskCard, { TaskCardOverlay } from './TaskCard';
+import TaskCard, { LEAVING_FALLBACK_MS, TaskCardLeaving, TaskCardOverlay } from './TaskCard';
 import { BreezeContext } from '@/features/breeze/breezeContext';
 import type { BreezeContextValue } from '@/features/breeze/breezeContext';
 import { swayAnimation, swayOf } from '@/features/breeze';
@@ -447,6 +447,109 @@ describe('TaskCard in gusty weather', () => {
 
     expect(card().style.animation).toBe('');
     expect(card()).toHaveClass('animate-bb-land');
+  });
+});
+
+describe('TaskCardLeaving', () => {
+  const leavingCard = () => document.querySelector('[data-task-leaving]') as HTMLElement;
+
+  const renderLeaving = (onGone = vi.fn(), value?: Partial<BreezeContextValue>) => {
+    render(
+      <BreezeContext.Provider
+        value={{ stored: 'breezy', level: 'breezy', reducedBySystem: false, setLevel: () => undefined, ...value }}
+      >
+        <TaskCardLeaving task={makeTask({ owner: ADA })} onGone={onGone} />
+      </BreezeContext.Provider>,
+    );
+    return { onGone };
+  };
+
+  it('plays the blow away animation and takes no pointer', () => {
+    renderLeaving();
+
+    expect(leavingCard()).toHaveClass('animate-bb-away');
+    expect(leavingCard()).toHaveClass('pointer-events-none');
+  });
+
+  // The exit is interaction motion, not ambient motion: Breeze Still removes
+  // the sway and the wind and leaves this alone, and only the system's own
+  // reduced motion preference collapses it, in the stylesheet.
+  it.each([
+    ['at Still', { level: 'still', stored: 'still' }],
+    ['at Gusty', { level: 'gusty', stored: 'gusty' }],
+    ['when the system asks for reduced motion', { level: 'still', stored: 'gusty', reducedBySystem: true }],
+  ] as const)('keeps the animation %s', (_label, value) => {
+    renderLeaving(vi.fn(), value);
+
+    expect(leavingCard()).toHaveClass('animate-bb-away');
+  });
+
+  it('does not sway while it leaves, because the sway would replace the exit', () => {
+    renderLeaving(vi.fn(), { level: 'gusty', stored: 'gusty' });
+
+    expect(leavingCard().style.animation).toBe('');
+  });
+
+  it('is a picture of the card: hidden from assistive technology, inert, with no control', () => {
+    renderLeaving();
+
+    expect(leavingCard()).toHaveAttribute('aria-hidden', 'true');
+    expect(leavingCard()).toHaveAttribute('inert');
+    expect(within(leavingCard()).queryByRole('button', { hidden: true })).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('is not found as a card of the board', () => {
+    renderLeaving();
+
+    expect(document.querySelector('[data-task-card]')).toBeNull();
+    expect(leavingCard().getAttribute('data-task-leaving')).toBe('task-1');
+  });
+
+  it('says it is gone when its own animation ends, and not when one inside it does', () => {
+    const { onGone } = renderLeaving();
+
+    act(() => {
+      leavingCard().querySelector('h3')!.dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+    expect(onGone).not.toHaveBeenCalled();
+
+    act(() => {
+      leavingCard().dispatchEvent(new Event('animationend', { bubbles: true }));
+    });
+    expect(onGone).toHaveBeenCalledWith('task-1');
+  });
+
+  // A browser that never runs the animation, a tab in the background for one,
+  // would leave the picture on the board for good.
+  it('is taken off the board anyway when no animation ever reports an end', () => {
+    vi.useFakeTimers();
+    try {
+      const { onGone } = renderLeaving();
+
+      vi.advanceTimersByTime(LEAVING_FALLBACK_MS - 1);
+      expect(onGone).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(onGone).toHaveBeenCalledWith('task-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops its timer when the picture is removed first, so nothing reports for a card that is gone', () => {
+    vi.useFakeTimers();
+    try {
+      const onGone = vi.fn();
+      const view = render(<TaskCardLeaving task={makeTask({})} onGone={onGone} />);
+
+      view.unmount();
+      vi.advanceTimersByTime(LEAVING_FALLBACK_MS * 2);
+
+      expect(onGone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

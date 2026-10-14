@@ -8,6 +8,7 @@ import type { Hue } from '@/shared/ui';
 import { resolveColor } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import type { ColumnData } from '../hooks/useBoardData';
+import type { LeavingCard } from '../hooks/useLeavingCards';
 import type { UseTaskDragAndDropResult } from '../hooks/useTaskDragAndDrop';
 import { EmptyBoardHero } from './EmptyBoardHero';
 
@@ -29,6 +30,9 @@ export interface BoardColumnsProps {
   composerRequest?: number;
   /** Asks for it. The banner's button calls this. */
   onRequestComposer: () => void;
+  /** Deleted cards still playing their exit, and the call that says one has finished. */
+  leaving?: LeavingCard[];
+  onLeavingEnd?: (taskId: string) => void;
 }
 
 /**
@@ -47,6 +51,8 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
   onCreateTask,
   composerRequest = 0,
   onRequestComposer,
+  leaving,
+  onLeavingEnd,
 }) => {
   const colorOf = (task: Task) => resolveColor(task.color, taskColors);
 
@@ -169,6 +175,8 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
               onMove={mover.moveToColumn}
               onCreateTask={title => create(column.id, title)}
               composerRequest={column.id === firstColumnId ? composerRequest : 0}
+              leaving={leaving}
+              onLeavingEnd={onLeavingEnd}
             />
           ))}
         </div>

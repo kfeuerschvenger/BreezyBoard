@@ -6,7 +6,14 @@ import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
 import { BoardHeader, boardHueOf } from '@/features/boards';
 import { useColors } from '@/features/colors';
-import { BoardColumns, TaskModal, useBoardData, useDeleteTaskWithUndo, useTaskDragAndDrop } from '@/features/tasks';
+import {
+  BoardColumns,
+  TaskModal,
+  useBoardData,
+  useDeleteTaskWithUndo,
+  useLeavingCards,
+  useTaskDragAndDrop,
+} from '@/features/tasks';
 import type { MoveTarget, StoredTask } from '@/features/tasks';
 import { IconPlus } from '@tabler/icons-react';
 import { Button, LoadingScreen, Icon } from '@/shared/ui';
@@ -35,7 +42,10 @@ const Board = () => {
     cache,
   });
 
-  const { deleteTask } = useDeleteTaskWithUndo({ cache });
+  // A deleted card is off the board's list at once and plays its exit from a
+  // picture kept here. Neither the request nor the toast wait for it.
+  const { leaving, leave, end } = useLeavingCards();
+  const { deleteTask } = useDeleteTaskWithUndo({ cache, onRemoved: leave });
 
   const openTask = (task: Task) => {
     setSelectedTask(task);
@@ -202,6 +212,8 @@ const Board = () => {
         onCreateTask={createTask}
         composerRequest={composerRequest}
         onRequestComposer={requestComposer}
+        leaving={leaving}
+        onLeavingEnd={end}
       />
 
       <TaskModal

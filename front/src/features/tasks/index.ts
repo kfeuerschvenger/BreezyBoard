@@ -49,9 +49,12 @@ export { useTaskDragAndDrop } from './hooks/useTaskDragAndDrop';
 export type { TaskCache, UseTaskDragAndDropOptions, UseTaskDragAndDropResult } from './hooks/useTaskDragAndDrop';
 export { useTaskModal } from './hooks/useTaskModal';
 export type { UseTaskModalOptions, UseTaskModalResult } from './hooks/useTaskModal';
+export { useLeavingCards } from './hooks/useLeavingCards';
+export type { LeavingCard, UseLeavingCardsResult } from './hooks/useLeavingCards';
 export { useDeleteTaskWithUndo } from './hooks/useDeleteTaskWithUndo';
 export type {
   DeletionCache,
+  RemovedTask,
   UseDeleteTaskWithUndoOptions,
   UseDeleteTaskWithUndoResult,
 } from './hooks/useDeleteTaskWithUndo';
