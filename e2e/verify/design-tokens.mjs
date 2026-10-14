@@ -2020,25 +2020,26 @@ log('\n--- the reduced motion policy ---');
 // waits on an animation to finish: a dialog unmounts only after its exit
 // completes, so a dialog that opens and then never leaves the page under
 // this setting would be the failure to catch.
-// Three animation frames after the click: late enough for the panel to exist
-// and for a reduced motion preference to have dropped its transform (the
-// first frame still carries the initial one), early enough that a 350
-// millisecond entrance has barely started.
+// Six animation frames after the click: late enough for the panel to exist
+// and for a reduced motion preference to have dropped its transform, early
+// enough that a 350 millisecond entrance is still under way. Three frames
+// were measured to leave the initial transform in place on 3 of 10 openings,
+// and five on none of 10, so the sample sits one frame past that.
+const OPENING_FRAMES = 6;
 const sampleOpening = pg =>
   pg.evaluate(
-    () =>
+    frames =>
       new Promise(resolve => {
         const trigger = [...document.querySelectorAll('button')].find(b => /forgot it/i.test(b.textContent));
         trigger.click();
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              const style = getComputedStyle(document.querySelector('[role="dialog"]'));
-              resolve({ opacity: Number(style.opacity), transform: style.transform });
-            })
-          )
-        );
-      })
+        const step = left => {
+          if (left > 0) return requestAnimationFrame(() => step(left - 1));
+          const style = getComputedStyle(document.querySelector('[role="dialog"]'));
+          resolve({ opacity: Number(style.opacity), transform: style.transform });
+        };
+        step(frames);
+      }),
+    OPENING_FRAMES
   );
 
 const calm = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
