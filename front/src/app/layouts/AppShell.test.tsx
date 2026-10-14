@@ -297,7 +297,49 @@ describe('the header', () => {
     const board = await within(breadcrumb()).findByText('Roadmap');
 
     expect(board).toHaveAttribute('aria-current', 'page');
-    expect(within(breadcrumb()).getByText('Boards')).not.toHaveAttribute('aria-current');
+    expect(within(breadcrumb()).getByText('Home')).not.toHaveAttribute('aria-current');
+  });
+
+  it('makes the section a link back to Home on a board, and leaves the board as text', async () => {
+    renderShell('/board/board-1');
+    const board = await within(breadcrumb()).findByText('Roadmap');
+
+    const home = within(breadcrumb()).getByRole('link', { name: 'Home' });
+
+    expect(home).toHaveAttribute('href', '/');
+    expect(home).not.toHaveAttribute('aria-current');
+    expect(within(breadcrumb()).getAllByRole('link')).toEqual([home]);
+    expect(board.closest('a')).toBeNull();
+    expect(board).toHaveAttribute('aria-current', 'page');
+  });
+
+  // 44 pixels tall on touch and 32 from the large breakpoint, never the bare
+  // line of text: a class assertion because jsdom loads no stylesheet.
+  it('gives the link a focus ring and a target that is not the line of text', async () => {
+    renderShell('/board/board-1');
+    await within(breadcrumb()).findByText('Roadmap');
+
+    const home = within(breadcrumb()).getByRole('link', { name: 'Home' });
+
+    expect(home).toHaveClass('focus-ring', 'min-h-11', 'lg:min-h-8');
+  });
+
+  it('goes to the home page when the link is pressed', async () => {
+    const user = userEvent.setup();
+    renderShell('/board/board-1');
+    await within(breadcrumb()).findByText('Roadmap');
+
+    await user.click(within(breadcrumb()).getByRole('link', { name: 'Home' }));
+
+    await waitFor(() => expect(within(breadcrumb()).queryByRole('link')).not.toBeInTheDocument());
+    expect(within(breadcrumb()).getByText('Home')).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('keeps the section as text on the pages that are not a board', async () => {
+    renderShell('/profile');
+    await screen.findByRole('link', { name: 'Roadmap' });
+
+    expect(within(breadcrumb()).queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('names the profile', async () => {
@@ -319,7 +361,8 @@ describe('the header', () => {
     renderShell('/board/board-9');
     await screen.findByRole('link', { name: 'Roadmap' });
 
-    expect(within(breadcrumb()).getByText('Boards')).toHaveAttribute('aria-current', 'page');
+    expect(within(breadcrumb()).getByText('Home')).toHaveAttribute('aria-current', 'page');
+    expect(within(breadcrumb()).queryByRole('link')).not.toBeInTheDocument();
   });
 });
 

@@ -190,7 +190,7 @@ describe('the sidebar as a panel', () => {
 
   it.each([
     ['a board', () => screen.getByRole('link', { name: 'Launch plan' })],
-    ['Home', () => screen.getByRole('link', { name: 'Home' })],
+    ['Home', () => within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Home' })],
     ['the logo', () => screen.getByRole('link', { name: 'breezyboard' })],
   ])('closes when %s is chosen, because the destination is what was asked for', async (_name, target) => {
     const user = userEvent.setup();
@@ -206,7 +206,7 @@ describe('the sidebar as a panel', () => {
   // The address does not change, so only the link itself can say the panel is
   // done.
   it.each([
-    ['Home', '/', () => screen.getByRole('link', { name: 'Home' })],
+    ['Home', '/', () => within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Home' })],
     ['the logo', '/', () => screen.getByRole('link', { name: 'breezyboard' })],
     ['the board that is open', '/board/board-1', () => screen.getByRole('link', { name: 'Roadmap' })],
   ])('closes when %s is chosen while already there', async (_name, path, target) => {
