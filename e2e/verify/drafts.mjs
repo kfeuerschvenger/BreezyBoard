@@ -141,7 +141,10 @@ check(
 );
 
 // Finish the edit properly, then confirm the draft is not left behind.
-await page.getByRole('button', { name: /save changes/i }).click();
+// The footer is Blow it away and one Done, which saves and closes. The column
+// called Done is a button in the dialog as well, so the submit button is read
+// by its type.
+await page.getByRole('dialog').locator('button[type="submit"]').click();
 await page.getByRole('dialog').waitFor({ state: 'detached' });
 await page.getByRole('button', { name: 'Half edited title', exact: true }).waitFor();
 check('the draft is cleared after a successful save', (await draftOf(draftKey)) === null, String(await draftOf(draftKey)));
@@ -151,6 +154,40 @@ const saved = await page.getByPlaceholder('Enter task description').inputValue()
 check('the saved text is what the form shows afterwards', saved === SENTENCE, saved);
 await page.keyboard.press('Escape');
 await page.getByRole('dialog').waitFor({ state: 'detached' });
+
+// There is no Cancel. The close button and Escape leave the dialog without
+// saving, and what was typed stays as a draft for the next time.
+const dialogButtons = async () => (await page.getByRole('dialog').getByRole('button').allInnerTexts()).map(text => text.trim());
+await openCard('Half edited title');
+const labels = await dialogButtons();
+check('the dialog has no Cancel and no Save Changes button', !labels.some(label => /^(cancel|save changes)$/i.test(label)), labels.join('|'));
+await page.getByPlaceholder('Enter task title').fill('Typed and closed');
+await page.waitForFunction(([key]) => (window.localStorage.getItem(key) ?? '').includes('Typed and closed'), [draftKey]);
+await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+await page.getByRole('dialog').waitFor({ state: 'detached' });
+check('closing with the close button keeps the draft', ((await draftOf(draftKey)) ?? '').includes('Typed and closed'), String(await draftOf(draftKey)));
+await page.getByRole('button', { name: 'Half edited title', exact: true }).waitFor();
+check('and the card on the board still has its saved title', (await page.getByRole('button', { name: 'Typed and closed', exact: true }).count()) === 0);
+
+await openCard('Half edited title');
+check('the next time the card opens it shows the draft', (await page.getByPlaceholder('Enter task title').inputValue()) === 'Typed and closed');
+await page.getByPlaceholder('Enter task title').fill('Typed and escaped');
+await page.waitForFunction(([key]) => (window.localStorage.getItem(key) ?? '').includes('Typed and escaped'), [draftKey]);
+await page.keyboard.press('Escape');
+await page.getByRole('dialog').waitFor({ state: 'detached' });
+check('closing with Escape keeps the draft too', ((await draftOf(draftKey)) ?? '').includes('Typed and escaped'), String(await draftOf(draftKey)));
+
+// Blowing the card away is the other way out, and it drops the draft: there is
+// no task left for it to be a draft of. Catching the card brings back the same
+// task, and the board is left as it was found.
+await openCard('Half edited title');
+await page.getByRole('dialog').getByRole('button', { name: 'Blow it away' }).click();
+await page.getByRole('dialog').waitFor({ state: 'detached' });
+check('blowing the card away drops its draft', (await draftOf(draftKey)) === null, String(await draftOf(draftKey)));
+await page.getByTestId('toast').getByRole('button', { name: 'Catch it' }).click();
+await page.getByRole('button', { name: 'Half edited title', exact: true }).waitFor();
+const caught = await req('GET', `/tasks/${taskId}`, token);
+check('catching it brings back the same task from the server', caught.status === 200 && caught.body.data.title === 'Half edited title', `${caught.status}`);
 
 log('\n--- the column composer ---');
 const composerKey = `breezyboard:draft:composer:${firstColumn._id}`;

@@ -176,6 +176,28 @@ const stale = await req('PATCH', `/tasks/${taskIds[1]}/move`, token, {
 check('a move against a stale neighbour is a conflict', stale.status, 409);
 check('and says so with a code the client can switch on', stale.body?.code, 'CONFLICT');
 
+log('\n--- a deleted task is invisible to every read, and restore brings back the same task in place ---');
+// Delete marks the task and removes nothing. It keeps its id, its creation
+// date and its ordering key, so a restore puts it back where it stood.
+const middleId = taskIds[1];
+const middleBefore = (await req('GET', `/tasks/${middleId}`, token)).body.data;
+const titlesBefore = (await req('GET', `/tasks/board/${boardId}`, token)).body.data.map(task => task.title).join(', ');
+check('DELETE /tasks/:id succeeds', (await req('DELETE', `/tasks/${middleId}`, token)).status, 200);
+check('the task is unreachable by id', (await req('GET', `/tasks/${middleId}`, token)).status, 404);
+check('and cannot be edited or deleted again', `${(await req('PUT', `/tasks/${middleId}`, token, { title: 'Ghost' })).status} ${(await req('DELETE', `/tasks/${middleId}`, token)).status}`, '404 404');
+const withoutIt = await req('GET', `/tasks/board/${boardId}`, token);
+check(
+  'the board read does not list it, keeps the others in order, and its total drops by one',
+  `${withoutIt.body.data.map(task => task.title).join(', ')} / ${withoutIt.body.pagination.total}`,
+  `${titlesBefore.split(', ').filter(title => title !== middleBefore.title).join(', ')} / 2`
+);
+check('the Home totals do not count it', (await req('GET', '/dashboard/stats', token)).body.data.totalTasks, 2);
+check('POST /tasks/:id/restore succeeds', (await req('POST', `/tasks/${middleId}/restore`, token)).status, 200);
+const middleAfter = (await req('GET', `/tasks/${middleId}`, token)).body.data;
+check('it is the same task: id, creation date and position', `${middleAfter._id === middleBefore._id} ${middleAfter.createdAt === middleBefore.createdAt} ${middleAfter.order === middleBefore.order}`, 'true true true');
+check('it is back in the same place on the board', (await req('GET', `/tasks/board/${boardId}`, token)).body.data.map(task => task.title).join(', '), titlesBefore);
+check('a second restore is not an error', (await req('POST', `/tasks/${middleId}/restore`, token)).status, 200);
+
 log('\n--- a deleted board and its tasks are unreachable, and restore brings them back ---');
 // Delete is a soft delete: the board is marked and its tasks are untouched,
 // so the observable contract is that nothing can reach them until the owner

@@ -2002,7 +2002,7 @@ await reportPairs(boardPage, [
   ['the unchosen priority text, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
   ['the checklist count, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
   ['a finished checklist item, on the panel', '--color-ink-secondary', '--color-surface', 4.5],
-  ['the Add Item link, on the panel', '--color-link', '--color-surface', 4.5],
+  ['the Add an item placeholder, on the panel', '--color-ink-tertiary', '--color-surface', 4.5],
   ['the checklist progress fill, on the track', '--color-green-edge', ['--color-surface', '--color-line-07'], 3],
   ['Blow it away, on the footer', '--color-danger', '--color-surface-subtle', 4.5],
   ['the checklist remove glyph, on the panel', '--color-danger', '--color-surface', 3],
@@ -2031,13 +2031,36 @@ const targetSizes = await taskModal.evaluate(dialog => {
   const size = el => [Math.round(el.offsetWidth), Math.round(el.offsetHeight)].join('x');
   return {
     close: size(dialog.querySelector('button[aria-label="Close"]')),
-    save: size([...dialog.querySelectorAll('button')].find(b => /save changes/i.test(b.textContent))),
+    save: size(dialog.querySelector('button[type="submit"]')),
     blow: size([...dialog.querySelectorAll('button')].find(b => /blow it away/i.test(b.textContent))),
     owner: size(dialog.querySelector('[role="combobox"]')),
   };
 });
 check('the close button is a 36 pixel disc', targetSizes.close, '36x36');
-check('Save Changes and Blow it away are 44 pixels tall', `${targetSizes.save.split('x')[1]} ${targetSizes.blow.split('x')[1]}`, '44 44');
+check('Done and Blow it away are 44 pixels tall', `${targetSizes.save.split('x')[1]} ${targetSizes.blow.split('x')[1]}`, '44 44');
+{
+  // The footer is a "Blow it away" on the left and one dark "Done" on the right,
+  // and nothing else: no Cancel, no Save.
+  const footer = await taskModal.evaluate(dialog => {
+    const done = dialog.querySelector('button[type="submit"]');
+    const row = done.parentElement;
+    const buttons = [...row.querySelectorAll('button')];
+    const blow = buttons.find(b => /blow it away/i.test(b.textContent));
+    return {
+      labels: buttons.map(b => b.textContent.trim()).join('|'),
+      blowLeftOfDone: blow.getBoundingClientRect().right < done.getBoundingClientRect().left,
+      doneAtRight: Math.round(dialog.getBoundingClientRect().right - done.getBoundingClientRect().right),
+      bg: getComputedStyle(done).backgroundColor,
+      blowBg: getComputedStyle(blow).backgroundColor,
+    };
+  });
+  check('the footer holds Blow it away and Done and nothing else', footer.labels, 'Blow it away|Done');
+  check('Blow it away is on the left of Done', footer.blowLeftOfDone, true);
+  check('Done is the one dark button, filled with ink', `${await paintOf(boardPage, footer.bg) === await paintOf(boardPage, await tokenValue(boardPage, '--color-ink'))} ${await paintOf(boardPage, footer.blowBg)}`, 'true 255,255,255');
+  check('Done is at the right edge of the dialog, inside its padding', footer.doneAtRight > 0 && footer.doneAtRight <= 40, true);
+}
+check('the field at the foot of the checklist is named Add an item, and is not a button', `${await taskModal.getByRole('textbox', { name: 'Add an item' }).count()} ${await taskModal.getByRole('button', { name: /add item/i }).count()}`, '1 0');
+check('the Add an item field is a text input with its own border', await taskModal.getByRole('textbox', { name: 'Add an item' }).evaluate(el => `${el.type} ${getComputedStyle(el).borderTopWidth}`), 'text 1px');
 check('the owner field is 48 pixels tall', targetSizes.owner.split('x')[1], '48');
 const moveFocus = await focusRing(boardPage, taskModal.getByRole('button', { name: gateBoardColumns[1].title, exact: true }));
 check('a column button has the 2 pixel focus ring', moveFocus, 'solid 2px 2px');
@@ -2350,6 +2373,152 @@ for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced m
   await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: 2000 });
   await modalContext.close();
 }
+
+log('\n--- the blown away exit: with motion on, at Still, and under reduced motion ---');
+
+// A card deleted from its modal is blown away for 460 milliseconds before it
+// leaves the board. It is interaction motion: it plays at every Breeze level,
+// and only the system's own reduced motion preference collapses it. A picture
+// of the card plays it, so what is asserted is that picture's computed style,
+// frame by frame, and that the card below it does not move until it is gone.
+// A frame can take 100 to 250 milliseconds on this page, so the checks read
+// what the frames show and never how many there were.
+const armExitRecorder = (pg, belowTitle) =>
+  pg.evaluate(title => {
+    window.__exit = new Promise(resolve => {
+      const started = performance.now();
+      const frames = [];
+      let first = null;
+      // The layout position of the card below, in its column's body: a card
+      // under the pointer lifts a couple of pixels on hover, and that is a
+      // transform and not a move of the layout this reads.
+      const belowTop = () =>
+        [...document.querySelectorAll('[data-task-card]')].find(card => card.querySelector('h3')?.textContent === title)
+          ?.offsetTop;
+      // Its own end, and how long it had run when it reported it. Heard on the
+      // document from the start, because a frame on this page can take longer
+      // than the animation and a listener added when the picture is first seen
+      // would miss an end that came before it.
+      let ended = null;
+      document.addEventListener(
+        'animationend',
+        event => {
+          if (event.target instanceof Element && event.target.hasAttribute('data-task-leaving')) {
+            ended = { elapsed: event.elapsedTime, name: event.animationName };
+          }
+        },
+        true
+      );
+      const step = () => {
+        const now = performance.now();
+        const picture = document.querySelector('[data-task-leaving]');
+        if (picture && !first) {
+          const style = getComputedStyle(picture);
+          first = {
+            at: now,
+            name: style.animationName,
+            duration: style.animationDuration,
+            pointer: style.pointerEvents,
+            ariaHidden: picture.getAttribute('aria-hidden'),
+            inert: picture.hasAttribute('inert'),
+            controls: picture.querySelectorAll('button, a, input').length,
+            asCard: Boolean(picture.closest('[data-task-card]')) || picture.hasAttribute('data-task-card'),
+            belowTop: belowTop(),
+          };
+        }
+        if (picture) {
+          const style = getComputedStyle(picture);
+          frames.push({
+            opacity: Number(style.opacity),
+            transform: style.transform,
+            toast: Boolean(document.querySelector('[data-testid="toast"]')),
+            belowTop: belowTop(),
+          });
+        }
+        if (first && !picture) {
+          return resolve({ first, frames, ended, elapsed: now - first.at, belowTopAfter: belowTop() });
+        }
+        if (now - started > 6000) return resolve({ first, frames, ended, elapsed: null, belowTopAfter: null });
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }, belowTitle);
+
+// The titles of the first column's cards, top to bottom.
+const columnTitles = pg =>
+  pg.evaluate(() =>
+    [...document.querySelector('[data-column]').querySelectorAll('[data-task-card] h3')].map(h => h.textContent)
+  );
+
+let exitRun = 0;
+for (const [mode, reducedMotion, breeze] of [
+  ['motion on', 'no-preference', 'breezy'],
+  ['at Still', 'no-preference', 'still'],
+  ['reduced motion', 'reduce', 'breezy'],
+]) {
+  exitRun += 1;
+  await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze } });
+  const top = `Away top ${exitRun}`;
+  const below = `Away below ${exitRun}`;
+  const topCreated = (await (await makeGateTask(top, 0)).json()).data;
+  await makeGateTask(below, 0);
+
+  const exitContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion });
+  const pg = await signIn(exitContext);
+  await pg.goto(gateBoardUrl);
+  await pg.getByRole('region', { name: 'Board columns' }).waitFor();
+  await pg.getByRole('button', { name: below, exact: true }).waitFor();
+  await pg.waitForTimeout(900);
+
+  const before = await columnTitles(pg);
+  const topId = await pg.locator('[data-task-card]', { hasText: top }).getAttribute('data-task-card');
+  check(`${mode}: the card to be blown away is the one the server made`, topId, topCreated._id);
+
+  await pg.getByRole('button', { name: top, exact: true }).click();
+  const exitDialog = pg.getByRole('dialog', { name: 'Edit Task' });
+  await exitDialog.waitFor();
+  await pg.waitForTimeout(400);
+  await armExitRecorder(pg, below);
+  await exitDialog.getByRole('button', { name: 'Blow it away' }).click();
+  const exit = await pg.evaluate(() => window.__exit);
+
+  check(`${mode}: a picture of the card plays bbAway`, exit.first?.name, 'bbAway');
+  check(`${mode}: the picture takes no pointer, is hidden from assistive technology, inert and has no control`, `${exit.first?.pointer} ${exit.first?.ariaHidden} ${exit.first?.inert} ${exit.first?.controls}`, 'none true true 0');
+  check(`${mode}: the picture is not found as a card of the board`, exit.first?.asCard, false);
+  // The picture is taken off the board by its own animationend and not by the
+  // timer that stands in for it, which is what the elapsed time on the event
+  // says: it had run the whole animation, or a hundredth of a millisecond of it.
+  if (reducedMotion === 'reduce') {
+    const seconds = Number.parseFloat(exit.first?.duration) * (String(exit.first?.duration).endsWith('ms') ? 0.001 : 1);
+    check(`${mode}: the exit collapses to under a millisecond`, seconds < 0.001, true);
+    check(`${mode}: and still reports its end`, `${exit.ended?.name} ${exit.ended !== null && exit.ended.elapsed < 0.001}`, 'bbAway true');
+  } else {
+    check(`${mode}: the exit is 460 milliseconds long`, exit.first?.duration, '0.46s');
+    check(`${mode}: the picture lifts off and fades while it plays`, exit.frames.some(f => f.opacity < 1 && f.transform !== 'none'), true);
+    check(`${mode}: it runs the whole animation before it reports its end`, `${exit.ended?.name} ${exit.ended !== null && exit.ended.elapsed >= 0.45 && exit.ended.elapsed <= 0.47}`, 'bbAway true');
+    check(`${mode}: the Catch it toast is on screen while the card is still leaving`, exit.frames.some(f => f.toast), true);
+  }
+  check(`${mode}: and the picture is gone within a second and a half`, exit.elapsed !== null && exit.elapsed < 1500, true);
+  const stayed = exit.frames.every(f => f.belowTop === exit.first.belowTop);
+  const closed = exit.belowTopAfter !== null && exit.belowTopAfter < exit.first.belowTop - 40;
+  if (!stayed || !closed) {
+    log(`  card below, layout top: first ${exit.first.belowTop}, frames ${JSON.stringify(exit.frames.map(f => f.belowTop))}, after ${exit.belowTopAfter}`);
+  }
+  check(`${mode}: the card below does not move while the picture plays`, stayed, true);
+  check(`${mode}: it closes the gap once the picture is gone`, closed, true);
+  check(`${mode}: the board does not hold the card any more`, await pg.locator('[data-task-card]', { hasText: top }).count(), 0);
+
+  await pg.getByTestId('toast').getByRole('button', { name: 'Catch it' }).click();
+  await pg.getByRole('button', { name: top, exact: true }).waitFor();
+  const after = await columnTitles(pg);
+  check(`${mode}: Catch it puts the card back in place`, after.join('|'), before.join('|'));
+  check(`${mode}: and it is the same card, with the same id`, await pg.locator('[data-task-card]', { hasText: top }).getAttribute('data-task-card'), topId);
+  const stored = await page.request.get(`${API}/tasks/${topId}`, homeAuth);
+  check(`${mode}: the server has the same task, with its own creation date`, `${stored.status()} ${(await stored.json()).data?.createdAt === topCreated.createdAt}`, '200 true');
+  await exitContext.close();
+}
+await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze: 'breezy' } });
 
 await browser.close();
 
