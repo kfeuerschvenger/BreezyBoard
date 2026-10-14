@@ -225,9 +225,43 @@ await page.getByRole('button', { name: /^create board$/i }).last().click();
 await page.getByText(boardName).first().click();
 await page.waitForURL(/\/board\/[a-f0-9]{24}$/);
 await page.waitForTimeout(400);
-await scan('board');
+// A board with no card at all: the banner above the columns and "Still air" in
+// each of them.
+await scan('board, empty');
 
-await page.getByRole('button', { name: /add task/i }).first().click();
+// The header's "Add card" opens the first column's composer, which is a form
+// at the foot of a column and is scanned open, with a title typed in it.
+await page.getByRole('button', { name: 'Add card', exact: true }).click();
+const composer = page.getByRole('textbox', { name: /new card in/i });
+await composer.waitFor();
+await composer.fill('Axe card');
+await scan('board, composer open');
+
+await composer.press('Enter');
+await page.getByRole('button', { name: 'Axe card', exact: true }).waitFor();
+await page.waitForTimeout(700);
+await scan('board, with a card');
+
+// A card held in the air: it is collapsed where it was, a gap is open where it
+// would land and a copy follows the pointer, and none of it may leave the page
+// with a node that is hidden and still focusable or a gap that is announced.
+await page.getByRole('button', { name: 'Drag handle' }).focus();
+await page.keyboard.press('Space');
+await page.locator('[id^="DndLiveRegion"]', { hasText: 'Picked up' }).waitFor();
+// The keyboard sensor listens for the arrows one task after the pick up, and
+// the announcement can be on screen before that. A task queued behind the
+// sensor's runs after it: timers of the same delay run in the order they were set.
+await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 0)));
+await page.keyboard.press('ArrowRight');
+await page.locator('[id^="DndLiveRegion"]', { hasText: 'Up Next' }).waitFor();
+await page.waitForTimeout(400);
+await scan('board, a card held with the keyboard');
+await page.keyboard.press('Escape');
+await page.locator('[id^="DndLiveRegion"]', { hasText: 'cancelled' }).waitFor();
+
+// A task is edited in the drawer until slice 7 replaces it with a modal.
+await page.getByRole('button', { name: 'Axe card', exact: true }).click();
+await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
 await page.waitForTimeout(400);
 await scan('board, task drawer open');
 

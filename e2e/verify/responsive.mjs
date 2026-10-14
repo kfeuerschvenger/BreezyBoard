@@ -134,6 +134,30 @@ const settle = async target => {
 };
 
 /**
+ * Resolves once the dialog's box has not moved for five frames. A fixed wait
+ * after it opens reads a panel that is still sliding in whenever the machine is
+ * slower than the wait, and reports its box a pixel short of the edge.
+ */
+const dialogStill = target =>
+  target.evaluate(
+    () =>
+      new Promise(resolve => {
+        const dialog = document.querySelector('[role="dialog"]');
+        let last = '';
+        let still = 0;
+        const tick = () => {
+          const box = dialog.getBoundingClientRect();
+          const key = `${box.left}|${box.top}|${box.right}|${box.bottom}`;
+          still = key === last ? still + 1 : 0;
+          last = key;
+          if (still >= 5) resolve();
+          else requestAnimationFrame(tick);
+        };
+        tick();
+      }),
+  );
+
+/**
  * Everything the assertions need, read in one round trip.
  *
  * It runs in the page, so it cannot import anything: the clipping model is
@@ -471,12 +495,15 @@ const authed = [
     },
   },
   {
-    name: 'board, new task drawer',
+    // The composer at the foot of a column, open with a title typed in it. It
+    // is the way a card is made, so it has to fit and clear its neighbours at
+    // every width, including a column in the middle of a row that scrolls.
+    name: 'board, card composer open',
     open: async () => {
       await page.goto(`${FRONT}/board/${boardId}`);
       await page.getByText('Short task', { exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Add Task' }).click();
-      await page.getByRole('dialog', { name: 'Create New Task' }).waitFor();
+      await page.getByRole('button', { name: /^Add a card to / }).first().click();
+      await page.getByRole('textbox', { name: /new card in/i }).fill('A card half typed');
     },
   },
   {
@@ -667,9 +694,10 @@ for (const viewport of VIEWPORTS) {
   await page.setViewportSize(viewport);
   await page.goto(`${FRONT}/board/${boardId}`);
   await page.getByText('Short task', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Add Task' }).click();
-  await page.getByRole('dialog', { name: 'Create New Task' }).waitFor();
+  await page.getByText('Short task', { exact: true }).click();
+  await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
   await settle(page);
+  await dialogStill(page);
 
   const g = await drawerGeometry();
   const label = `at ${viewport.width}`;
@@ -745,7 +773,8 @@ for (const viewport of VIEWPORTS) {
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').waitFor({ state: 'detached' });
   check(`${label}: Escape closes it and focus returns to the control that opened it`,
-    await page.evaluate(() => /add task/i.test(document.activeElement?.textContent ?? '')));
+    // The control that opened it is the card's title button.
+    await page.evaluate(() => document.activeElement?.dataset.taskOpen !== undefined && /short task/i.test(document.activeElement.textContent ?? '')));
 }
 
 log('\n--- on a touch screen nothing is hidden behind a hover ---');
