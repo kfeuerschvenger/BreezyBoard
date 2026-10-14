@@ -7,11 +7,12 @@ import {
   NewBoardTile,
   eyebrowFor,
   greetingFor,
+  useAddMembersFlow,
   useBoardDashboard,
   useBoardMenu,
 } from '@/features/boards';
 import { AddMemberModal } from '@/features/users';
-import type { Board, User } from '@/models';
+import type { Board } from '@/models';
 import { AuthService } from '@/services';
 import { Button, EmptyState, LoadingScreen, Icon } from '@/shared/ui';
 import { ShellAction } from '@/app/layouts/shell/ShellAction';
@@ -37,22 +38,16 @@ const lineFor = (boardCount: number): string =>
     : "The wind's in your favor. Pick up where you left off.";
 
 const BoardDashboard: React.FC = () => {
-  const [memberBoard, setMemberBoard] = useState<Board | null>(null);
   const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
 
   const dashboard = useBoardDashboard();
+  const addMembers = useAddMembersFlow();
   const menu = useBoardMenu();
   const shell = useShell();
   const createBoard = () => shell?.openCreateBoard();
 
-  const handleAddMembers = async (members: User[]) => {
-    if (!memberBoard) return;
-    await dashboard.addMembers(memberBoard._id, members);
-    setMemberBoard(null);
-  };
-
-  const openAddMember = (boardId: string) => {
-    setMemberBoard(dashboard.boards.find(board => board._id === boardId) ?? null);
+  const openAddMember = (board: Board) => {
+    addMembers.open(board);
     menu.close();
   };
 
@@ -130,7 +125,7 @@ const BoardDashboard: React.FC = () => {
                 menuOpen={menu.isOpen(board._id)}
                 isDeleting={dashboard.isDeleting(board._id)}
                 onToggleMenu={() => menu.toggle(board._id)}
-                onAddMember={() => openAddMember(board._id)}
+                onAddMember={() => openAddMember(board)}
                 onDelete={() => setBoardToDelete(board)}
               />
             ))}
@@ -156,13 +151,7 @@ const BoardDashboard: React.FC = () => {
         onCancel={() => setBoardToDelete(null)}
       />
 
-      <AddMemberModal
-        open={memberBoard !== null}
-        onClose={() => setMemberBoard(null)}
-        onAddMembers={handleAddMembers}
-        boardTitle={memberBoard?.title ?? ''}
-        boardId={memberBoard?._id ?? ''}
-      />
+      <AddMemberModal {...addMembers.dialogProps} />
     </div>
   );
 };

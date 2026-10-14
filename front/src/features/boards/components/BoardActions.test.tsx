@@ -2,20 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
-import { BoardService, ColorService, DashboardService } from '@/services';
+import { BoardService, ColorService, DashboardService, UserService } from '@/services';
 import type { Board, Color } from '@/models';
+import { userKeys } from '@/features/users';
 import { boardKeys } from '../queries';
 import { BoardActions } from './BoardActions';
 
 vi.mock('@/services', () => ({
-  BoardService: { update: vi.fn(), getAll: vi.fn(), getById: vi.fn(), delete: vi.fn(), restore: vi.fn() },
+  BoardService: { addMembers: vi.fn(), update: vi.fn(), getAll: vi.fn(), getById: vi.fn(), delete: vi.fn(), restore: vi.fn() },
   ColorService: { getByType: vi.fn() },
   DashboardService: { getStats: vi.fn() },
+  UserService: { search: vi.fn() },
 }));
 
 const mockedBoardService = vi.mocked(BoardService);
 const mockedColorService = vi.mocked(ColorService);
 const mockedDashboardService = vi.mocked(DashboardService);
+const mockedUserService = vi.mocked(UserService);
 
 const BLUE: Color = { _id: 'color-blue', name: 'Sky', value: 'sky' };
 const GREEN: Color = { _id: 'color-green', name: 'Green', value: 'green' };
@@ -131,6 +134,91 @@ describe('BoardActions', () => {
       totalTasks: 4,
       avgProgress: 50,
     });
+  });
+});
+
+describe('BoardActions adding members', () => {
+  const ADA = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
+
+  const openAddMembers = async () => {
+    await userEvent.click(trigger());
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Add members' }));
+    return screen.findByRole('dialog', { name: /Add Members/ });
+  };
+
+  const addAda = async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /Ada Lovelace/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add 1 Member' }));
+  };
+
+  beforeEach(() => {
+    mockedBoardService.addMembers.mockReset();
+    mockedUserService.search.mockReset().mockResolvedValue([ADA]);
+  });
+
+  it('puts Add members in the board menu, between editing and deleting', async () => {
+    renderWithQuery(<BoardActions board={makeBoard()} onDeleted={vi.fn()} />);
+
+    await userEvent.click(trigger());
+
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+      'Edit board',
+      'Add members',
+      'Delete board',
+    ]);
+  });
+
+  // The server refuses the route to anybody but an owner, and a menu that
+  // does not render is what keeps a member from being offered it.
+  it.each([['member' as const], [undefined]])('is not offered to a viewer whose role is %s', role => {
+    renderWithQuery(<BoardActions board={makeBoard({ viewerRole: role })} onDeleted={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /options for/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Add members' })).not.toBeInTheDocument();
+  });
+
+  it('opens the dialog on this board and returns focus to the menu button when it is cancelled', async () => {
+    renderWithQuery(<BoardActions board={makeBoard()} onDeleted={vi.fn()} />);
+
+    const dialog = await openAddMembers();
+
+    expect(dialog).toBeInTheDocument();
+    expect(mockedUserService.search).toHaveBeenCalledWith('', 'board-1');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(mockedBoardService.addMembers).not.toHaveBeenCalled();
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('adds the people chosen to this board and refreshes everything that lists them', async () => {
+    mockedBoardService.addMembers.mockResolvedValue(makeBoard());
+    mockedBoardService.getAll.mockResolvedValue([]);
+    mockedDashboardService.getStats.mockResolvedValue({ totalBoards: 0, totalMembers: 0, totalTasks: 0, avgProgress: 0 });
+    const { queryClient } = renderWithQuery(<BoardActions board={makeBoard()} onDeleted={vi.fn()} />);
+    const invalidated = vi.spyOn(queryClient, 'invalidateQueries');
+    await openAddMembers();
+
+    await addAda();
+
+    await waitFor(() => expect(mockedBoardService.addMembers).toHaveBeenCalledWith('board-1', ['user-ada']));
+    await waitFor(() => expect(invalidated).toHaveBeenCalledWith({ queryKey: boardKeys.detail('board-1') }));
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: userKeys.boardMembers('board-1') });
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: boardKeys.list() });
+    expect(invalidated).toHaveBeenCalledWith({ queryKey: boardKeys.stats() });
+  });
+
+  it('says so in a toast when the write fails, and leaves the board page alone', async () => {
+    mockedBoardService.addMembers.mockRejectedValue(new Error('refused'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderWithQuery(<BoardActions board={makeBoard()} onDeleted={vi.fn()} />);
+    await openAddMembers();
+
+    await addAda();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('could not be added');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 

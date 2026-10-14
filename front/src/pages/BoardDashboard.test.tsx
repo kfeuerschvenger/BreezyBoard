@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import BoardDashboard from './BoardDashboard';
 import { ShellContext } from '@/app/layouts/shell/shellContext';
-import { AuthService, BoardService, ColorService, DashboardService, TemplateService } from '@/services';
+import { AuthService, BoardService, ColorService, DashboardService, TemplateService, UserService } from '@/services';
 import type { Board } from '@/models';
 import { HUES, MID_BACKGROUND, hueFromSeed } from '@/shared/ui';
 
@@ -389,6 +389,22 @@ describe('BoardDashboard per board menu', () => {
 
     expect(screen.getByRole('button', { name: /Add Member/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Delete/ })).toBeInTheDocument();
+  });
+
+  // The same flow the board page's menu uses, so a change to it shows here.
+  it('adds the people chosen to the board whose menu was used, closing the menu', async () => {
+    const user = userEvent.setup();
+    const ADA = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
+    vi.mocked(UserService).search.mockResolvedValue([ADA]);
+    mockedBoardService.addMembers.mockResolvedValue(makeBoard({}));
+    await openMenu(user, 'Launch Plan');
+
+    await user.click(screen.getByRole('button', { name: /Add Member/ }));
+    await user.click(await screen.findByRole('button', { name: /Ada Lovelace/ }));
+    await user.click(screen.getByRole('button', { name: 'Add 1 Member' }));
+
+    await waitFor(() => expect(mockedBoardService.addMembers).toHaveBeenCalledWith('board-launch', ['user-ada']));
+    expect(screen.queryByRole('button', { name: /^Add Member$/ })).not.toBeInTheDocument();
   });
 
   it('says whether it is open on the button that opens it', async () => {
