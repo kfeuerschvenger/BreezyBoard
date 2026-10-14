@@ -2009,9 +2009,9 @@ await reportPairs(boardPage, [
 ]);
 
 // What the row of columns and the chips are made of.
-const pressedStyle = await styleOf(taskModal.getByRole('button', { name: gateBoardColumns[0].title, exact: true }), ['backgroundColor', 'color', 'height', 'borderTopLeftRadius']);
+const pressedStyle = await styleOf(taskModal.getByRole('button', { name: `Move to ${gateBoardColumns[0].title}`, exact: true }), ['backgroundColor', 'color', 'height', 'borderTopLeftRadius']);
 check('the pressed column is filled with ink, in white, 34 pixels tall with the small button radius', `${await paintOf(boardPage, pressedStyle.backgroundColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-ink'))} ${await paintOf(boardPage, pressedStyle.color)} ${pressedStyle.height} ${pressedStyle.borderTopLeftRadius}`, 'true 255,255,255 34px 10px');
-const idleColumn = await styleOf(taskModal.getByRole('button', { name: gateBoardColumns[1].title, exact: true }), ['borderTopColor', 'borderTopWidth']);
+const idleColumn = await styleOf(taskModal.getByRole('button', { name: `Move to ${gateBoardColumns[1].title}`, exact: true }), ['borderTopColor', 'borderTopWidth']);
 // The border is 1.5 pixels in the source and computes to 1 at a device pixel
 // ratio of 1, which is how the browser rounds a border width.
 check('a column that is not pressed carries the control border', `${await paintOf(boardPage, idleColumn.borderTopColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-line-control'))} ${idleColumn.borderTopWidth}`, 'true 1px');
@@ -2062,7 +2062,7 @@ check('Done and Blow it away are 44 pixels tall', `${targetSizes.save.split('x')
 check('the field at the foot of the checklist is named Add an item, and is not a button', `${await taskModal.getByRole('textbox', { name: 'Add an item' }).count()} ${await taskModal.getByRole('button', { name: /add item/i }).count()}`, '1 0');
 check('the Add an item field is a text input with its own border', await taskModal.getByRole('textbox', { name: 'Add an item' }).evaluate(el => `${el.type} ${getComputedStyle(el).borderTopWidth}`), 'text 1px');
 check('the owner field is 48 pixels tall', targetSizes.owner.split('x')[1], '48');
-const moveFocus = await focusRing(boardPage, taskModal.getByRole('button', { name: gateBoardColumns[1].title, exact: true }));
+const moveFocus = await focusRing(boardPage, taskModal.getByRole('button', { name: `Move to ${gateBoardColumns[1].title}`, exact: true }));
 check('a column button has the 2 pixel focus ring', moveFocus, 'solid 2px 2px');
 const blowFocus = await focusRing(boardPage, taskModal.getByRole('button', { name: 'Blow it away' }));
 check('Blow it away has the 2 pixel focus ring', blowFocus, 'solid 2px 2px');

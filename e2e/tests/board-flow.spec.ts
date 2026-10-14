@@ -278,11 +278,11 @@ test.describe('board core loop', () => {
     });
 
     await test.step('Move to moves the card at once and leaves the modal open', async () => {
-      await dialog.getByRole('button', { name: 'In Progress', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Move to In Progress', exact: true }).click();
 
       await expect.poll(() => columnCount(page, 'In Progress')).toBe(1);
       expect(await columnCount(page, 'Backlog')).toBe(0);
-      await expect(dialog.getByRole('button', { name: 'In Progress', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(dialog.getByRole('button', { name: 'Move to In Progress', exact: true })).toHaveAttribute('aria-pressed', 'true');
       await expect(dialog.locator('[data-task-place]')).toContainText('In Progress');
       await expect(dialog).toBeVisible();
     });
@@ -292,6 +292,8 @@ test.describe('board core loop', () => {
     await test.step('the footer is Blow it away and one Done, with no Cancel', async () => {
       await expect(dialog.getByRole('button', { name: 'Blow it away' })).toBeVisible();
       await expect(dialog.locator('button[type="submit"]')).toHaveText('Done');
+      // The board's last column is also called Done; its button is named "Move to Done".
+      await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toHaveCount(1);
       await expect(dialog.getByRole('button', { name: /^cancel$/i })).toHaveCount(0);
     });
 

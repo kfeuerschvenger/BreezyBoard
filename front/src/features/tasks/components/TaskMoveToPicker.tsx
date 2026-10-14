@@ -50,6 +50,11 @@ export const TaskMoveToPicker: React.FC<TaskMoveToPickerProps> = ({ columns, cur
               key={column.id}
               type="button"
               aria-pressed={pressed}
+              // The visible text is the column's title and the name starts with
+              // it, so a voice user can say what they see (WCAG 2.5.3). The
+              // prefix keeps a column named like the footer's "Done" from
+              // sharing its accessible name inside the one dialog.
+              aria-label={`Move to ${column.title}`}
               onClick={() => {
                 if (!pressed) onMove(column);
               }}

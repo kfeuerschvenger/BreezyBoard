@@ -21,6 +21,13 @@ export interface ChecklistItemData {
 export interface ChecklistProps {
   items: ChecklistItemData[];
   onChange: (items: ChecklistItemData[]) => void;
+  /**
+   * The text in the "Add an item" field, when the caller keeps it: a form that
+   * saves what is typed and not yet added needs to see it. Without it the field
+   * keeps its own text.
+   */
+  pending?: string;
+  onPendingChange?: (text: string) => void;
 }
 
 interface SortableChecklistItemProps {
@@ -106,7 +113,7 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, pos
  * edit that produced it, so the caller stores a list and never has to know
  * which of add, edit, remove or reorder happened.
  */
-export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
+export const Checklist: React.FC<ChecklistProps> = ({ items, onChange, pending, onPendingChange }) => {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -117,7 +124,9 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange }) => {
   // What has been typed in the field at the foot and not yet added. It is the
   // field's own and never part of the list, so a list never holds a row that
   // has no text.
-  const [draft, setDraft] = useState('');
+  const [ownDraft, setOwnDraft] = useState('');
+  const draft = pending ?? ownDraft;
+  const setDraft = onPendingChange ?? setOwnDraft;
 
   const handleAdd = () => {
     const text = draft.trim();
