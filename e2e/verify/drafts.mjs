@@ -9,8 +9,14 @@ const check = (label, ok, detail = '') => {
   log(`${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? '  :: ' + detail : ''}`);
 };
 
-const browser = await chromium.launch();
-const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const req = async (method, path, token, body) => {
+  const response = await fetch(API + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: response.status, body: await response.json().catch(() => ({})) };
+};
 
 const user = {
   firstName: 'Draft',
@@ -18,59 +24,121 @@ const user = {
   email: `draft-${Date.now()}@example.test`,
   password: 'Passw0rd1',
 };
-await page.request.post(`${API}/auth/register`, { data: user });
+const registered = await req('POST', '/auth/register', null, user);
+if (registered.status !== 201 && registered.status !== 200) {
+  console.error(`registration failed with ${registered.status}. Run: docker compose restart back`);
+  process.exit(1);
+}
+const token = registered.body.data.token;
+const userId = registered.body.data.user._id;
+
+// A board with one card that is already valid, so a draft is the only thing
+// between the form and a save. Both drafts below are what a person loses when
+// a session ends mid sentence: the task form's, and the composer's.
+const templates = await req('GET', '/templates', token);
+const boardColors = await req('GET', '/colors?type=board', token);
+const taskColors = await req('GET', '/colors?type=task', token);
+const board = await req('POST', '/boards', token, {
+  title: `Draft Board ${Date.now()}`,
+  description: 'for the draft checks',
+  color: boardColors.body.data[0]._id,
+  template: templates.body.data[0]._id,
+});
+const boardId = board.body.data._id;
+const [firstColumn] = [...board.body.data.columns].sort((a, b) => a.order - b.order);
+const task = await req('POST', `/tasks/board/${boardId}`, token, {
+  title: 'Card with a draft',
+  description: 'The description as it was saved',
+  status: firstColumn._id,
+  color: taskColors.body.data[0]._id,
+  owner: userId,
+});
+const taskId = task.body.data._id;
+
+const browser = await chromium.launch();
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 
 await page.goto(`${FRONT}/login`, { waitUntil: 'networkidle' });
 const form = page.locator('form').first();
 await form.getByLabel('Email address', { exact: true }).fill(user.email);
 await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
-await page.waitForSelector('text=Your boards');
+await page.getByText('Your boards').waitFor();
 
-const boardName = `Draft Board ${Date.now()}`;
-await page.getByRole('button', { name: /create board/i }).first().click();
-await page.waitForTimeout(900);
-await page.getByLabel(/board name/i).fill(boardName);
-await page.getByRole('button', { name: /^create board$/i }).last().click();
-await page.waitForTimeout(2500);
-await page.getByText(boardName).first().click();
-await page.waitForTimeout(2500);
+const openBoard = async () => {
+  await page.goto(`${FRONT}/board/${boardId}`);
+  await page.getByRole('button', { name: 'Card with a draft', exact: true }).waitFor();
+};
+const openCard = async (name = 'Card with a draft') => {
+  await page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
+  // The form is built from the saved task and then from the draft, a render
+  // after the dialog is on screen, so a read before the title has a value is a
+  // read of a form still being filled in.
+  await page.getByRole('radio').first().waitFor({ state: 'attached' });
+  await page.waitForFunction(() => document.querySelector('[placeholder="Enter task title"]')?.value);
+};
+const draftKey = `breezyboard:draft:task:${taskId}`;
+const draftOf = key => page.evaluate(k => window.localStorage.getItem(k), key);
 
 const SENTENCE = 'A sentence the user was halfway through writing';
 
-await page.getByRole('button', { name: /add task/i }).first().click();
-await page.waitForTimeout(1200);
-await page.getByPlaceholder('Enter task title').fill('Half written task');
+log('--- the task form ---');
+await openBoard();
+await openCard();
+await page.getByPlaceholder('Enter task title').fill('Half edited title');
 await page.getByPlaceholder('Enter task description').fill(SENTENCE);
-await page.waitForTimeout(1200);
+// The draft is written on a throttle, so it is read from storage and not
+// assumed: nothing below means anything until it is there.
+await page.waitForFunction(
+  ([key, text]) => (window.localStorage.getItem(key) ?? '').includes(text),
+  [draftKey, SENTENCE],
+);
 
 // Losing the page entirely, the way a session timeout or a crashed tab would.
 await page.reload({ waitUntil: 'networkidle' });
-await page.waitForTimeout(2500);
-await page.getByRole('button', { name: /add task/i }).first().click();
-await page.waitForTimeout(1500);
+await page.getByRole('button', { name: 'Card with a draft', exact: true }).waitFor();
+await openCard();
 
 const title = await page.getByPlaceholder('Enter task title').inputValue();
 const description = await page.getByPlaceholder('Enter task description').inputValue();
 log(`  restored title: ${JSON.stringify(title)}`);
 log(`  restored description: ${JSON.stringify(description)}`);
 
-check('the title survived losing the page', title === 'Half written task', title);
+check('the title survived losing the page', title === 'Half edited title', title);
 check('the description survived losing the page', description === SENTENCE, description);
 
-// Finish the task properly, then confirm the draft is not left behind.
-await page.locator('label', { has: page.getByRole('radio', { name: 'Coral' }) }).click();
-await page.getByPlaceholder('Search team members...').fill('Draft');
-await page.waitForTimeout(1600);
-await page.getByText(user.email).last().click();
-await page.waitForTimeout(600);
+// Finish the edit properly, then confirm the draft is not left behind.
 await page.getByRole('button', { name: /save changes/i }).click();
-await page.waitForTimeout(2500);
+await page.getByRole('dialog').waitFor({ state: 'detached' });
+await page.getByRole('button', { name: 'Half edited title', exact: true }).waitFor();
+check('the draft is cleared after a successful save', (await draftOf(draftKey)) === null, String(await draftOf(draftKey)));
 
-await page.getByRole('button', { name: /add task/i }).first().click();
-await page.waitForTimeout(1500);
-const afterSave = await page.getByPlaceholder('Enter task description').inputValue();
-check('the draft is cleared after a successful save', afterSave === '', JSON.stringify(afterSave));
+await openCard('Half edited title');
+const saved = await page.getByPlaceholder('Enter task description').inputValue();
+check('the saved text is what the form shows afterwards', saved === SENTENCE, saved);
+await page.keyboard.press('Escape');
+await page.getByRole('dialog').waitFor({ state: 'detached' });
+
+log('\n--- the column composer ---');
+const composerKey = `breezyboard:draft:composer:${firstColumn._id}`;
+await page.getByRole('button', { name: `Add a card to ${firstColumn.title}` }).click();
+const field = page.getByRole('textbox', { name: new RegExp(`new card in ${firstColumn.title}`, 'i') });
+await field.fill('Half a card title');
+await page.waitForFunction(
+  ([key]) => (window.localStorage.getItem(key) ?? '').includes('Half a card title'),
+  [composerKey],
+);
+
+await page.reload({ waitUntil: 'networkidle' });
+await page.getByRole('button', { name: 'Half edited title', exact: true }).waitFor();
+await page.getByRole('button', { name: `Add a card to ${firstColumn.title}` }).click();
+const restored = await page.getByRole('textbox', { name: new RegExp(`new card in ${firstColumn.title}`, 'i') }).inputValue();
+check('a half typed card title survived losing the page', restored === 'Half a card title', restored);
+
+await page.keyboard.press('Enter');
+await page.getByRole('button', { name: 'Half a card title', exact: true }).waitFor();
+check('the composer draft is cleared once the card is added', (await draftOf(composerKey)) === null, String(await draftOf(composerKey)));
 
 await browser.close();
 const failed = results.filter(r => !r).length;

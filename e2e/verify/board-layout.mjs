@@ -149,6 +149,8 @@ const measure = () =>
     };
   });
 
+const COLUMN_WIDTH = 292;
+
 const VIEWPORTS = [
   // Narrower than four columns at any width, so the row must overflow.
   { name: "phone 390", width: 390, height: 844, overflows: true },
@@ -194,6 +196,13 @@ for (const viewport of VIEWPORTS) {
   check(
     "every column has the same fixed width",
     new Set(m.columnWidths).size === 1,
+    `widths ${m.columnWidths.join(", ")}`,
+  );
+  // The reference design's column. It does not change with the viewport, which
+  // is what makes the row scroll sideways at 1440 and fit at 1920 (P4-42).
+  check(
+    "every column is 292 pixels wide, as the design draws it",
+    m.columnWidths.every((width) => width === COLUMN_WIDTH),
     `widths ${m.columnWidths.join(", ")}`,
   );
   check(
@@ -262,8 +271,27 @@ for (const viewport of VIEWPORTS) {
 
   check(
     "an empty column says so",
-    /no tasks here yet/i.test(m.emptyBody.hint),
+    /still air/i.test(m.emptyBody.hint),
     `reads "${m.emptyBody.hint.slice(0, 40)}"`,
+  );
+  // The composer is the foot of the column, outside the scrolling body, so a
+  // column of fourteen cards still has its way of adding a card in view.
+  const composerBox = await page
+    .getByRole("button", { name: `Add a card to ${boardColumns[0].title}` })
+    .boundingBox();
+  const columnBox = await page
+    .getByRole("heading", { level: 2, name: boardColumns[0].title })
+    .evaluate((heading) => {
+      const box = heading.closest('div[class*="shrink-0"]').parentElement.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    });
+  check(
+    "the composer stays at the foot of a long column, in view, while the cards scroll",
+    Boolean(composerBox) &&
+      composerBox.y >= columnBox.top &&
+      composerBox.y + composerBox.height <= columnBox.bottom &&
+      composerBox.y + composerBox.height <= m.viewportHeight,
+    `composer ${Math.round(composerBox?.y ?? -1)} to ${Math.round((composerBox?.y ?? 0) + (composerBox?.height ?? 0))}, column ends ${Math.round(columnBox.bottom)}`,
   );
   check(
     "an empty column body fills its column, so the whole of it is a drop target",
@@ -291,8 +319,8 @@ for (const viewport of VIEWPORTS) {
   await page.getByRole("region", { name: "Board columns" }).waitFor();
   await settle();
 
-  const banner = page.getByRole("heading", { level: 2, name: /no tasks yet/i });
-  const add = page.getByRole("button", { name: "Add task", exact: true });
+  const banner = page.getByRole("heading", { level: 2, name: /a fresh board/i });
+  const add = page.getByRole("button", { name: "Add your first card", exact: true });
   const addBox = await add.boundingBox();
   const state = await page.evaluate(() => {
     const doc = document.documentElement;
@@ -336,7 +364,7 @@ await page.getByRole("region", { name: "Board columns" }).waitFor();
 await page.getByText("Layout task 1", { exact: true }).waitFor();
 check(
   "a board that has tasks shows no empty board banner",
-  (await page.getByRole("heading", { name: /no tasks yet/i }).count()) === 0,
+  (await page.getByRole("heading", { name: /a fresh board/i }).count()) === 0,
 );
 
 log("\n--- dragging toward a column that is off screen ---");

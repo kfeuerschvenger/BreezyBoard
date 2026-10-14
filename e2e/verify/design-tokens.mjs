@@ -1678,6 +1678,314 @@ for (const [width, expected] of [[320, 1], [390, 1], [768, 2], [1024, 3], [1440,
 }
 await homeContext.close();
 
+log('\n--- the board page, signed in ---');
+
+// A board with cards in three of its four columns and the last one holding a
+// finished card, made through the API for the gate account: the header, a
+// card of each priority, a checklist half done and one complete, an owner on
+// the cards, an empty column and the last column drawn as where work lands.
+const boardMe = (await (await page.request.get(`${API}/auth/me`, homeAuth)).json()).data;
+const boardTaskPalette = (await (await page.request.get(`${API}/colors?type=task`, homeAuth)).json()).data;
+const gateBoardCreated = await page.request.post(`${API}/boards`, {
+  ...homeAuth,
+  data: {
+    title: 'Board gate',
+    description: 'A board made to be measured',
+    color: homePalette.find(entry => entry.value === 'green')._id,
+    template: homeTemplate._id,
+  },
+});
+const gateBoardData = (await gateBoardCreated.json()).data;
+const gateBoardColumns = [...gateBoardData.columns].sort((a, b) => a.order - b.order);
+const makeGateTask = (title, column, extra = {}) =>
+  page.request.post(`${API}/tasks/board/${gateBoardData._id}`, {
+    ...homeAuth,
+    data: { title, status: gateBoardColumns[column]._id, color: boardTaskPalette[0]._id, owner: boardMe._id, ...extra },
+  });
+await makeGateTask('Gate high task', 0, { priority: 'high', checklist: [{ text: 'a', completed: true }, { text: 'b', completed: false }] });
+await makeGateTask('Gate low task', 0, { priority: 'low' });
+await makeGateTask('Gate medium task', 1, { priority: 'medium' });
+await makeGateTask('Gate landed task', 3, { priority: 'low', checklist: [{ text: 'a', completed: true }] });
+const gateBoardUrl = `${FRONT}/board/${gateBoardData._id}`;
+
+const signIn = async context => {
+  const pg = await context.newPage();
+  await pg.goto(`${FRONT}/login`);
+  await pg.locator('form').first().getByLabel('Email address', { exact: true }).fill(gateUser.email);
+  await pg.locator('form').first().getByLabel('Password', { exact: true }).fill(gateUser.password);
+  await pg.locator('form').first().getByRole('button', { name: /sign in/i }).click();
+  await pg.getByText('Your boards').waitFor();
+  return pg;
+};
+
+// Reduced motion for the measurements: the wind layer is absent, so the text is
+// measured against the glass and the ground and not against a moving streak.
+const boardContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+const boardPage = await signIn(boardContext);
+await boardPage.goto(gateBoardUrl);
+await boardPage.getByRole('region', { name: 'Board columns' }).waitFor();
+await boardPage.getByText('Gate high task', { exact: true }).waitFor();
+await boardPage.waitForTimeout(500);
+
+const boardStructure = await boardPage.evaluate(() => ({
+  h1: [...document.querySelectorAll('h1')].map(h => h.textContent),
+  columns: [...document.querySelectorAll('[role="region"][aria-label="Board columns"] h2')].map(h => h.textContent),
+  cardTitles: [...document.querySelectorAll('[data-task-card] h3')].map(h => h.textContent),
+  footers: document.querySelectorAll('footer').length,
+}));
+check('the board page has exactly one h1, the board name', `${boardStructure.h1.length} ${boardStructure.h1[0]}`, '1 Board gate');
+check('the columns are headings in board order', boardStructure.columns.join('|'), gateBoardColumns.map(c => c.title).join('|'));
+check('every card is an h3', boardStructure.cardTitles.length, 4);
+
+// The header: cover, name, description, progress, the owner and the menu.
+const boardHeader = boardPage.locator('main header[data-board-header]');
+const headerCover = await boardHeader.locator('div[aria-hidden="true"]').first().evaluate(el => {
+  const style = getComputedStyle(el);
+  return { width: Math.round(el.offsetWidth), height: Math.round(el.offsetHeight), radius: style.borderTopLeftRadius, image: style.backgroundImage };
+});
+check('the cover is a 56 pixel square with the float radius', `${headerCover.width} ${headerCover.height} ${headerCover.radius}`, '56 56 18px');
+check('the cover is the gradient of the board hue', headerCover.image.includes('oklch(0.5 0.13 150)'), true);
+const boardTitleStyle = await styleOf(boardHeader.getByRole('heading', { level: 1 }), ['fontSize', 'fontWeight', 'fontFamily']);
+check('the board name is 36 pixels, bold, in the display face', `${boardTitleStyle.fontSize} ${boardTitleStyle.fontWeight} ${boardTitleStyle.fontFamily.startsWith('"Bricolage Grotesque Variable"')}`, '36px 700 true');
+const headerProgress = await boardHeader.getByRole('progressbar').evaluate(el => {
+  const fill = el.firstElementChild;
+  return { height: Math.round(el.offsetHeight), now: el.getAttribute('aria-valuenow'), max: el.getAttribute('aria-valuemax'), text: el.getAttribute('aria-valuetext'), fill: getComputedStyle(fill).backgroundColor, width: Math.round(el.offsetWidth) };
+});
+check('the progress bar is 8 pixels tall and 190 wide', `${headerProgress.height} ${headerProgress.width}`, '8 190');
+check('one of four cards has landed, and the bar says so in words', `${headerProgress.now}/${headerProgress.max} ${headerProgress.text}`, '1/4 1 of 4 landed');
+check('the progress fill is the edge step of the board hue', await paintOf(boardPage, headerProgress.fill), await paintOf(boardPage, await tokenValue(boardPage, '--color-green-edge')));
+check('the header names one person, the owner, and no stack of members', `${await boardHeader.getByText('Owner: Token Gate').count()} ${await boardHeader.locator('.rounded-full').count()}`, '1 1');
+
+// Every text colour on the board, against the darkest pixel behind it.
+for (const [label, locator, token] of [
+  ['the board name', boardHeader.getByRole('heading', { level: 1 }), '--color-ink'],
+  ['the board description', boardHeader.getByText('A board made to be measured'), '--color-ink-secondary'],
+  ['the progress words', boardHeader.getByText('1 of 4 landed'), '--color-ink-secondary'],
+  ['the progress figure', boardHeader.getByText('25%'), '--color-ink-tertiary'],
+  ['a column name', boardPage.getByRole('heading', { level: 2, name: gateBoardColumns[0].title }), '--color-ink'],
+  ['a column count', boardPage.getByRole('heading', { level: 2, name: gateBoardColumns[0].title }).locator('xpath=following-sibling::span[last()]'), '--color-ink-secondary'],
+  ['the Still air title', boardPage.getByText('Still air').first(), '--color-ink-secondary'],
+  ['the Still air line', boardPage.getByText('Drop a card here or add one below.').first(), '--color-ink-tertiary'],
+  ['the composer button', boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }), '--color-ink-secondary'],
+]) {
+  const behind = await extremeBehind(boardPage, locator, 'darkest');
+  await reportPairs(boardPage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
+}
+
+// The cards are white, so their text is measured as pairs.
+await reportPairs(boardPage, [
+  ['a card title on the card', '--color-ink', '--color-surface', 4.5],
+  ['the title of a card that has landed on the card', '--color-ink-secondary', '--color-surface', 4.5],
+  ['an unfinished checklist figure on the card', '--color-ink-secondary', '--color-surface', 4.5],
+  ['a finished checklist figure on the card', '--color-green-deep', '--color-surface', 4.5],
+  ['the low priority chip', '--color-green-deep', '--color-green-tint', 4.5],
+  ['the medium priority chip', '--color-sand-deep', '--color-sand-tint', 4.5],
+  ['the high priority chip', '--color-coral-deep', '--color-coral-tint', 4.5],
+  ['the column outline while a card is over it, against the ground', '--color-sky-edge', '--color-ground', 3],
+  ['the gap outline, against the glass', '--color-sky-edge', ['--color-ground', '--color-glass-column'], 3],
+]);
+
+// What a column and a card are made of.
+const gateColumn = boardPage.locator('[data-column]').first();
+const columnStyle = await styleOf(gateColumn, ['width', 'borderTopLeftRadius', 'backgroundColor', 'backdropFilter', 'boxShadow']);
+check('a column is 292 pixels wide with the panel radius', `${columnStyle.width} ${columnStyle.borderTopLeftRadius}`, '292px 24px');
+check('a column is glass at half white, blurred 14 pixels', `${await paintOf(boardPage, columnStyle.backgroundColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-glass-column'))} ${columnStyle.backdropFilter.includes('blur(14px)')}`, 'true true');
+check('a column casts the column shadow', columnStyle.boxShadow.includes('0px 16px 40px -32px'), true);
+const cardStyle = await styleOf(boardPage.locator('[data-task-card]').first(), ['borderTopLeftRadius', 'paddingTop', 'paddingLeft', 'boxShadow', 'backgroundColor', 'marginBottom']);
+check('a card has the card radius and padding 12 by 14', `${cardStyle.borderTopLeftRadius} ${cardStyle.paddingTop} ${cardStyle.paddingLeft}`, '16px 12px 14px');
+check('a card is white with the resting shadow', `${await paintOf(boardPage, cardStyle.backgroundColor)} ${cardStyle.boxShadow.includes('0px 8px 20px -16px')}`, '255,255,255 true');
+check('cards are 10 pixels apart', cardStyle.marginBottom, '10px');
+const landedColumn = boardPage.locator('[data-column]').nth(3);
+check('the last column has the arrival icon and a green dot, and keeps its own name', `${await landedColumn.locator('h2 ~ svg').count()} ${await landedColumn.getByRole('heading', { level: 2 }).textContent()}`, `1 ${gateBoardColumns[3].title}`);
+check('the card in the last column is drawn as done, in the secondary text', await paintOf(boardPage, await landedColumn.getByRole('button', { name: 'Gate landed task', exact: true }).evaluate(el => getComputedStyle(el).color)), await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-secondary')));
+check('an empty column says Still air', await boardPage.locator('[data-column]').nth(2).getByText('Still air').isVisible(), true);
+
+// The composer, open, is a field like any other: the control border and the
+// focus colour.
+await boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }).click();
+const composerField = boardPage.getByRole('textbox', { name: /new card in/i });
+await composerField.waitFor();
+await boardPage.waitForTimeout(300);
+const composerStyle = await styleOf(composerField, ['borderTopColor', 'boxShadow', 'borderTopLeftRadius']);
+check('the open composer field is focused and draws the focus colour and its halo', `${await paintOf(boardPage, composerStyle.borderTopColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-focus'))} ${composerStyle.boxShadow.includes('0px 0px 0px 4px')}`, 'true true');
+await composerField.fill('x');
+await boardPage.getByRole('button', { name: 'Done', exact: true }).click();
+await boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }).waitFor();
+check('closing the composer gives focus back to its button', await boardPage.evaluate(() => document.activeElement?.getAttribute('aria-label')), `Add a card to ${gateBoardColumns[0].title}`);
+// The draft only: the session lives in the same storage and the drag below
+// needs it.
+await boardPage.evaluate(() => {
+  for (const key of Object.keys(window.localStorage)) if (key.startsWith('breezyboard:draft:')) window.localStorage.removeItem(key);
+});
+
+// Picks a card up with the mouse, carries it to a column and holds it there,
+// reading what is on screen, then lets go and reads the landing. The same
+// walk is made with motion on and with reduced motion, since the claim is
+// about both.
+const carry = async (pg, title, toColumn) => {
+  // A press while the page is still arriving lands where the handle was and
+  // not where it is: the cards are waited for, not a fixed time.
+  await pg.waitForFunction(() =>
+    [...document.querySelectorAll('[data-task-card]')].every(card => {
+      const style = getComputedStyle(card);
+      return style.opacity === '1' && style.transform === 'none';
+    }),
+  );
+  const handle = pg.locator('[data-task-card]', { hasText: title }).locator('[aria-label="Drag handle"]');
+  const from = await handle.boundingBox();
+  const target = await pg.getByRole('heading', { level: 2, name: toColumn }).boundingBox();
+  const cx = from.x + from.width / 2;
+  const cy = from.y + from.height / 2;
+  await pg.mouse.move(cx, cy);
+  await pg.mouse.down();
+  // Paces the input: the sensor needs the press and the first move apart.
+  await pg.waitForTimeout(100);
+  await pg.mouse.move(cx + 12, cy + 12);
+  // The copy that follows the pointer is what says the card is in the air; the
+  // announcement is replaced as soon as the card moves.
+  await pg.locator('[data-task-card][aria-hidden="true"]').waitFor({ state: 'attached' });
+  for (let step = 1; step <= 25; step += 1) {
+    await pg.mouse.move(from.x + (target.x + 150 - from.x) * (step / 25), from.y + (target.y + 220 - from.y) * (step / 25), { steps: 2 });
+    await pg.waitForTimeout(25);
+  }
+  // Held until the target column is the one lit: the card is over it, which is
+  // what a person waits for before letting go.
+  await pg
+    .locator('[data-column][data-highlighted] h2', { hasText: toColumn })
+    .waitFor({ state: 'attached', timeout: 5000 })
+    .catch(() => {});
+  await pg.waitForTimeout(450);
+};
+
+const held = pg =>
+  pg.evaluate(() => {
+    const gap = document.querySelector('[data-drop-gap]');
+    const gapStyle = gap && getComputedStyle(gap);
+    const lit = [...document.querySelectorAll('[data-column][data-highlighted]')];
+    const litStyle = lit[0] && getComputedStyle(lit[0]);
+    const overlay = [...document.querySelectorAll('[data-task-card][aria-hidden="true"]')][0];
+    const overlayStyle = overlay && getComputedStyle(overlay);
+    const collapsed = [...document.querySelectorAll('[data-task-card]:not([aria-hidden])')].filter(card => card.offsetHeight === 0);
+    return {
+      gap: gap && {
+        height: Math.round(gap.getBoundingClientRect().height),
+        border: `${gapStyle.borderTopStyle} ${gapStyle.borderTopWidth}`,
+        borderColor: gapStyle.borderTopColor,
+        background: gapStyle.backgroundColor,
+        duration: gapStyle.animationDuration,
+        inColumn: gap.closest('[data-column]').querySelector('h2').textContent,
+        hidden: gap.getAttribute('aria-hidden'),
+      },
+      lit: lit.map(column => column.querySelector('h2').textContent),
+      litBackground: litStyle?.backgroundColor,
+      litBorder: litStyle?.borderTopColor,
+      overlay: overlay && { rotate: overlayStyle.rotate, scale: overlayStyle.scale, hidden: overlay.getAttribute('aria-hidden') },
+      collapsed: collapsed.map(card => card.querySelector('h3').textContent),
+    };
+  });
+
+const toMs = value => Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 1000);
+
+{
+  const mode = 'reduced motion';
+  const pg = boardPage;
+  await carry(pg, 'Gate low task', gateBoardColumns[1].title);
+  const h = await held(pg);
+  check(`${mode}: the column under the card is the one that is lit`, h.lit.join('|'), gateBoardColumns[1].title);
+  check(`${mode}: the lit column is brighter glass with the sky edge as its outline`, `${await paintOf(pg, h.litBackground) === await paintOf(pg, await tokenValue(pg, '--color-glass-strong'))} ${await paintOf(pg, h.litBorder) === await paintOf(pg, await tokenValue(pg, '--color-sky-edge'))}`, 'true true');
+  check(`${mode}: the gap is 58 pixels tall and a dashed 2 pixel outline, in that column`, `${h.gap?.height} ${h.gap?.border} ${h.gap?.inColumn}`, `58 dashed 2px ${gateBoardColumns[1].title}`);
+  check(`${mode}: the gap is outlined in the sky edge`, h.gap && (await paintOf(pg, h.gap.borderColor)), await paintOf(pg, await tokenValue(pg, '--color-sky-edge')));
+  check(`${mode}: the gap is hidden from assistive technology`, h.gap?.hidden, 'true');
+  check(`${mode}: the card that is held takes no room where it was`, h.collapsed.join('|'), 'Gate low task');
+  check(`${mode}: the copy that follows the pointer is tilted, enlarged and hidden from assistive technology`, `${h.overlay?.rotate} ${h.overlay?.scale} ${h.overlay?.hidden}`, '3deg 1.03 true');
+  check(`${mode}: the gap's opening animation is collapsed to an instant`, h.gap && toMs(h.gap.duration) < 1, true);
+  await pg.mouse.up();
+  // The card is read once it has been put in its new column, which the page does
+  // before the server answers; a fixed wait reads the frame before that.
+  await pg
+    .waitForFunction(
+      ([title, column]) =>
+        [...document.querySelectorAll('[data-task-card]')].some(
+          card => card.querySelector('h3')?.textContent === title && card.closest('[data-column]')?.querySelector('h2')?.textContent === column,
+        ),
+      ['Gate low task', gateBoardColumns[1].title],
+      { timeout: 5000 },
+    )
+    .catch(() => {});
+  const landed = await pg.evaluate(title => {
+    const card = [...document.querySelectorAll('[data-task-card]')].find(c => c.querySelector('h3')?.textContent === title);
+    return { column: card?.closest('[data-column]')?.querySelector('h2').textContent, duration: card && getComputedStyle(card).animationDuration, gaps: document.querySelectorAll('[data-drop-gap]').length, lit: document.querySelectorAll('[data-highlighted]').length };
+  }, 'Gate low task');
+  check(`${mode}: the card lands in the column it was carried to`, landed.column, gateBoardColumns[1].title);
+  check(`${mode}: no gap and no highlight are left behind`, `${landed.gaps} ${landed.lit}`, '0 0');
+  await pg.waitForTimeout(400);
+  check(`${mode}: the landing flag is gone once the card has settled`, await pg.locator('[data-landed]').count(), 0);
+  void context;
+}
+await boardContext.close();
+
+// With motion on.
+const motionContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+const motionPage = await signIn(motionContext);
+await motionPage.goto(gateBoardUrl);
+await motionPage.getByRole('region', { name: 'Board columns' }).waitFor();
+await motionPage.getByText('Gate high task', { exact: true }).waitFor();
+await motionPage.waitForTimeout(900);
+{
+  const mode = 'motion on';
+  await carry(motionPage, 'Gate medium task', gateBoardColumns[2].title);
+  const h = await held(motionPage);
+  check(`${mode}: the column under the card is the one that is lit`, h.lit.join('|'), gateBoardColumns[2].title);
+  check(`${mode}: the gap is 58 pixels tall and a dashed 2 pixel outline, in that column`, `${h.gap?.height} ${h.gap?.border} ${h.gap?.inColumn}`, `58 dashed 2px ${gateBoardColumns[2].title}`);
+  check(`${mode}: the gap opens over 180 milliseconds`, h.gap?.duration, '0.18s');
+  check(`${mode}: the copy that follows the pointer is tilted and enlarged`, `${h.overlay?.rotate} ${h.overlay?.scale}`, '3deg 1.03');
+  // Where the gap is, between the cards that stay: the card under the held one
+  // in this column is the one that was dropped on, so the gap is before it.
+  await motionPage.mouse.up();
+  const landing = await motionPage.evaluate(title => {
+    const card = [...document.querySelectorAll('[data-task-card]')].find(c => c.querySelector('h3')?.textContent === title);
+    const style = card && getComputedStyle(card);
+    return {
+      column: card?.closest('[data-column]')?.querySelector('h2').textContent,
+      animation: style?.animationName,
+      duration: style?.animationDuration,
+      easing: style?.animationTimingFunction,
+      running: card ? card.getAnimations().map(a => a.animationName) : [],
+    };
+  }, 'Gate medium task');
+  check(`${mode}: the card lands in the column it was carried to`, landing.column, gateBoardColumns[2].title);
+  check(`${mode}: the landing is bbLand over 550 milliseconds`, `${landing.animation} ${landing.duration}`, 'bbLand 0.55s');
+  check(`${mode}: the landing is running on the card`, landing.running.includes('bbLand'), true);
+  await motionPage.waitForTimeout(900);
+  check(`${mode}: the landing flag is cleared by the end of the animation`, await motionPage.locator('[data-landed]').count(), 0);
+  check(`${mode}: a card that is not landing does not animate (the stored level is breezy)`, await motionPage.evaluate(() => [...document.querySelectorAll('[data-task-card]')].filter(c => getComputedStyle(c).animationName !== 'none').length), 0);
+}
+await motionContext.close();
+
+// Gusty weather: every card sways, out of step with its neighbours, and a
+// system that asks for reduced motion holds them still without touching the
+// stored choice.
+await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze: 'gusty' } });
+const gustyContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'no-preference' });
+const gustyPage = await signIn(gustyContext);
+await gustyPage.goto(gateBoardUrl);
+await gustyPage.getByText('Gate high task', { exact: true }).waitFor();
+await gustyPage.waitForTimeout(700);
+const sway = await gustyPage.evaluate(() => [...document.querySelectorAll('[data-task-card]')].map(c => `${getComputedStyle(c).animationName} ${getComputedStyle(c).animationDuration} ${getComputedStyle(c).animationDelay}`));
+check('at gusty every card sways', sway.every(entry => entry.startsWith('bbSway')), true);
+check('the sway of two cards is out of step', new Set(sway).size > 1, true);
+await gustyContext.close();
+
+const stillContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+const stillPage = await signIn(stillContext);
+await stillPage.goto(gateBoardUrl);
+await stillPage.getByText('Gate high task', { exact: true }).waitFor();
+await stillPage.waitForTimeout(500);
+check('reduced motion holds the cards still at the stored gusty', await stillPage.evaluate(() => [...document.querySelectorAll('[data-task-card]')].every(c => getComputedStyle(c).animationName === 'none')), true);
+check('and leaves the stored choice alone', (await (await page.request.get(`${API}/auth/me`, homeAuth)).json()).data.breeze, 'gusty');
+await stillContext.close();
+await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze: 'breezy' } });
+
 log('\n--- the reduced motion policy ---');
 
 // A person who asks the system for less motion gets animations and
