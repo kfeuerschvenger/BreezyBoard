@@ -19,7 +19,8 @@ export interface TaskFormValues {
   checklist: ChecklistItemData[];
 }
 
-export type TaskFormErrors = Partial<Record<'title' | 'description' | 'owner' | 'color', string>>;
+/** The description is optional, so it never has an error of its own. */
+export type TaskFormErrors = Partial<Record<'title' | 'owner' | 'color', string>>;
 
 export interface UseTaskFormOptions {
   open: boolean;
@@ -194,7 +195,6 @@ export function useTaskForm({
     const found: TaskFormErrors = {};
 
     if (!values.title.trim()) found.title = 'Title is required';
-    if (!values.description.trim()) found.description = 'Description is required';
     if (!values.owner) found.owner = 'Owner is required';
     if (!values.color) found.color = 'Color is required';
 
@@ -204,7 +204,6 @@ export function useTaskForm({
 
   const isValid =
     values.title.trim() !== '' &&
-    values.description.trim() !== '' &&
     values.owner !== '' &&
     values.color !== '' &&
     // Error values, not keys: a cleared error is stored as undefined under a

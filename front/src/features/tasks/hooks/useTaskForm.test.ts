@@ -60,7 +60,7 @@ describe('useTaskForm', () => {
   // One field at a time, with every other field genuinely filled. Asserting
   // on a form where several are blank passes even when only one of the checks
   // survives, which is a test that cannot tell the difference.
-  it.each(['title', 'description'] as const)('refuses a form whose %s holds only whitespace', field => {
+  it('refuses a form whose title holds only whitespace', () => {
     const { result } = setup();
 
     act(() => {
@@ -70,10 +70,42 @@ describe('useTaskForm', () => {
       result.current.setField('color', 'color-blue');
     });
     act(() => {
-      result.current.setField(field, '   ');
+      result.current.setField('title', '   ');
     });
 
     expect(result.current.isValid).toBe(false);
+  });
+
+  // A card made from a column composer has a title and nothing written under
+  // it, and it has to be openable and savable as it is.
+  it('accepts a form with a title, an owner and a colour and no description', async () => {
+    const { result, onSave } = setup();
+
+    act(() => {
+      result.current.setField('title', 'Write the migration');
+      result.current.setField('owner', ADA._id);
+      result.current.setField('color', 'color-blue');
+    });
+
+    expect(result.current.values.description).toBe('');
+    expect(result.current.isValid).toBe(true);
+
+    await act(async () => {
+      await result.current.handleSubmit({ preventDefault: vi.fn() } as never);
+    });
+
+    expect(result.current.errors).toEqual({});
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ title: 'Write the migration', description: '' }));
+  });
+
+  it('opens a stored task that has no description at all', () => {
+    const { result } = setup({
+      task: { _id: 'task-2', boardId: 'board-1', title: 'Title only', color: 'color-blue', owner: ADA._id },
+      colors: COLORS,
+    });
+
+    expect(result.current.values.description).toBe('');
+    expect(result.current.isValid).toBe(true);
   });
 
   it('names every missing field when a submit is attempted', async () => {
@@ -86,7 +118,6 @@ describe('useTaskForm', () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(result.current.errors).toEqual({
       title: 'Title is required',
-      description: 'Description is required',
       owner: 'Owner is required',
       color: 'Color is required',
     });

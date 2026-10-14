@@ -68,21 +68,20 @@ export const TaskForm: React.FC<TaskFormProps> = ({
       )}
     </Field>
 
-    <Field label="Description" required error={errors.description}>
+    <Field label="Description">
       {props => (
         <Textarea
           {...props}
           value={values.description}
           onChange={event => setField('description', event.target.value)}
           rows={3}
-          hasError={Boolean(errors.description)}
           placeholder="Enter task description"
           className="font-body"
         />
       )}
     </Field>
 
-    <Field label="Owner" required error={errors.owner} icon={<Icon as={IconUser} size={16} className="text-gray-400" />}>
+    <Field label="Owner" required error={errors.owner} icon={<Icon as={IconUser} size={16} className="text-ink-tertiary" />}>
       {props => (
         <UserPicker
           value={values.owner}
@@ -117,7 +116,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
     <Checklist items={values.checklist} onChange={checklist => setField('checklist', checklist)} />
 
     {submitError && (
-      <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+      <div role="alert" className="rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
         {submitError}
       </div>
     )}

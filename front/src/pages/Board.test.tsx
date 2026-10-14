@@ -5,6 +5,7 @@ import { renderWithQuery } from '@/test/renderWithQuery';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AxiosError, AxiosHeaders } from 'axios';
 import Board from './Board';
+import { useAuth } from '@/hooks/useAuth';
 import { BoardService, TaskService, ColorService, UserService } from '@/services';
 import type { Board as BoardModel, Color, Task, User } from '@/models';
 
@@ -22,8 +23,15 @@ vi.mock('@/services', () => ({
 // The not found page asks who is signed in to choose its link, and the page
 // is rendered here without an AuthProvider.
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ isAuthenticated: true, loading: false, user: null }),
+  useAuth: vi.fn(),
 }));
+
+const SIGNED_IN_AS_NOBODY = { isAuthenticated: true, loading: false, user: null } as unknown as ReturnType<typeof useAuth>;
+const mockedUseAuth = vi.mocked(useAuth);
+
+beforeEach(() => {
+  mockedUseAuth.mockReset().mockReturnValue(SIGNED_IN_AS_NOBODY);
+});
 
 const mockedBoardService = vi.mocked(BoardService);
 const mockedTaskService = vi.mocked(TaskService);
@@ -221,6 +229,25 @@ describe('Board page adding and saving a task', () => {
   });
 
   describe('from a column composer', () => {
+    it('makes its author the owner of the card', async () => {
+      const user = userEvent.setup();
+      mockedUseAuth.mockReturnValue({ isAuthenticated: true, loading: false, user: ADA } as unknown as ReturnType<typeof useAuth>);
+      mockedTaskService.create.mockResolvedValue(
+        makeTask({ _id: 'task-new', title: 'Pack the stove', status: 'col-done' }),
+      );
+      renderBoard();
+
+      await typeInto(user, 'Done', 'Pack the stove');
+
+      await waitFor(() =>
+        expect(mockedTaskService.create).toHaveBeenCalledWith(
+          BOARD_ID,
+          expect.objectContaining({ title: 'Pack the stove', owner: ADA._id }),
+        ),
+      );
+      expect(mockedTaskService.create.mock.calls[0][1]).not.toHaveProperty('description');
+    });
+
     const typeInto = async (user: ReturnType<typeof userEvent.setup>, column: string, title: string) => {
       await user.click(await screen.findByRole('button', { name: `Add a card to ${column}` }));
       await user.type(
