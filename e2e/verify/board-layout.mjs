@@ -12,6 +12,7 @@
 // changes the colours, the spacing or the column width does not break it.
 
 import { chromium } from "playwright";
+import { poll, settled, until } from "./observe.mjs";
 
 const FRONT = process.env.E2E_FRONT_URL ?? "http://localhost:5173";
 const API = process.env.E2E_API_URL ?? "http://localhost:5000/api/v1";
@@ -98,7 +99,7 @@ await page.getByText("Your boards").waitFor();
 
 const settle = async () => {
   await page.waitForLoadState("networkidle").catch(() => {});
-  await page.waitForTimeout(900);
+  await settled(page, { label: "the board to stop animating" });
 };
 
 /** Everything the layout assertions need, read in one round trip. */
@@ -397,12 +398,17 @@ await page.mouse.down();
 // moves is coalesced and the sensor never sees the drag start.
 for (let step = 1; step <= 8; step += 1) {
   await page.mouse.move(startX + step * 4, startY, { steps: 2 });
-  await page.waitForTimeout(40);
+  await page.waitForTimeout(40); // NOSONAR javascript:S2925 paces the pointer, dnd-kit coalesces a burst of moves
 }
 // Hold at the right edge of the screen so the container scrolls under the
-// pointer.
+// pointer. The scroll is waited for, not timed: a row that never moves is
+// reported by the check with the position it was left at.
 await page.mouse.move(386, startY, { steps: 10 });
-await page.waitForTimeout(1500);
+await until(
+  page,
+  "the column row to scroll under the held card",
+  () => document.querySelector('[role="region"][aria-label="Board columns"]').scrollLeft > 0,
+).catch(() => {});
 const scrolled = await scrollLeft();
 check(
   "holding a card at the right edge scrolls the column row",
@@ -413,10 +419,18 @@ check(
 // Drop wherever the pointer is. The last column is the one the scroll brings
 // into reach, so the card must have moved somewhere other than where it began.
 await page.mouse.up();
-await page.waitForTimeout(800);
 
-const after = await req("GET", `/tasks/board/${boardId}`, token);
-const moved = after.body.data.find((task) => task.title === "Layout task 1");
+// The card is moved on the server by the drop. It is read back until it has
+// left its column, and a card that never leaves is reported by the check.
+const readMoved = async () => {
+  const response = await req("GET", `/tasks/board/${boardId}`, token);
+  return response.body.data.find((task) => task.title === "Layout task 1");
+};
+const moved = await poll(
+  "the dropped card to be stored in another column",
+  readMoved,
+  (task) => Boolean(task) && task.status !== firstColumn._id,
+).catch(readMoved);
 check(
   "the drop landed the card in another column",
   Boolean(moved) && moved.status !== firstColumn._id,

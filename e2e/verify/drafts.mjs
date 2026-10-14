@@ -130,7 +130,31 @@ check('the description survived losing the page', description === SENTENCE, desc
 // the autosave must not write the empty form it was built with over the draft
 // it is about to restore. A tab lost inside the window between the two writes
 // lost the draft.
-await page.waitForTimeout(800);
+// The write that follows the restore is waited for. A late write of the empty
+// form would be the trailing write of the draft's 500 millisecond throttle, so
+// the writes are read once none has come for longer than that. That is an
+// absence over a window, the one thing here with nothing to observe, and a
+// stalled page only lengthens it.
+await page
+  .waitForFunction(() => window.__draftWrites.length > 0, null, { timeout: 15000 })
+  .catch(() => {});
+await page.evaluate(
+  quietMs =>
+    new Promise(resolve => {
+      let seen = window.__draftWrites.length;
+      let changedAt = performance.now();
+      const tick = () => {
+        if (window.__draftWrites.length !== seen) {
+          seen = window.__draftWrites.length;
+          changedAt = performance.now();
+        }
+        if (performance.now() - changedAt >= quietMs) return resolve();
+        requestAnimationFrame(tick);
+      };
+      tick();
+    }),
+  600
+);
 const writes = await page.evaluate(() => window.__draftWrites);
 log(`  titles written while opening the card: ${JSON.stringify(writes)}`);
 check('opening a card writes its draft at least once', writes.length > 0, String(writes.length));

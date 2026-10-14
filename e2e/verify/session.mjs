@@ -32,7 +32,9 @@ check('carries sessionStartedAt', typeof firstClaims.sessionStartedAt === 'numbe
 check('carries tokenVersion', typeof firstClaims.tokenVersion === 'number');
 
 // 1. renewal on an ordinary authenticated request
-await new Promise(r => setTimeout(r, 1100));
+// A token's `exp` has a resolution of one second, so the renewal can only be told
+// apart from the original once the clock has moved on. Elapsed time is the input.
+await new Promise(r => setTimeout(r, 1100)); // NOSONAR javascript:S2925 the claims carry whole seconds, so real time has to pass
 const me = await call('GET', '/auth/me', first);
 const renewed = me.headers.get('x-auth-token');
 check('authenticated request answers 200', me.status === 200);

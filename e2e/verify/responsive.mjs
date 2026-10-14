@@ -32,6 +32,7 @@
 // changes colours, spacing or type does not break it.
 
 import { chromium } from 'playwright';
+import { settled } from './observe.mjs';
 
 const FRONT = process.env.E2E_FRONT_URL ?? 'http://localhost:5173';
 const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
@@ -130,32 +131,18 @@ await page.getByText('Your boards').waitFor();
 
 const settle = async target => {
   await target.waitForLoadState('networkidle').catch(() => {});
-  await target.waitForTimeout(700);
+  await settled(target, { label: 'the page to stop animating before it is measured' });
 };
 
 /**
- * Resolves once the dialog's box has not moved for five frames. A fixed wait
- * after it opens reads a panel that is still sliding in whenever the machine is
- * slower than the wait, and reports its box a pixel short of the edge.
+ * Resolves once the dialog has stopped animating: no CSS animation or
+ * transition running in it and none of its inline styles still being rewritten,
+ * which is how the panel's slide is drawn. A box compared over a count of
+ * frames reads a panel that is still sliding whenever a frame takes long, and
+ * reports its box a pixel short of the edge.
  */
 const dialogStill = target =>
-  target.evaluate(
-    () =>
-      new Promise(resolve => {
-        const dialog = document.querySelector('[role="dialog"]');
-        let last = '';
-        let still = 0;
-        const tick = () => {
-          const box = dialog.getBoundingClientRect();
-          const key = `${box.left}|${box.top}|${box.right}|${box.bottom}`;
-          still = key === last ? still + 1 : 0;
-          last = key;
-          if (still >= 5) resolve();
-          else requestAnimationFrame(tick);
-        };
-        tick();
-      }),
-  );
+  settled(target, { within: '[role="dialog"]', label: 'the dialog to stop moving' });
 
 /**
  * Everything the assertions need, read in one round trip.
@@ -807,10 +794,10 @@ for (const viewport of VIEWPORTS) {
     // the height is taken down until it overflows, and the body is asked to
     // scroll there.
     await page.setViewportSize({ width: viewport.width, height: 420 });
-    await page.waitForTimeout(250);
+    await dialogStill(page);
     scrolled = await scrollTheForm();
     await page.setViewportSize(viewport);
-    await page.waitForTimeout(250);
+    await dialogStill(page);
   }
   if (viewport.height <= 844) {
     check(`${label}: the form scrolls inside the panel`, scrolled !== null && scrolled > 0, `scrollTop ${scrolled}`);
@@ -829,7 +816,7 @@ for (const viewport of VIEWPORTS) {
     const keyboardHeight = Math.round(viewport.height * 0.5);
     await page.setViewportSize({ width: viewport.width, height: keyboardHeight });
     await page.getByRole('textbox', { name: /^Title/ }).focus();
-    await page.waitForTimeout(300);
+    await dialogStill(page);
     const k = await modalGeometry();
     check(`${label}: with half the height gone the sheet fits and the actions stay reachable`,
       k.box.top >= -0.5 && k.box.bottom <= k.vh + 0.5 && within(k.save, k.vw, k.vh) && within(k.blow, k.vw, k.vh),

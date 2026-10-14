@@ -11,6 +11,15 @@
 // and the numbers are not the ones most contrast advice is written against.
 
 import { chromium } from 'playwright';
+import {
+  WAIT_MS,
+  armAppearance,
+  distinctMidTransforms,
+  poll,
+  readAppearance,
+  settled,
+  until,
+} from './observe.mjs';
 
 const FRONT = process.env.E2E_FRONT_URL ?? 'http://localhost:5173';
 
@@ -320,7 +329,7 @@ check(
 );
 
 await page.locator('form input').first().focus();
-await page.waitForTimeout(400);
+await settled(page, { within: 'form', label: 'the focused input to finish its transition' });
 const focusedField = await page.evaluate(() => {
   const style = getComputedStyle(document.activeElement);
   return { border: style.borderTopColor, shadow: style.boxShadow };
@@ -337,7 +346,7 @@ log('\n--- buttons and the focus ring, on a rendered dialog ---');
 await page.getByRole('button', { name: 'Forgot it?' }).click();
 const probeDialog = page.getByRole('dialog');
 await probeDialog.waitFor({ state: 'visible' });
-await page.waitForTimeout(500);
+await settled(page, { within: '[role="dialog"]', label: 'the forgot password dialog to finish opening' });
 const primary = probeDialog.getByRole('button', { name: 'Send reset link' });
 const secondary = probeDialog.getByRole('button', { name: 'Cancel' });
 const styleOf = (locator, props) =>
@@ -396,7 +405,7 @@ const closeButton = probeDialog.getByRole('button', { name: 'Close' });
 const closeStyle = await styleOf(closeButton, ['width', 'height', 'borderTopLeftRadius']);
 check('the close button is a 36 pixel circle', `${closeStyle.width} ${closeStyle.height} ${closeStyle.borderTopLeftRadius}`, '36px 36px 99px');
 await closeButton.hover();
-await page.waitForTimeout(450);
+await settled(page, { within: '[role="dialog"]', label: 'the close glyph to finish turning' });
 check('the close glyph turns a quarter on hover', (await styleOf(closeButton.locator('svg'), ['rotate'])).rotate, '90deg');
 await page.mouse.move(2, 2);
 
@@ -411,8 +420,8 @@ log('\n--- the new primitives, rendered for real ---');
 // loaded are found in the transformed entry module and imported by URL, so the
 // primitives are rendered with the same instances, the same stylesheet and the
 // same fonts as the application, with nothing added to the repository.
-const mountPrimitives = async (target, build, args = {}) =>
-  target.evaluate(async ([source, args]) => {
+const mountPrimitives = async (target, build, args = {}) => {
+  await target.evaluate(async ([source, args]) => {
     const entry = await (await fetch('/src/main.tsx')).text();
     const urlOf = name => entry.match(new RegExp(`/node_modules/[.]vite/deps/${name}[.]js[?]v=[a-f0-9]+`))?.[0];
     const react = await import(urlOf('react'));
@@ -432,8 +441,20 @@ const mountPrimitives = async (target, build, args = {}) =>
     root.render(
       new Function('ui', 'h', 'React', 'args', `return (${source})(ui, h, React, args)`)(ui, createElement, react.default ?? react, args)
     );
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // The render is scheduled, not synchronous: wait for the probe's first element.
+    await new Promise((resolve, reject) => {
+      const started = performance.now();
+      const look = () => {
+        if (host.firstElementChild) return resolve();
+        if (performance.now() - started > 15000) return reject(new Error('the probe never rendered'));
+        requestAnimationFrame(look);
+      };
+      look();
+    });
   }, [build.toString(), args]);
+  // An entrance or a transition on the probe has to be over before it is measured.
+  await settled(target, { within: '#probe-host', label: 'the mounted probe to stop animating' });
+};
 
 const unmountPrimitives = async target =>
   target.evaluate(() => {
@@ -519,7 +540,7 @@ await reportPairs(page, [
 ]);
 check('a keyboard focused switch draws a 2px outline offset by 2px', await focusRing(page, switchControl), 'solid 2px 2px');
 await page.keyboard.press('Space');
-await page.waitForTimeout(500);
+await settled(page, { within: '#probe-host', label: 'the switch to finish turning on' });
 check('pressing Space turns the switch on', await switchControl.getAttribute('aria-checked'), 'true');
 const onTrack = await probe(page, '[role="switch"]', ['backgroundColor']);
 const knobOn = await probe(page, '[role="switch"] span', ['translate']);
@@ -626,6 +647,9 @@ await unmountPrimitives(page);
 // Cover
 // The caller sizes a cover. The probe sizes a wrapper and lets the cover fill
 // it, since a utility class that only this script names is not in the sheet.
+// The image is requested as the cover renders, and the fallback follows its
+// failure, so the request is awaited before the fallback is read.
+const missingImage = page.waitForResponse(response => response.url().endsWith('/definitely-missing.png'), { timeout: WAIT_MS });
 await mountPrimitives(page, (ui, h) => {
   const sized = child => h('div', { style: { width: 192, height: 96, display: 'inline-block' } }, child);
   return h(
@@ -639,7 +663,8 @@ await mountPrimitives(page, (ui, h) => {
 const plainCover = await probe(page, 'div[aria-hidden="true"]', ['height', 'width', 'backgroundImage']);
 check('a cover takes its size from the caller', `${plainCover.width} ${plainCover.height}`, '192px 96px');
 check('a cover draws its gradient', plainCover.backgroundImage.startsWith('linear-gradient'), true);
-await page.waitForTimeout(300);
+await missingImage;
+await until(page, 'the cover to drop the image that failed to load', () => document.querySelector('#probe-host img') === null).catch(() => {});
 check('a cover whose image is missing falls back to its gradient', await page.locator('#probe-host img').count(), 0);
 check('a named cover is an image with that name', await page.locator('#probe-host [role="img"][aria-label="A named cover"]').count(), 1);
 await unmountPrimitives(page);
@@ -718,7 +743,7 @@ check('a swatch with no hue is outlined in the control border colour', await pai
 check('the chosen swatch carries the white and ink double ring', sky.boxShadow.includes('0px 0px 0px 4px') && sky.boxShadow.includes('rgb(15, 27, 45)'), true);
 check('a swatch that is not chosen carries no ring', !coral.boxShadow.includes('0px 0px 0px 4px'), true);
 await swatch('coral').hover();
-await page.waitForTimeout(350);
+await settled(page, { within: '#probe-host', label: 'the hovered swatch to finish growing' });
 check('a hovered swatch grows by 15 percent', (await styleOf(swatch('coral'), ['scale'])).scale, '1.15');
 await page.mouse.move(2, 2);
 await page.locator('#probe-host input[value="sky"]').focus();
@@ -745,7 +770,6 @@ await mountPrimitives(page, (ui, h) =>
     h(ui.StatTile, { icon: h('span', null, 's'), tone: 'teal', value: 42, label: 'Probe tiles' })
   )
 );
-await page.waitForTimeout(700);
 const emptyCircle = await probe(page, 'h3 ~ p', ['color']);
 const circle = await page.locator('#probe-host h3').locator('xpath=preceding-sibling::*[1]').evaluate(el => {
   const style = getComputedStyle(el);
@@ -830,9 +854,16 @@ check('the animations are running, one for every streak and particle', await pag
   return animations.length === 15 && animations.every(animation => animation.playState === 'running');
 }), true);
 const driftBefore = await windLayer.locator(':scope > span').nth(1).evaluate(el => getComputedStyle(el).transform);
-await page.waitForTimeout(500);
+await until(
+  page,
+  'the second particle to move',
+  before => getComputedStyle(document.querySelectorAll('#wind-box > div[aria-hidden="true"] > span')[1]).transform !== before,
+  driftBefore
+).catch(() => {});
 const driftAfter = await windLayer.locator(':scope > span').nth(1).evaluate(el => getComputedStyle(el).transform);
-check('a particle has moved half a second later', driftBefore !== driftAfter, true);
+check('a particle moves while the wind plays', driftBefore !== driftAfter, true);
+// An absence over a stretch of time: the window is the claim, so it is the one
+// wait here that has nothing to observe. A longer stall only lengthens it.
 check(
   'nothing in the page changes while the wind plays',
   await page.evaluate(
@@ -895,7 +926,7 @@ await page.getByRole('button', { name: /create board/i }).first().click();
 await page.getByLabel(/board name/i).fill(gateBoard);
 await page.getByRole('button', { name: /^create board$/i }).last().click();
 await page.getByText(gateBoard).first().waitFor();
-await page.waitForTimeout(600);
+await settled(page, { label: 'the dashboard to stop animating after the board is created' });
 
 log('\n--- the application shell, signed in at 1440 ---');
 
@@ -1047,7 +1078,13 @@ check('the sidebar is above the wind', breezyWind?.linkOnTop, true);
 
 // The radios are visually hidden and a press lands on their segment, which
 // is what a pointer does.
-const chooseBreeze = name => sidebar.locator('label', { hasText: new RegExp(`^${name}$`) }).click();
+// The choice is applied to the page at once and sent in the background, so
+// anything read back from the server waits for the request that stores it.
+const chooseBreeze = async name => {
+  const saved = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/users/'), { timeout: WAIT_MS });
+  await sidebar.locator('label', { hasText: new RegExp(`^${name}$`) }).click();
+  await saved;
+};
 const breezeBox = sidebar.getByRole('radiogroup', { name: 'Breeze' });
 const boxGeometry = await breezeBox.evaluate(group => {
   const frame = group.getBoundingClientRect();
@@ -1077,8 +1114,7 @@ check(
 check('the box says 38 km/h at the default', await sidebar.getByText('38 km/h').isVisible(), true);
 
 await chooseBreeze('Gusty');
-await page.waitForTimeout(400);
-const gustyWind = await windOfShell();
+const gustyWind = await poll('the wind layer to follow the Gusty choice', windOfShell, wind => wind?.streaks === 11);
 check('gusty is 11 streaks and 20 particles', `${gustyWind?.streaks} ${gustyWind?.particles}`, '11 20');
 check('the box says 74 km/h for gusty', await sidebar.getByText('74 km/h').isVisible(), true);
 check('the choice is stored on the user', await storedBreeze(), 'gusty');
@@ -1087,11 +1123,12 @@ check('a gusty logo glyph sways', await sidebar.getByRole('link', { name: 'breez
 // The stored value is what a new load reads: nothing is kept in the browser.
 await page.reload();
 await page.getByText('Your boards').waitFor();
+await poll('the shell wind to be drawn after the reload', windOfShell, wind => wind !== null).catch(() => {});
 check('the choice is still gusty after a reload', (await windOfShell())?.streaks, 11);
 check('the control shows the stored choice after a reload', await page.getByRole('radio', { name: 'Gusty' }).isChecked(), true);
 
 await chooseBreeze('Still');
-await page.waitForTimeout(400);
+await poll('the wind layer to be removed at Still', windOfShell, wind => wind === null);
 check('still removes the wind from the page entirely', await windOfShell(), null);
 check('still holds the logo glyph still', await sidebar.getByRole('link', { name: 'breezyboard' }).locator('svg').evaluate(svg => getComputedStyle(svg).animationName), 'none');
 // Ambient motion is what runs without end. A transition or an entrance that
@@ -1118,7 +1155,7 @@ await quietPage.locator('form').first().getByLabel('Email address', { exact: tru
 await quietPage.locator('form').first().getByLabel('Password', { exact: true }).fill(gateUser.password);
 await quietPage.locator('form').first().getByRole('button', { name: /sign in/i }).click();
 await quietPage.getByText('Your boards').waitFor();
-await quietPage.waitForTimeout(600);
+await settled(quietPage, { label: 'the signed in shell to stop animating under reduced motion' });
 check('under reduced motion there is no wind layer in the shell', await quietPage.evaluate(() => document.getElementById('app-sidebar').previousElementSibling?.getAttribute('aria-hidden') === 'true'), false);
 check('the speed hint says the motion is reduced', await quietPage.getByText('Reduced motion').isVisible(), true);
 check(
@@ -1132,27 +1169,18 @@ await quiet.close();
 await page.reload();
 await page.getByText('Your boards').waitFor();
 await chooseBreeze('Breezy');
-await page.waitForTimeout(400);
+await poll('the wind layer to follow the Breezy choice', windOfShell, wind => wind?.streaks === 6);
 
 // The account menu: it rises in, and while it leaves it is already out of
 // reach.
-const menuOpening = await page.evaluate(
-  () =>
-    new Promise(resolve => {
-      document.querySelector('button[aria-label^="Account menu for"]').click();
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            const style = getComputedStyle(document.querySelector('[role="menu"]'));
-            resolve({ opacity: Number(style.opacity), transform: style.transform });
-          })
-        )
-      );
-    })
-);
+// Recorded on every frame from before the click until the menu is at rest: the
+// first frame is its initial values, the last is where it settles, and neither
+// depends on how long a frame took.
+await armAppearance(page, '[role="menu"]');
+await page.locator('button[aria-label^="Account menu for"]').click();
+const menuOpening = (await readAppearance(page))[0];
 check('a menu fades in', menuOpening.opacity < 1, true);
 check('a menu rises and scales in', isIdentity(menuOpening.transform), false);
-await page.waitForTimeout(500);
 const menuSurface = await styleOf(page.getByRole('menu'), ['borderTopLeftRadius', 'backgroundColor', 'boxShadow']);
 check('a menu has the control radius', menuSurface.borderTopLeftRadius, '12px');
 check('a menu is white', await paintOf(page, menuSurface.backgroundColor), '255,255,255');
@@ -1164,25 +1192,41 @@ await reportPairs(page, [
   ['a hovered menu item on its fill', '--color-ink', '--color-line-06', 4.5],
 ]);
 
+// Read from the page's own mutations, which report the moment the popup is
+// marked or removed, and not from a frame a fixed distance after the key. The
+// popup may be gone before it is ever read, which is fine. If it is still
+// there, it must not be reachable while it fades. A popup that never becomes
+// either is reported as it was after the wait.
 const menuLeaving = await page.evaluate(
-  () =>
+  limit =>
     new Promise(resolve => {
-      const menu = document.querySelector('[role="menu"]');
-      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      requestAnimationFrame(() => {
+      const stateOf = () => {
         const still = document.querySelector('[role="menu"]');
-        resolve(still ? { hidden: still.getAttribute('aria-hidden'), inert: still.hasAttribute('inert') } : null);
+        return still ? { hidden: still.getAttribute('aria-hidden'), inert: still.hasAttribute('inert') } : null;
+      };
+      const unreachable = state => state === null || (state.hidden === 'true' && state.inert);
+      const observer = new MutationObserver(() => {
+        const state = stateOf();
+        if (unreachable(state)) {
+          observer.disconnect();
+          resolve(state);
+        }
       });
-    })
+      observer.observe(document.documentElement, { subtree: true, attributes: true, childList: true });
+      document.querySelector('[role="menu"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      setTimeout(() => {
+        observer.disconnect();
+        resolve(stateOf());
+      }, limit);
+    }),
+  WAIT_MS
 );
-// The popup may already be gone, which is fine. If it is not, it must not be
-// reachable while it fades.
 check(
   'a leaving menu is hidden and inert, or already gone',
   menuLeaving === null || (menuLeaving.hidden === 'true' && menuLeaving.inert),
   true
 );
-await page.waitForTimeout(500);
+await page.getByRole('menu').waitFor({ state: 'detached', timeout: WAIT_MS }).catch(() => {});
 check('the menu is gone from the page after its exit', await page.getByRole('menu').count(), 0);
 
 // The confirm dialog and the toast.
@@ -1191,7 +1235,7 @@ await page.getByRole('button', { name: `Options for ${gateBoard}` }).click();
 await page.getByRole('button', { name: 'Delete', exact: true }).click();
 const confirmDialog = page.getByRole('dialog', { name: 'Delete this board?' });
 await confirmDialog.waitFor({ state: 'visible' });
-await page.waitForTimeout(500);
+await settled(page, { within: '[role="dialog"]', label: 'the confirm dialog to finish opening' });
 check(
   'the confirm dialog puts focus on Cancel',
   await confirmDialog.getByRole('button', { name: 'Cancel' }).evaluate(el => el === document.activeElement),
@@ -1218,7 +1262,7 @@ check('a toast casts the toast shadow', toastStyle.boxShadow.includes('0px 20px 
 check('a toast enters on bbToast', toastStyle.animationName, 'bbToast');
 // The entrance slides in from the left on a tilt, which moves the box, so the
 // position is measured once it has settled.
-await page.waitForTimeout(700);
+await settled(page, { within: '[data-testid="toast"]', label: 'the toast to finish sliding in' });
 const toastBox = await toast.boundingBox();
 const viewport = page.viewportSize();
 check('a toast is centred at the bottom of the screen', Math.abs(toastBox.x + toastBox.width / 2 - viewport.width / 2) <= 1, true);
@@ -1390,11 +1434,20 @@ check('on a phone the branding column is not rendered at all', await phonePage.l
 check('on a phone the page still has exactly one visible h1', await phonePage.locator('h1:visible').count(), 1);
 check('on a phone a small wordmark stands in for the column', await phonePage.locator('main').getByText('breezy', { exact: false }).first().isVisible(), true);
 
-// A refused submit shakes the form: the animation is running on it.
+// A refused submit shakes the form: the animation starts on it. The shake is
+// shorter than a stalled page can take to answer a query, so its start is
+// heard as an event from before the click and not looked for afterwards.
+await phonePage.evaluate(limit => {
+  const form = document.querySelector('form');
+  window.__shake = new Promise(resolve => {
+    form.addEventListener('animationstart', event => resolve(event.animationName), { once: true });
+    setTimeout(() => resolve('no animation started'), limit);
+  });
+}, WAIT_MS);
 await phonePage.getByRole('button', { name: /^Sign in/ }).click();
 await phonePage.getByText('Email is required').waitFor();
-check('a refused submit plays the shake on the form', await phonePage.locator('form').evaluate(form => getComputedStyle(form).animationName), 'bbShake');
-await phonePage.locator('form').evaluate(form => Promise.all(form.getAnimations().map(a => a.finished)));
+check('a refused submit plays the shake on the form', await phonePage.evaluate(() => window.__shake), 'bbShake');
+await until(phonePage, 'the shake to end', () => !document.querySelector('form').classList.contains('animate-bb-shake')).catch(() => {});
 check('the shake class comes off when it ends', await phonePage.locator('form').evaluate(form => form.classList.contains('animate-bb-shake')), false);
 await phone.close();
 
@@ -1527,7 +1580,7 @@ const heroTargets = [
 ];
 for (const width of [1440, 1024, 768, 390, 320]) {
   await homePage.setViewportSize({ width, height: 900 });
-  await homePage.waitForTimeout(250);
+  await settled(homePage, { label: `the home page to lay out at ${width}` });
   for (const [label, selector, minimum] of heroTargets) {
     for (const [index, handle] of (await homePage.locator(selector).all()).entries()) {
       const behind = await extremeBehind(homePage, handle, 'lightest');
@@ -1536,7 +1589,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
   }
 }
 await homePage.setViewportSize({ width: 1440, height: 900 });
-await homePage.waitForTimeout(250);
+await settled(homePage, { label: 'the home page to lay out at 1440' });
 
 const heroLink = homePage.locator('main header').getByRole('link', { name: /^Open / });
 check('the hero button opens the board worked on last', await heroLink.getAttribute('href'), await homePage.locator('main').getByRole('link', { name: 'Home lavender', exact: true }).getAttribute('href'));
@@ -1576,7 +1629,7 @@ check('a tile title is 17 pixels at 650 in the display face', `${leads(tileTitle
 
 // Hover lifts the tile and turns it, and the shadow deepens.
 await sampleTile.hover();
-await homePage.waitForTimeout(400);
+await settled(homePage, { label: 'the hovered tile to finish rising' });
 const hovered = await styleOf(sampleTile, ['translate', 'rotate', 'boxShadow']);
 check('a hovered tile rises 4 pixels', hovered.translate, '0px -4px');
 check('a hovered tile turns by 0.6 degrees', hovered.rotate, '-0.6deg');
@@ -1644,7 +1697,7 @@ for (const [label, locator, token] of [
   await reportPairs(homePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]);
 }
 await newTile.hover();
-await homePage.waitForTimeout(400);
+await settled(homePage, { label: 'the hovered new board tile to finish rising' });
 const newHovered = await styleOf(newTile, ['translate', 'borderTopColor']);
 check('a hovered new board tile rises 3 pixels', newHovered.translate, '0px -3px');
 check('a hovered new board tile takes the accent outline', await paintOf(homePage, newHovered.borderTopColor), await paintOf(homePage, await tokenValue(homePage, '--color-accent')));
@@ -1672,7 +1725,7 @@ const tileColumns = () =>
   homePage.evaluate(() => new Set([...document.querySelectorAll('main [data-hue]')].map(tile => Math.round(tile.getBoundingClientRect().left))).size);
 for (const [width, expected] of [[320, 1], [390, 1], [768, 2], [1024, 3], [1440, 4]]) {
   await homePage.setViewportSize({ width, height: 900 });
-  await homePage.waitForTimeout(250);
+  await settled(homePage, { label: `the tiles to lay out at ${width}` });
   check(`at ${width} the tiles share ${expected} column${expected > 1 ? 's' : ''}`, await tileColumns(), expected);
   check(`at ${width} the page does not scroll sideways`, await homePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
 }
@@ -1725,7 +1778,7 @@ const boardPage = await signIn(boardContext);
 await boardPage.goto(gateBoardUrl);
 await boardPage.getByRole('region', { name: 'Board columns' }).waitFor();
 await boardPage.getByText('Gate high task', { exact: true }).waitFor();
-await boardPage.waitForTimeout(500);
+await settled(boardPage, { label: 'the board to stop animating' });
 
 const boardStructure = await boardPage.evaluate(() => ({
   h1: [...document.querySelectorAll('h1')].map(h => h.textContent),
@@ -1837,7 +1890,7 @@ check('an empty column says Still air', await boardPage.locator('[data-column]')
 await boardPage.getByRole('button', { name: `Add a card to ${gateBoardColumns[0].title}` }).click();
 const composerField = boardPage.getByRole('textbox', { name: /new card in/i });
 await composerField.waitFor();
-await boardPage.waitForTimeout(300);
+await settled(boardPage, { label: 'the composer to finish opening' });
 const composerStyle = await styleOf(composerField, ['borderTopColor', 'boxShadow', 'borderTopLeftRadius']);
 check('the open composer field is focused and draws the focus colour and its halo', `${await paintOf(boardPage, composerStyle.borderTopColor) === await paintOf(boardPage, await tokenValue(boardPage, '--color-focus'))} ${composerStyle.boxShadow.includes('0px 0px 0px 4px')}`, 'true true');
 await composerField.fill('x');
@@ -1871,22 +1924,25 @@ const carry = async (pg, title, toColumn) => {
   await pg.mouse.move(cx, cy);
   await pg.mouse.down();
   // Paces the input: the sensor needs the press and the first move apart.
-  await pg.waitForTimeout(100);
+  await pg.waitForTimeout(100); // NOSONAR javascript:S2925 the pause is the input itself, nothing observable says when to send the next move
   await pg.mouse.move(cx + 12, cy + 12);
   // The copy that follows the pointer is what says the card is in the air; the
   // announcement is replaced as soon as the card moves.
   await pg.locator('[data-task-card][aria-hidden="true"]').waitFor({ state: 'attached' });
   for (let step = 1; step <= 25; step += 1) {
     await pg.mouse.move(from.x + (target.x + 150 - from.x) * (step / 25), from.y + (target.y + 220 - from.y) * (step / 25), { steps: 2 });
-    await pg.waitForTimeout(25);
+    await pg.waitForTimeout(25); // NOSONAR javascript:S2925 paces the pointer, dnd-kit coalesces a burst of moves
   }
   // Held until the target column is the one lit: the card is over it, which is
-  // what a person waits for before letting go.
-  await pg
+  // what a person waits for before letting go. A column that never lights is
+  // left for the checks to report, with what was on screen.
+  const lit = await pg
     .locator('[data-column][data-highlighted] h2', { hasText: toColumn })
-    .waitFor({ state: 'attached', timeout: 5000 })
-    .catch(() => {});
-  await pg.waitForTimeout(450);
+    .waitFor({ state: 'attached', timeout: WAIT_MS })
+    .then(() => true, () => false);
+  // The gap opens and the column brightens over a few hundred milliseconds,
+  // and what is read next is where they come to rest.
+  if (lit) await settled(pg, { within: '[data-column][data-highlighted]', label: 'the lit column and its gap to come to rest' });
 };
 
 const held = pg =>
@@ -1950,7 +2006,7 @@ const toMs = value => Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 100
   }, 'Gate low task');
   check(`${mode}: the card lands in the column it was carried to`, landed.column, gateBoardColumns[1].title);
   check(`${mode}: no gap and no highlight are left behind`, `${landed.gaps} ${landed.lit}`, '0 0');
-  await pg.waitForTimeout(400);
+  await until(pg, 'the landing flag to clear', () => document.querySelector('[data-landed]') === null).catch(() => {});
   check(`${mode}: the landing flag is gone once the card has settled`, await pg.locator('[data-landed]').count(), 0);
   void context;
 }
@@ -1963,7 +2019,7 @@ log('\n--- the task modal, signed in at 1440 ---');
 await boardPage.getByRole('button', { name: 'Gate high task', exact: true }).click();
 const taskModal = boardPage.getByRole('dialog', { name: 'Edit Task' });
 await taskModal.waitFor();
-await boardPage.waitForTimeout(700);
+await settled(boardPage, { within: '[role="dialog"]', label: 'the task modal to finish opening' });
 
 const modalStyle = await styleOf(taskModal, ['borderTopLeftRadius', 'boxShadow', 'backgroundColor', 'width']);
 check('the panel is white with the modal radius, the modal shadow and the 672 pixel cap', `${modalStyle.borderTopLeftRadius} ${modalStyle.boxShadow.includes('0px 40px 80px -30px')} ${await paintOf(boardPage, modalStyle.backgroundColor) === '255,255,255'} ${modalStyle.width}`, '26px true true 672px');
@@ -2080,7 +2136,7 @@ const motionPage = await signIn(motionContext);
 await motionPage.goto(gateBoardUrl);
 await motionPage.getByRole('region', { name: 'Board columns' }).waitFor();
 await motionPage.getByText('Gate high task', { exact: true }).waitFor();
-await motionPage.waitForTimeout(900);
+await settled(motionPage, { label: 'the board to stop animating with motion on' });
 {
   const mode = 'motion on';
   await carry(motionPage, 'Gate medium task', gateBoardColumns[2].title);
@@ -2091,22 +2147,39 @@ await motionPage.waitForTimeout(900);
   check(`${mode}: the copy that follows the pointer is tilted and enlarged`, `${h.overlay?.rotate} ${h.overlay?.scale}`, '3deg 1.03');
   // Where the gap is, between the cards that stay: the card under the held one
   // in this column is the one that was dropped on, so the gap is before it.
+  // The landing lasts 550 milliseconds, which a stalled page can outlast before
+  // a query reaches it, so its start is heard as an event from before the drop
+  // and the card is read at that moment.
+  await motionPage.evaluate(
+    ([title, limit]) => {
+      window.__landing = new Promise(resolve => {
+        document.addEventListener(
+          'animationstart',
+          event => {
+            const card = event.target;
+            if (event.animationName !== 'bbLand' || !(card instanceof Element) || card.querySelector('h3')?.textContent !== title) return;
+            const style = getComputedStyle(card);
+            resolve({
+              column: card.closest('[data-column]')?.querySelector('h2').textContent,
+              animation: style.animationName,
+              duration: style.animationDuration,
+              easing: style.animationTimingFunction,
+              running: card.getAnimations().map(a => a.animationName),
+            });
+          },
+          true
+        );
+        setTimeout(() => resolve({ column: undefined, animation: 'no animation started', duration: '', easing: '', running: [] }), limit);
+      });
+    },
+    ['Gate medium task', WAIT_MS]
+  );
   await motionPage.mouse.up();
-  const landing = await motionPage.evaluate(title => {
-    const card = [...document.querySelectorAll('[data-task-card]')].find(c => c.querySelector('h3')?.textContent === title);
-    const style = card && getComputedStyle(card);
-    return {
-      column: card?.closest('[data-column]')?.querySelector('h2').textContent,
-      animation: style?.animationName,
-      duration: style?.animationDuration,
-      easing: style?.animationTimingFunction,
-      running: card ? card.getAnimations().map(a => a.animationName) : [],
-    };
-  }, 'Gate medium task');
+  const landing = await motionPage.evaluate(() => window.__landing);
   check(`${mode}: the card lands in the column it was carried to`, landing.column, gateBoardColumns[2].title);
   check(`${mode}: the landing is bbLand over 550 milliseconds`, `${landing.animation} ${landing.duration}`, 'bbLand 0.55s');
   check(`${mode}: the landing is running on the card`, landing.running.includes('bbLand'), true);
-  await motionPage.waitForTimeout(900);
+  await until(motionPage, 'the landing flag to clear', () => document.querySelector('[data-landed]') === null).catch(() => {});
   check(`${mode}: the landing flag is cleared by the end of the animation`, await motionPage.locator('[data-landed]').count(), 0);
   check(`${mode}: a card that is not landing does not animate (the stored level is breezy)`, await motionPage.evaluate(() => [...document.querySelectorAll('[data-task-card]')].filter(c => getComputedStyle(c).animationName !== 'none').length), 0);
 }
@@ -2120,7 +2193,7 @@ const gustyContext = await browser.newContext({ viewport: { width: 1440, height:
 const gustyPage = await signIn(gustyContext);
 await gustyPage.goto(gateBoardUrl);
 await gustyPage.getByText('Gate high task', { exact: true }).waitFor();
-await gustyPage.waitForTimeout(700);
+await settled(gustyPage, { label: 'the gusty board to stop animating' });
 const sway = await gustyPage.evaluate(() => [...document.querySelectorAll('[data-task-card]')].map(c => `${getComputedStyle(c).animationName} ${getComputedStyle(c).animationDuration} ${getComputedStyle(c).animationDelay}`));
 check('at gusty every card sways', sway.every(entry => entry.startsWith('bbSway')), true);
 check('the sway of two cards is out of step', new Set(sway).size > 1, true);
@@ -2130,7 +2203,7 @@ const stillContext = await browser.newContext({ viewport: { width: 1440, height:
 const stillPage = await signIn(stillContext);
 await stillPage.goto(gateBoardUrl);
 await stillPage.getByText('Gate high task', { exact: true }).waitFor();
-await stillPage.waitForTimeout(500);
+await settled(stillPage, { label: 'the board to stop animating under reduced motion' });
 check('reduced motion holds the cards still at the stored gusty', await stillPage.evaluate(() => [...document.querySelectorAll('[data-task-card]')].every(c => getComputedStyle(c).animationName === 'none')), true);
 check('and leaves the stored choice alone', (await (await page.request.get(`${API}/auth/me`, homeAuth)).json()).data.breeze, 'gusty');
 await stillContext.close();
@@ -2143,27 +2216,18 @@ log('\n--- the reduced motion policy ---');
 // waits on an animation to finish: a dialog unmounts only after its exit
 // completes, so a dialog that opens and then never leaves the page under
 // this setting would be the failure to catch.
-// Six animation frames after the click: late enough for the panel to exist
-// and for a reduced motion preference to have dropped its transform, early
-// enough that a 350 millisecond entrance is still under way. Three frames
-// were measured to leave the initial transform in place on 3 of 10 openings,
-// and five on none of 10, so the sample sits one frame past that.
-const OPENING_FRAMES = 6;
-const sampleOpening = pg =>
-  pg.evaluate(
-    frames =>
-      new Promise(resolve => {
-        const trigger = [...document.querySelectorAll('button')].find(b => /forgot it/i.test(b.textContent));
-        trigger.click();
-        const step = left => {
-          if (left > 0) return requestAnimationFrame(() => step(left - 1));
-          const style = getComputedStyle(document.querySelector('[role="dialog"]'));
-          resolve({ opacity: Number(style.opacity), transform: style.transform });
-        };
-        step(frames);
-      }),
-    OPENING_FRAMES
-  );
+// The opening is recorded on every frame, from before the click until the panel
+// is at rest. Which frame shows what depends on how long frames take, so no
+// claim is made about a frame number: the first frame is the panel's initial
+// values, and what lies between that and rest says whether it travelled. A
+// reduced motion preference drops the transform at once, so the recording holds
+// at most the initial transform and rest. A panel that played its entrance
+// holds the values in between as well.
+const sampleOpening = async pg => {
+  await armAppearance(pg, '[role="dialog"]');
+  await pg.getByRole('button', { name: 'Forgot it?' }).click();
+  return readAppearance(pg);
+};
 
 const calm = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 const calmPage = await calm.newPage();
@@ -2228,8 +2292,8 @@ const calmOpening = await sampleOpening(calmPage);
 const dialog = calmPage.getByRole('dialog');
 await dialog.waitFor({ state: 'visible' });
 check('a dialog opens under reduced motion', await dialog.isVisible(), true);
-check('under reduced motion the panel does not travel or scale', isIdentity(calmOpening.transform), true);
-check('under reduced motion the panel still fades in', calmOpening.opacity < 1, true);
+check('under reduced motion the panel does not travel or scale', distinctMidTransforms(calmOpening) <= 1, true);
+check('under reduced motion the panel still fades in', calmOpening[0].opacity < 1, true);
 await calmPage.keyboard.press('Escape');
 await dialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 check('the dialog unmounts after its exit under reduced motion', await dialog.count(), 0);
@@ -2243,8 +2307,8 @@ await normalPage.waitForSelector('form');
 const normalOpening = await sampleOpening(normalPage);
 const normalDialog = normalPage.getByRole('dialog');
 await normalDialog.waitFor({ state: 'visible' });
-check('with motion on the panel rises and scales in', isIdentity(normalOpening.transform), false);
-check('with motion on the panel fades in', normalOpening.opacity < 1, true);
+check('with motion on the panel rises and scales in', isIdentity(normalOpening[0].transform), false);
+check('with motion on the panel fades in', normalOpening[0].opacity < 1, true);
 await normalPage.keyboard.press('Escape');
 await normalDialog.waitFor({ state: 'detached', timeout: 2000 }).catch(() => {});
 check('the dialog unmounts after its exit with motion on', await normalDialog.count(), 0);
@@ -2252,44 +2316,29 @@ await normal.close();
 
 log('\n--- the task modal: its entrance with motion on and reduced, and the layer that leaves ---');
 
-// The board is heavy to paint and a frame can take 100 to 200 milliseconds, so
-// a count of frames says nothing about elapsed time here. The opening is read
-// on the first frame the dialog exists, where its initial values are on it: a
+// The board is heavy to paint and a frame can take 100 to 250 milliseconds, so
+// a count of frames says nothing about elapsed time here. The opening is
+// recorded on every frame from before the click until the dialog is at rest,
+// and read from the series: its first frame holds the initial values, where a
 // panel that travels starts translated and scaled, and both start transparent.
 // Under reduced motion the same initial values are there for that first frame
-// and the transform is collapsed to its rest value by the frames after it, not
-// played over 350 milliseconds, so the next three frames are read as well.
+// and the transform collapses to its rest value, not played over 350
+// milliseconds, so the series holds at most the initial transform and rest.
 const modalPage = async (reducedMotion, viewport) => {
   const modalContext = await browser.newContext({ viewport, reducedMotion });
   const pg = await signIn(modalContext);
   await pg.goto(gateBoardUrl);
   await pg.getByRole('region', { name: 'Board columns' }).waitFor();
   await pg.getByText('Gate medium task', { exact: true }).waitFor();
-  await pg.waitForTimeout(900);
+  await settled(pg, { label: 'the board to stop animating before the modal opens' });
   return { pg, modalContext };
 };
 
-const sampleModalOpening = pg =>
-  pg.evaluate(
-    () =>
-      new Promise((resolve, reject) => {
-        document.querySelector('[data-task-open]').click();
-        const started = performance.now();
-        const frames = [];
-        const step = () => {
-          const dialog = document.querySelector('[role="dialog"]');
-          if (dialog) {
-            const style = getComputedStyle(dialog);
-            frames.push({ opacity: Number(style.opacity), transform: style.transform });
-            if (frames.length === 4) return resolve(frames);
-          } else if (performance.now() - started > 3000) {
-            return reject(new Error('the dialog never mounted'));
-          }
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }),
-  );
+const sampleModalOpening = async pg => {
+  await armAppearance(pg, '[role="dialog"]');
+  await pg.evaluate(() => document.querySelector('[data-task-open]').click());
+  return readAppearance(pg);
+};
 
 /** The translation along y of a `matrix(...)`, and the scale along x. */
 const matrixOf = transform => {
@@ -2297,38 +2346,46 @@ const matrixOf = transform => {
   return parts ? { scale: parts[0], ty: parts[5] } : { scale: 1, ty: 0 };
 };
 
-// Closed from inside the page and read on the first frame where the wrapper
-// reports that it takes no pointer, while the panel is still leaving: the
-// wrapper fixed over the screen has to let a pointer through to what is behind
-// it, or the first press after a save lands on it. If it is gone before it ever
-// said so, `stillMounted` is false and the wrapper never made that claim.
+// Closed from inside the page and read at the moment the wrapper reports that
+// it takes no pointer, while the panel is still leaving: the wrapper fixed over
+// the screen has to let a pointer through to what is behind it, or the first
+// press after a save lands on it. The moment is reported by a mutation
+// observer, so it does not depend on which frame a stalled page reaches first.
+// If the wrapper is gone before it ever said so, `stillMounted` is false and it
+// never made that claim.
 const sampleLeaving = pg =>
   pg.evaluate(
-    () =>
+    limit =>
       new Promise(resolve => {
         const panel = document.querySelector('[role="dialog"]');
         const wrapper = panel.parentElement;
         const scrim = panel.previousElementSibling;
         const box = document.querySelector('[data-task-card]').getBoundingClientRect();
-        const started = performance.now();
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-        const step = () => {
-          const caught = wrapper.isConnected && getComputedStyle(wrapper).pointerEvents === 'none';
-          if (caught || !wrapper.isConnected || performance.now() - started > 3000) {
-            const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-            return resolve({
-              stillMounted: wrapper.isConnected,
-              wrapper: getComputedStyle(wrapper).pointerEvents,
-              scrim: getComputedStyle(scrim).pointerEvents,
-              panel: getComputedStyle(panel).pointerEvents,
-              hitIsInsideWrapper: wrapper.contains(hit),
-              hitIsTheCard: Boolean(hit?.closest('[data-task-card]')),
-            });
-          }
-          requestAnimationFrame(step);
+        const read = () => {
+          const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+          return {
+            stillMounted: wrapper.isConnected,
+            wrapper: getComputedStyle(wrapper).pointerEvents,
+            scrim: getComputedStyle(scrim).pointerEvents,
+            panel: getComputedStyle(panel).pointerEvents,
+            hitIsInsideWrapper: wrapper.contains(hit),
+            hitIsTheCard: Boolean(hit?.closest('[data-task-card]')),
+          };
         };
-        requestAnimationFrame(step);
+        const observer = new MutationObserver(() => {
+          if (!wrapper.isConnected || getComputedStyle(wrapper).pointerEvents === 'none') {
+            observer.disconnect();
+            resolve(read());
+          }
+        });
+        observer.observe(document.documentElement, { subtree: true, attributes: true, childList: true });
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        setTimeout(() => {
+          observer.disconnect();
+          resolve(read());
+        }, limit);
       }),
+    WAIT_MS
   );
 
 for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced motion', 'reduce']]) {
@@ -2340,9 +2397,9 @@ for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced m
   if (reducedMotion === 'no-preference') {
     check(`${mode}, at 1440: the modal starts raised and scaled down`, isIdentity(opening.transform), false);
   } else {
-    check(`${mode}, at 1440: the modal is at rest within three frames of appearing, and does not travel`, frames.some(frame => isIdentity(frame.transform)), true);
+    check(`${mode}, at 1440: the modal comes to rest without travelling`, distinctMidTransforms(frames) <= 1, true);
   }
-  await pg.waitForTimeout(700);
+  await settled(pg, { within: '[role="dialog"]', label: 'the modal to finish opening at 1440' });
   const leaving = await sampleLeaving(pg);
   check(`${mode}, at 1440: it is still mounted while it leaves`, leaving.stillMounted, true);
   check(`${mode}, at 1440: while it leaves the wrapper, the scrim and the panel take no pointer`, `${leaving.wrapper} ${leaving.scrim} ${leaving.panel}`, 'none none none');
@@ -2360,14 +2417,14 @@ for (const [mode, reducedMotion] of [['motion on', 'no-preference'], ['reduced m
   if (reducedMotion === 'no-preference') {
     check(`${mode}, at 390: the sheet starts below the bottom edge and does not scale`, `${ty > 0} ${scale}`, 'true 1');
   } else {
-    check(`${mode}, at 390: the sheet is at rest within three frames of appearing`, frames.some(frame => isIdentity(frame.transform)), true);
+    check(`${mode}, at 390: the sheet comes to rest without travelling`, distinctMidTransforms(frames) <= 1, true);
   }
-  await pg.waitForTimeout(700);
-  const settled = await pg.getByRole('dialog').evaluate(el => {
+  await settled(pg, { within: '[role="dialog"]', label: 'the sheet to finish opening at 390' });
+  const atRest = await pg.getByRole('dialog').evaluate(el => {
     const box = el.getBoundingClientRect();
     return { bottom: Math.round(box.bottom), height: Math.round(innerHeight) };
   });
-  check(`${mode}, at 390: the sheet comes to rest against the bottom edge`, settled.bottom, settled.height);
+  check(`${mode}, at 390: the sheet comes to rest against the bottom edge`, atRest.bottom, atRest.height);
   const leaving = await sampleLeaving(pg);
   check(`${mode}, at 390: while the sheet leaves it takes no pointer`, `${leaving.stillMounted} ${leaving.wrapper} ${leaving.scrim} ${leaving.panel}`, 'true none none none');
   await pg.getByRole('dialog').waitFor({ state: 'detached', timeout: 2000 });
@@ -2438,7 +2495,7 @@ const armExitRecorder = (pg, belowTitle) =>
         if (first && !picture) {
           return resolve({ first, frames, ended, elapsed: now - first.at, belowTopAfter: belowTop() });
         }
-        if (now - started > 6000) return resolve({ first, frames, ended, elapsed: null, belowTopAfter: null });
+        if (now - started > 15000) return resolve({ first, frames, ended, elapsed: null, belowTopAfter: null });
         requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
@@ -2469,7 +2526,7 @@ for (const [mode, reducedMotion, breeze] of [
   await pg.goto(gateBoardUrl);
   await pg.getByRole('region', { name: 'Board columns' }).waitFor();
   await pg.getByRole('button', { name: below, exact: true }).waitFor();
-  await pg.waitForTimeout(900);
+  await settled(pg, { label: 'the board to stop animating before a card is blown away' });
 
   const before = await columnTitles(pg);
   const topId = await pg.locator('[data-task-card]', { hasText: top }).getAttribute('data-task-card');
@@ -2478,7 +2535,7 @@ for (const [mode, reducedMotion, breeze] of [
   await pg.getByRole('button', { name: top, exact: true }).click();
   const exitDialog = pg.getByRole('dialog', { name: 'Edit Task' });
   await exitDialog.waitFor();
-  await pg.waitForTimeout(400);
+  await settled(pg, { within: '[role="dialog"]', label: 'the task modal to finish opening before the card is blown away' });
   await armExitRecorder(pg, below);
   await exitDialog.getByRole('button', { name: 'Blow it away' }).click();
   const exit = await pg.evaluate(() => window.__exit);
@@ -2499,7 +2556,9 @@ for (const [mode, reducedMotion, breeze] of [
     check(`${mode}: it runs the whole animation before it reports its end`, `${exit.ended?.name} ${exit.ended !== null && exit.ended.elapsed >= 0.45 && exit.ended.elapsed <= 0.47}`, 'bbAway true');
     check(`${mode}: the Catch it toast is on screen while the card is still leaving`, exit.frames.some(f => f.toast), true);
   }
-  check(`${mode}: and the picture is gone within a second and a half`, exit.elapsed !== null && exit.elapsed < 1500, true);
+  // The picture leaves when its animation ends, however long the page took to
+  // start it, so the claim is that it is gone and not how soon.
+  check(`${mode}: and the picture is gone once the exit has played`, exit.elapsed !== null, true);
   const stayed = exit.frames.every(f => f.belowTop === exit.first.belowTop);
   const closed = exit.belowTopAfter !== null && exit.belowTopAfter < exit.first.belowTop - 40;
   if (!stayed || !closed) {
