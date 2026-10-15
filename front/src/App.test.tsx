@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import App from './App';
 import { useAuth } from '@/hooks/useAuth';
 import type { AuthContextType } from '@/context/AuthContext';
@@ -50,7 +51,17 @@ vi.mock('@/app/layouts/AppShell', async () => {
 vi.mock('@/pages', () => ({
   Home: () => <div>Protected home content</div>,
   Board: () => <div>Board page</div>,
-  Auth: ({ mode }: { mode: string }) => <div>{mode === 'signin' ? 'Login page' : 'Register page'}</div>,
+  // Prints the confirmation flag the router state carries, so a test can see
+  // whether a redirect brought it along.
+  Auth: ({ mode }: { mode: string }) => {
+    const { state } = useLocation();
+    return (
+      <div>
+        {mode === 'signin' ? 'Login page' : 'Register page'}
+        {state?.passwordReset && <span>Carries the password confirmation</span>}
+      </div>
+    );
+  },
   Profile: () => <div>Profile page</div>,
   NotFound: () => <div>Not found page</div>,
   ResetPassword: () => <div>Reset password page</div>,
@@ -64,6 +75,7 @@ const authState = (overrides: Partial<AuthContextType>): AuthContextType => ({
   register: vi.fn(),
   logout: vi.fn(),
   clearSession: vi.fn(),
+  sessionEndReason: null,
   updateUser: vi.fn(),
   isAuthenticated: false,
   loading: false,
@@ -83,6 +95,31 @@ describe('auth guard (ProtectedRoute)', () => {
 
     expect(await screen.findByText('Login page')).toBeInTheDocument();
     expect(screen.queryByText('Protected home content')).not.toBeInTheDocument();
+  });
+
+  // A page behind the guard that drops the session itself, as the password
+  // change does, is redirected by this guard in the same instant, ahead of any
+  // navigation of its own. The confirmation has to ride on this redirect.
+  it('carries the confirmation of a password change on its redirect', async () => {
+    route.path = '/profile';
+    mockedUseAuth.mockReturnValue(
+      authState({ isAuthenticated: false, loading: false, sessionEndReason: 'password-changed' })
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText('Login page')).toBeInTheDocument();
+    expect(screen.getByText('Carries the password confirmation')).toBeInTheDocument();
+  });
+
+  it('carries nothing on a redirect that has no reason to explain', async () => {
+    route.path = '/profile';
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false, loading: false }));
+
+    render(<App />);
+
+    expect(await screen.findByText('Login page')).toBeInTheDocument();
+    expect(screen.queryByText('Carries the password confirmation')).not.toBeInTheDocument();
   });
 
   it('shows the protected content to an authenticated visitor', async () => {

@@ -132,7 +132,9 @@ describe('PasswordPanel', () => {
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith('/login', { replace: true, state: { passwordReset: true } })
     );
-    expect(auth.clearSession).toHaveBeenCalledTimes(1);
+    // With its reason: the guard that redirects the page the instant the
+    // session is gone needs it to carry the confirmation.
+    expect(auth.clearSession).toHaveBeenCalledExactlyOnceWith('password-changed');
   });
 
   // A 401 is what the client reads as an ended session and signs the person
