@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Button } from '@/shared/ui';
 
 export interface SessionWarningToastProps {
   secondsRemaining: number;
@@ -33,21 +34,17 @@ export function SessionWarningToast({ secondsRemaining, onExtend }: SessionWarni
   }, [secondsRemaining]);
 
   return createPortal(
-    <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-gray-200 bg-white p-4 shadow-lg">
-      <div role="alert" className="text-sm text-gray-800">
+    <div className="fixed bottom-4 right-4 z-50 max-w-sm rounded-card border border-line-10 bg-surface p-4 shadow-modal">
+      <div role="alert" className="text-sm text-ink-body">
         {announcedText}
       </div>
       <div className="mt-3 flex items-center justify-between gap-3">
-        <span aria-hidden="true" className="text-lg font-semibold text-gray-900">
+        <span aria-hidden="true" className="font-mono text-lg font-medium text-ink">
           {secondsRemaining}
         </span>
-        <button
-          type="button"
-          onClick={onExtend}
-          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-pointer"
-        >
+        <Button type="button" size="xs" onClick={onExtend}>
           Stay signed in
-        </button>
+        </Button>
       </div>
     </div>,
     document.body

@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { IconCheck, IconSearch, IconX } from '@tabler/icons-react';
 import type { User } from '@/models';
-import { Avatar, Icon } from '@/shared/ui';
+import { Avatar, Button, Icon, LoadingScreen } from '@/shared/ui';
 
 export interface MemberSearchResultsProps {
   members: User[];
@@ -17,7 +17,7 @@ export interface MemberSearchResultsProps {
 const fullName = (member: User) => `${member.firstName} ${member.lastName}`;
 
 const Centered: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="text-center py-8">{children}</div>
+  <div className="py-8 text-center">{children}</div>
 );
 
 /**
@@ -37,31 +37,22 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
   onRetry,
 }) => {
   if (isLoading) {
-    return (
-      <Centered>
-        <div
-          role="status"
-          aria-label="Loading team members..."
-          className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"
-        />
-        <p className="text-gray-500 font-body">Loading team members...</p>
-      </Centered>
-    );
+    return <LoadingScreen label="Loading team members..." showLabel fill="inline" />;
   }
 
   if (error) {
     return (
       <Centered>
         <div
-          className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"
+          className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-danger-bg text-danger"
           aria-hidden="true"
         >
-          <Icon as={IconX} className="text-red-500" size={24} />
+          <Icon as={IconX} size={24} />
         </div>
-        <p className="text-red-500 font-body">{error}</p>
-        <button type="button" onClick={onRetry} className="mt-4 text-blue-600 hover:text-blue-800 cursor-pointer">
+        <p className="text-danger-strong">{error}</p>
+        <Button type="button" variant="secondary" size="sm" onClick={onRetry} className="mt-4">
           Try again
-        </button>
+        </Button>
       </Centered>
     );
   }
@@ -70,12 +61,12 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
     return (
       <Centered>
         <div
-          className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4"
+          className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-line-06 text-ink-secondary"
           aria-hidden="true"
         >
-          <Icon as={IconSearch} className="text-gray-400" size={24} />
+          <Icon as={IconSearch} size={24} />
         </div>
-        <p className="text-gray-500 font-body">No members found matching your search</p>
+        <p className="text-ink-secondary">No members found matching your search</p>
       </Centered>
     );
   }
@@ -89,8 +80,10 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
           <motion.div
             key={member._id}
             whileHover={{ scale: 1.01 }}
-            className={`flex items-center gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            className={`focus-ring flex cursor-pointer items-center gap-4 rounded-control border-2 p-4 transition-[background-color,border-color] ${
+              isSelected
+                ? 'border-sky-edge bg-sky-tint'
+                : 'border-line-14 hover:border-line-22 hover:bg-surface-subtle'
             }`}
             onClick={() => onToggle(member)}
             role="button"
@@ -111,20 +104,20 @@ export const MemberSearchResults: React.FC<MemberSearchResultsProps> = ({
             <div className="relative" aria-hidden="true">
               <Avatar name={fullName(member)} src={member.avatar} size="lg" decorative />
               {isSelected && (
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                  <Icon as={IconCheck} size={12} className="text-white" />
+                <div className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-ink text-white">
+                  <Icon as={IconCheck} size={12} />
                 </div>
               )}
             </div>
 
             <div className="flex-1">
-              <h3 className="font-medium text-gray-900 font-heading">{fullName(member)}</h3>
-              <p className="text-sm text-gray-600 font-body">{member.role}</p>
-              <p className="text-xs text-gray-500 font-body">{member.email}</p>
+              <h3 className="font-heading font-medium text-ink">{fullName(member)}</h3>
+              <p className="text-sm text-ink-secondary">{member.role}</p>
+              <p className="text-xs text-ink-secondary">{member.email}</p>
             </div>
 
             <div className="text-right">
-              <span className="inline-block px-2 py-1 bg-gray-100 text-xs text-gray-600 rounded-full font-body">
+              <span className="inline-block rounded-full bg-line-06 px-2 py-1 text-xs text-ink-secondary">
                 {member.department}
               </span>
             </div>

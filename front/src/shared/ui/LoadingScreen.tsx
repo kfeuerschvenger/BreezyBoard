@@ -13,14 +13,17 @@ export interface LoadingScreenProps {
    * `screen` is a page of its own, as tall as the window on the ground
    * colour. `parent` fills the box it is placed in and draws no ground of its
    * own, for a page that already sits inside the application shell, where a
-   * window-tall box would make the content area scroll for nothing.
+   * window-tall box would make the content area scroll for nothing. `inline`
+   * takes only the room the mark needs, for a region of a page or a dialog
+   * that is waiting on its own while the rest is already there.
    */
-  fill?: 'screen' | 'parent';
+  fill?: 'screen' | 'parent' | 'inline';
 }
 
 const FILL_CLASSES = {
   screen: 'min-h-screen bg-ground',
   parent: 'min-h-0 flex-1',
+  inline: 'py-4',
 } as const;
 
 /**

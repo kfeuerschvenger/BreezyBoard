@@ -15,10 +15,10 @@ export const SelectedMembers: React.FC<SelectedMembersProps> = ({ members, onRem
   if (members.length === 0) return null;
 
   return (
-    <div className="p-6 bg-blue-50 border-b border-gray-200">
-      <div className="flex items-center gap-2 mb-3">
-        <Icon as={IconUserPlus} size={16} className="text-blue-600" aria-hidden="true" />
-        <span className="text-sm font-medium text-blue-900">
+    <div className="border-b border-line-10 bg-sky-tint p-6">
+      <div className="mb-3 flex items-center gap-2 text-sky-deep">
+        <Icon as={IconUserPlus} size={16} aria-hidden="true" />
+        <span className="text-sm font-medium">
           {members.length} member{members.length > 1 ? 's' : ''} selected
         </span>
       </div>
@@ -26,15 +26,15 @@ export const SelectedMembers: React.FC<SelectedMembersProps> = ({ members, onRem
         {members.map(member => (
           <div
             key={member._id}
-            className="flex items-center gap-2 bg-white px-3 py-1 rounded-full border border-blue-200"
+            className="flex items-center gap-2 rounded-full border border-line-14 bg-surface px-3 py-1"
           >
-            <Avatar name={fullName(member)} src={member.avatar} size="sm" decorative className="w-5 h-5 text-[10px]" />
-            <span className="text-sm text-gray-700">{fullName(member)}</span>
+            <Avatar name={fullName(member)} src={member.avatar} size="sm" decorative className="size-5 text-[10px]" />
+            <span className="text-sm text-ink-body">{fullName(member)}</span>
             <button
               type="button"
               onClick={() => onRemove(member)}
               aria-label={`Remove ${fullName(member)}`}
-              className="text-gray-400 hover:text-gray-600 cursor-pointer"
+              className="focus-ring cursor-pointer rounded-full text-ink-secondary hover:text-ink"
             >
               <Icon as={IconX} size={14} aria-hidden="true" />
             </button>

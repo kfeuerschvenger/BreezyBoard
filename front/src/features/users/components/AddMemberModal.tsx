@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { IconSearch } from '@tabler/icons-react';
 import type { User } from '@/models';
 import { Button, Modal, Icon } from '@/shared/ui';
+import { FIELD_BORDER, FIELD_CLASSES } from '@/shared/ui/fieldStyles';
 import { useMemberSearch } from '../hooks/useMemberSearch';
 import { MemberSearchResults } from './MemberSearchResults';
 import { SelectedMembers } from './SelectedMembers';
@@ -74,7 +75,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       subtitle={boardTitle ? `Add team members to "${boardTitle}"` : 'Add team members'}
       footer={
         <>
-          <p className="text-sm text-gray-600 font-body">
+          <p className="text-sm text-ink-secondary">
             {selected.length} member{selected.length !== 1 ? 's' : ''} selected
           </p>
           <div className="flex gap-3">
@@ -89,11 +90,12 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
       }
     >
       <div className="space-y-6">
-        <div className="border-b border-gray-200 py-4 md:p-6">
+        <div className="border-b border-line-10 py-4 md:p-6">
           <div className="relative">
-            <Icon as={IconSearch}
+            <Icon
+              as={IconSearch}
               size={20}
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-tertiary"
               aria-hidden="true"
             />
             <input
@@ -102,7 +104,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               placeholder="Search team members..."
               value={search.term}
               onChange={event => search.setTerm(event.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-body"
+              className={`${FIELD_CLASSES} ${FIELD_BORDER} h-12 rounded-field pl-11 pr-4`}
               aria-label="Search team members"
             />
           </div>
