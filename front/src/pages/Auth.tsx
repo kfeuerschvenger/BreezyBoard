@@ -14,8 +14,9 @@ export interface AuthProps {
 }
 
 // What a page that sends someone here can ask of it, through the router's
-// location state: show the confirmation of a finished reset, or open the
-// dialog that asks for a new link.
+// location state: show the confirmation of a finished reset or of a password
+// change (both end the session and read the same), or open the dialog that
+// asks for a new link.
 interface AuthLocationState {
   passwordReset?: boolean;
   forgotPassword?: boolean;

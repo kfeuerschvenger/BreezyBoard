@@ -35,6 +35,14 @@ export const AuthService = {
     await api.post('/auth/reset-password', { token, newPassword });
   },
 
+  // For somebody who is signed in. A wrong current password rejects with the
+  // API's WRONG_CURRENT_PASSWORD code (a 400, so the client does not read it
+  // as an ended session). A success revokes every session of the account,
+  // this browser's included: the caller has to drop the stored one.
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await api.post('/auth/change-password', { currentPassword, newPassword });
+  },
+
   // Replaces validateToken(). The backend wraps every response body as
   // { success, data }, /auth/me included, so this unwraps via
   // response.data.data like every other endpoint here.

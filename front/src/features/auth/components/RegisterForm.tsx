@@ -6,6 +6,7 @@ import { IconArrowRight } from '@tabler/icons-react';
 import { Button, Field, Icon, Input, PasswordInput } from '@/shared/ui';
 import type { RegisterCredentials } from '@/models';
 import { useLegalDocuments } from '@/hooks/useLegalDocuments';
+import { newPasswordSchema } from '@/shared/lib/passwordRule';
 import { useShake } from '../useShake';
 import { AuthBanner } from './AuthBanner';
 
@@ -19,12 +20,7 @@ const registerSchema = z
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     email: z.string().email('Email is invalid'),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/(?=.*[a-z])/, 'Password must contain a lowercase letter')
-      .regex(/(?=.*[A-Z])/, 'Password must contain an uppercase letter')
-      .regex(/(?=.*\d)/, 'Password must contain a number'),
+    password: newPasswordSchema,
     confirmPassword: z.string().min(1, 'Please confirm your password'),
     terms: z.boolean().refine(value => value === true, { message: 'You must accept the terms' }),
   })

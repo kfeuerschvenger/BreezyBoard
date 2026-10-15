@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { IconArrowRight } from '@tabler/icons-react';
 import { Button, Field, Icon, PasswordInput } from '@/shared/ui';
+import { newPasswordSchema, PASSWORD_RULE_HINT } from '@/shared/lib/passwordRule';
 import { useShake } from '../useShake';
 import { AuthBanner } from './AuthBanner';
 
@@ -14,12 +15,7 @@ import { AuthBanner } from './AuthBanner';
  */
 const resetPasswordSchema = z
   .object({
-    newPassword: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/(?=.*[a-z])/, 'Password must contain a lowercase letter')
-      .regex(/(?=.*[A-Z])/, 'Password must contain an uppercase letter')
-      .regex(/(?=.*\d)/, 'Password must contain a number'),
+    newPassword: newPasswordSchema,
     confirmPassword: z.string().min(1, 'Please confirm your password'),
   })
   .refine(values => values.newPassword === values.confirmPassword, {
@@ -61,7 +57,7 @@ export const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onSubmit, 
       <Field
         label="New password"
         error={errors.newPassword?.message}
-        hint="At least 8 characters, with a lowercase letter, an uppercase letter and a number."
+        hint={PASSWORD_RULE_HINT}
       >
         {props => (
           <PasswordInput
