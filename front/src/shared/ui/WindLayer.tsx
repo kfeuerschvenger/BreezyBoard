@@ -91,7 +91,11 @@ export const WindLayer: React.FC<WindLayerProps> = ({ tone = 'light', level = 'b
   if (reduced || !layer) return null;
 
   return (
-    <div aria-hidden="true" className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}>
+    <div
+      aria-hidden="true"
+      data-testid="wind-layer"
+      className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}
+    >
       {layer}
     </div>
   );

@@ -18,6 +18,7 @@
 import { chromium } from 'playwright';
 import { AxeBuilder } from '@axe-core/playwright';
 import { settled } from './observe.mjs';
+import { measureContrast } from './contrast.mjs';
 
 const FRONT = process.env.E2E_FRONT_URL ?? 'http://localhost:5173';
 const API = process.env.E2E_API_URL ?? 'http://localhost:5000/api/v1';
@@ -76,7 +77,14 @@ const BASELINE = {
 // entrance animation, which `settle` below now waits out. On the settled
 // page axe finds none. The contrast concern recorded in P4-5 is about icon
 // colours, which is WCAG 1.4.11 and a rule axe does not run by default, so
-// it is neither confirmed nor refuted by this script.
+// it is neither confirmed nor refuted by axe.
+//
+// Contrast is measured here in a second way, which does not wait on axe: after
+// each scan `contrast.mjs` photographs the page with its glyphs removed and
+// compares every piece of text with the pixels behind it. Axe reads a background
+// from the cascade and has no answer for text on translucent glass over a
+// gradient. That sweep has no budget. Every pair on every surface meets its
+// minimum, and a pair that does not is a failure to fix in the interface.
 
 const log = (...a) => console.log(...a);
 const results = [];
@@ -164,10 +172,60 @@ const scan = async surface => {
     log('PASS  no violations at all');
     results.push(true);
   }
+
+  await sweepContrast();
+};
+
+/**
+ * The colour of every piece of text on the settled page, against the pixels
+ * painted behind it. Axe has no answer for text on a translucent surface over a
+ * gradient, and the list of pairs in design-tokens.mjs holds only the pairs
+ * somebody thought of. This holds every pair that is on screen.
+ */
+const sweepContrast = async () => {
+  const { measured, failures, lowest, skipped } = await measureContrast(page);
+  const ok = failures.length === 0 && measured.length > 0;
+  results.push(ok);
+  const left = Object.entries(skipped)
+    .map(([reason, count]) => `${count} ${reason}`)
+    .join(', ');
+  const glyphs = measured.filter(box => box.kind === 'glyph').length;
+  log(
+    `${ok ? 'PASS' : 'FAIL'}  contrast of every colour on screen  -> ${measured.length} measured (${glyphs} glyphs), ${failures.length} below the minimum, lowest ${lowest?.ratio}:1 (${lowest?.kind}, "${lowest?.label}" in ${lowest?.where})${left ? `; not measured: ${left}` : ''}`,
+  );
+  for (const box of failures.slice(0, 12)) {
+    log(`        ${box.ratio}:1 < ${box.minimum}:1  "${box.label}"  ${box.color} on rgb(${box.behind})  in ${box.where}`);
+  }
 };
 
 await page.goto(`${FRONT}/login`);
 await page.waitForSelector('form');
+
+// The sweep is only worth its pass if it can fail. Four probes of known colour
+// are put on the page and taken away again: the grey the reference design uses
+// for small text (3.2:1, which has to be refused), ink (which has to pass), the
+// same grey at a size WCAG treats as large (3:1, which has to pass) and ink at
+// 30% opacity (which has to be refused, so a faded parent is not ignored).
+await page.evaluate(() => {
+  const probe = document.createElement('div');
+  probe.id = 'contrast-probe';
+  probe.setAttribute('style', 'position:fixed;left:8px;top:8px;z-index:99999;background:#ffffff;padding:8px');
+  probe.innerHTML = [
+    '<p style="color:#8391a4;font:16px sans-serif;margin:0">probe weak</p>',
+    '<p style="color:#0f1b2d;font:16px sans-serif;margin:0">probe strong</p>',
+    '<p style="color:#8391a4;font:bold 24px sans-serif;margin:0">probe large</p>',
+    '<div style="opacity:0.3"><p style="color:#0f1b2d;font:16px sans-serif;margin:0">probe faded</p></div>',
+  ].join('');
+  document.body.appendChild(probe);
+});
+const probed = await measureContrast(page);
+await page.evaluate(() => document.getElementById('contrast-probe')?.remove());
+const probeFailed = label => probed.failures.some(box => box.label === label);
+check('the contrast sweep refuses the reference design grey on white', probeFailed('probe weak'), true);
+check('the contrast sweep accepts ink on white', probeFailed('probe strong'), false);
+check('the contrast sweep accepts that grey at the large text size', probeFailed('probe large'), false);
+check('the contrast sweep refuses ink at 30% opacity', probeFailed('probe faded'), true);
+
 await scan('login');
 
 // The forgot password dialog was the fifth hand-written modal and the one
