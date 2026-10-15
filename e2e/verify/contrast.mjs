@@ -60,7 +60,10 @@ const collectBoxes = () => {
 
   const clipped = (element, rect) => {
     let { left, top, right, bottom } = rect;
-    for (let node = element.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+    // The element's own overflow clips its text as much as an ancestor's does:
+    // `truncate` cuts a line at the element's edge and leaves the rest of the
+    // text's box lying over whatever is beside it.
+    for (let node = element; node && node !== document.documentElement; node = node.parentElement) {
       const style = getComputedStyle(node);
       if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
       const box = node.getBoundingClientRect();
@@ -82,9 +85,11 @@ const collectBoxes = () => {
   const isTurned = element => {
     for (let node = element; node; node = node.parentElement) {
       const style = getComputedStyle(node);
-      if (style.rotate !== 'none' && style.rotate !== '0deg') return true;
+      // A tilt under about a degree, such as a lifted tile's, moves the corners
+      // of a line's box by a pixel or two over a flat surface and is measured.
+      if (style.rotate !== 'none' && Math.abs(Number.parseFloat(style.rotate)) > 1) return true;
       const matrix = /^matrix\(([^)]*)\)$/.exec(style.transform);
-      if (matrix && Math.abs(Number.parseFloat(matrix[1].split(',')[1])) > 0.001) return true;
+      if (matrix && Math.abs(Number.parseFloat(matrix[1].split(',')[1])) > 0.02) return true;
     }
     return false;
   };
@@ -102,6 +107,9 @@ const collectBoxes = () => {
 
   const skipReason = (element, rect) => {
     if (getComputedStyle(element).visibility === 'hidden') return 'hidden';
+    // A control that appears under a pointer, or a focus, is measured in the
+    // state it appears in: the scans that need it hover or focus it first.
+    if (opacityOf(element) < 0.02) return 'transparent';
     if (isScreenReaderOnly(element)) return 'screen reader only';
     if (isTurned(element)) return 'turned';
     if (element.closest('[inert]')) return 'inert';

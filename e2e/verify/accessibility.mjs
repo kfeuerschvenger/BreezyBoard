@@ -245,6 +245,21 @@ await page.getByRole('dialog', { name: 'Forgot password' }).getByRole('status').
 await settled(page, { within: '[role="dialog"]', label: 'the confirmation to finish replacing the form' });
 await scan('login, forgot password confirmation');
 
+// A refused sign in: the error banner is a tint of its own, with its own text
+// colour, and exists only after a refusal. The terms dialog opened from the
+// pair of links under the form is a long document in a dialog.
+await page.goto(`${FRONT}/login`);
+const refusedForm = page.locator('form').first();
+await refusedForm.getByLabel('Email address', { exact: true }).fill(`axe-nobody-${Date.now()}@example.test`);
+await refusedForm.getByLabel('Password', { exact: true }).fill('NotARealPassw0rd');
+await refusedForm.getByRole('button', { name: /sign in/i }).click();
+await page.getByRole('alert').first().waitFor();
+await scan('login, sign in refused');
+await page.getByRole('button', { name: 'Terms', exact: true }).click();
+await page.getByRole('dialog', { name: /Terms of Service/ }).locator('.whitespace-pre-wrap').waitFor();
+await settled(page, { within: '[role="dialog"]', label: 'the terms dialog to finish opening' });
+await scan('login, terms open');
+
 await page.goto(`${FRONT}/register`);
 await page.waitForSelector('form').catch(() => {});
 await scan('register');
@@ -404,8 +419,31 @@ if (!created.ok()) {
   await browser.close();
   process.exit(1);
 }
+// Cards in the states the first one is not in: a high priority card with a
+// description and a half done checklist, and a low priority card in the last
+// column with a finished one. Together with the medium card they put every
+// priority chip, the checklist figure in both colours, the description marker
+// and the muted title of a card that has landed on screen at once.
+const lastColumn = board.columns.at(-1)._id;
+for (const extra of [
+  { title: 'Axe high card', status: board.columns[1]._id, priority: 'high', description: 'Something worth reading', checklist: [{ text: 'First', completed: true }, { text: 'Second' }] }, // NOSONAR javascript:S9382 sequential on purpose: each card is added to the same column and its place is the order it was made in
+  { title: 'Axe landed card', status: lastColumn, priority: 'low', description: '', checklist: [{ text: 'Only', completed: true }] },
+]) { // NOSONAR javascript:S9382
+  const made = await page.request.post(`${API}/tasks/board/${boardId}`, { ...authorised, data: { ...extra, color: palette[1]._id, boardId } }); // NOSONAR javascript:S9382
+  if (!made.ok()) {
+    console.error(`creating ${extra.title} failed with ${made.status()}.`);
+    await browser.close();
+    process.exit(1);
+  }
+}
 await page.reload();
 await page.getByRole('button', { name: 'Move Axe menu task to another column' }).waitFor();
+await page.getByRole('button', { name: 'Axe landed card', exact: true }).waitFor();
+await settled(page, { label: 'the cards to finish arriving' });
+await scan('board, cards in every state');
+await page.setViewportSize({ width: 390, height: 844 });
+await scan('board, cards in every state, phone');
+await page.setViewportSize({ width: 1440, height: 900 });
 await page.keyboard.press('Tab');
 await page.getByRole('button', { name: 'Move Axe menu task to another column' }).click();
 await page.getByRole('menu', { name: 'Move Axe menu task to' }).waitFor();
@@ -444,6 +482,12 @@ await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
 await page.getByRole('textbox', { name: 'Search team members' }).waitFor();
 await settled(page, { within: '[role="dialog"]', label: 'the add members dialog to finish opening' });
 await scan('board, add members dialog open');
+// A person chosen: the row in its selected tint, the chip row above the list and
+// the count in the footer.
+await page.getByRole('dialog', { name: 'Add Members' }).locator('[aria-pressed="false"]').first().click();
+await page.getByText('1 member selected').first().waitFor();
+await settled(page, { within: '[role="dialog"]', label: 'the selection to finish arriving' });
+await scan('board, add members dialog, one person chosen');
 await page.keyboard.press('Escape');
 await page.getByRole('dialog', { name: 'Add Members' }).waitFor({ state: 'hidden' });
 
@@ -478,6 +522,28 @@ await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
 await page.getByRole('radio').first().waitFor({ state: 'attached' });
 await scan('board, edit dialog open');
 await page.keyboard.press('Escape');
+
+// Home with a board on it: the banner over its gradient, the tile's cover, its
+// progress figure and the counts in the tertiary ink on glass. Every earlier
+// scan of this page was of an empty one. The phone is scanned too, because the
+// banner's text sits on a different part of the gradient there.
+await page.goto(`${FRONT}/`);
+await page.getByText(boardName).first().waitFor();
+await settled(page, { label: 'the home page to stop animating' });
+await scan('dashboard, with a board');
+// The tile's options button is drawn only while a pointer or the keyboard is on
+// its tile, so it is measured with the pointer there: a glass disc and a glyph
+// over the board's cover gradient.
+await page.locator('main').getByRole('heading', { level: 3, name: boardName }).hover();
+await page.getByRole('button', { name: /^options for /i }).waitFor();
+await settled(page, { label: 'the tile to finish lifting under the pointer' });
+await scan('dashboard, a tile under the pointer');
+await page.mouse.move(0, 0);
+await page.setViewportSize({ width: 390, height: 844 });
+await scan('dashboard, with a board, phone');
+await page.setViewportSize({ width: 1440, height: 900 });
+await page.goto(`${FRONT}/board/${boardId}`);
+await page.getByRole('button', { name: 'Axe card', exact: true }).waitFor();
 
 // The delete confirmation is a second dialog from the same menu, and the
 // toast that follows a delete is the one live region the application
