@@ -111,6 +111,13 @@ afterEach(() => {
 });
 
 describe('BoardDashboard listing', () => {
+  it('names the tab Home', async () => {
+    renderDashboard();
+
+    await screen.findByRole('link', { name: 'Launch Plan' });
+    expect(document.title).toBe('Home | BreezyBoard');
+  });
+
   it('renders one card per board, with the title linking to that board', async () => {
     renderDashboard();
 

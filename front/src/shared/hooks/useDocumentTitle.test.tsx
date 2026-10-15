@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { useDocumentTitle } from './useDocumentTitle';
 
-const Titled = ({ title }: { title: string }) => {
+const Titled = ({ title }: { title: string | null }) => {
   useDocumentTitle(title);
   return null;
 };
@@ -23,6 +23,17 @@ describe('useDocumentTitle', () => {
     rerender(<Titled title="Second" />);
 
     expect(document.title).toBe('Second');
+  });
+
+  it('leaves the title alone for null, and takes it when a title arrives', () => {
+    const { rerender } = render(<Titled title={null} />);
+    expect(document.title).toBe('Boards');
+
+    rerender(<Titled title="Named" />);
+    expect(document.title).toBe('Named');
+
+    rerender(<Titled title={null} />);
+    expect(document.title).toBe('Boards');
   });
 
   it('puts back the title it replaced on unmount', () => {

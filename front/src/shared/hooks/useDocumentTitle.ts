@@ -8,9 +8,15 @@ import { useEffect } from 'react';
  * not. The title is what a screen reader announces on arrival and what the
  * tab, the history and a bookmark show, so a page that says it is somewhere
  * else (or nowhere) has to be able to say so.
+ *
+ * `null` leaves the title alone. A page that hands the screen to a child that
+ * names it, such as a missing board, passes `null` for that case: effects run
+ * child first, so a parent that set its own title would overwrite the child's.
  */
-export function useDocumentTitle(title: string): void {
+export function useDocumentTitle(title: string | null): void {
   useEffect(() => {
+    if (title === null) return undefined;
+
     const previous = document.title;
     document.title = title;
 

@@ -11,6 +11,7 @@ import {
   SignOutCard,
   useProfile,
 } from '@/features/users';
+import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
 import { useToast } from '@/shared/hooks/useToast';
 import { Button, Icon, LoadingScreen } from '@/shared/ui';
 
@@ -27,6 +28,7 @@ const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const { user, logout } = useAuth();
+  useDocumentTitle('Profile | BreezyBoard');
 
   const profile = useProfile(user?._id ?? null);
   const { form, save, cancel, uploadAvatar } = profile;

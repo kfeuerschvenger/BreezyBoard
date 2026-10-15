@@ -293,6 +293,9 @@ await form.getByLabel('Password', { exact: true }).fill(user.password);
 await form.getByRole('button', { name: /sign in/i }).click();
 await page.getByText('Your boards').waitFor();
 await scan('dashboard');
+// Every page names its tab: it is what a screen reader announces on arrival and
+// what the history and a bookmark show.
+check('the home page names the tab Home', await page.title(), 'Home | BreezyBoard');
 
 // The sidebar is a column on this screen and a panel on a phone, and the panel
 // is a different surface: a dialog that holds focus, over a page made inert,
@@ -318,6 +321,7 @@ await settled(page, { label: 'the board page to stop animating' });
 // A board with no card at all: the banner above the columns and "Still air" in
 // each of them.
 await scan('board, empty');
+check('a board names the tab with its own name', await page.title(), `${boardName} | BreezyBoard`);
 
 // The header's "Add card" opens the first column's composer, which is a form
 // at the foot of a column and is scanned open, with a title typed in it.
@@ -576,6 +580,7 @@ await page.goto(`${FRONT}/profile`);
 await page.getByRole('heading', { level: 1 }).waitFor();
 await settled(page, { label: 'the profile page to stop animating' });
 await scan('profile');
+check('the profile names the tab Profile', await page.title(), 'Profile | BreezyBoard');
 
 // What axe has no rule for on the profile: the order of its panels, that the
 // two preferences that are not built are switches that are off and disabled

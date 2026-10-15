@@ -159,6 +159,17 @@ describe('Board page rendering', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('names the tab with the board, and says Board while it is still on its way', async () => {
+    mockedBoardService.getById.mockResolvedValue(board);
+    mockedTaskService.getByBoard.mockResolvedValue([]);
+
+    renderBoard();
+
+    expect(document.title).toBe('Board | BreezyBoard');
+    await screen.findByRole('heading', { name: 'To Do' });
+    expect(document.title).toBe('Launch Plan | BreezyBoard');
+  });
+
   it('shows a loading indicator while the fetch is pending', () => {
     mockedBoardService.getById.mockReturnValue(new Promise(() => {}));
     mockedTaskService.getByBoard.mockReturnValue(new Promise(() => {}));
