@@ -122,9 +122,9 @@ describe('Avatar semantics are unchanged by the colour', () => {
     expect(await axe(container, axeOptions)).toHaveNoViolations();
   });
 
-  it('sets the large avatar initials in the display face', () => {
+  it('sets the profile avatar at 116 pixels with the initials in the display face at 40', () => {
     render(<Avatar name="Ada Lovelace" size="xl" />);
 
-    expect(screen.getByRole('img')).toHaveClass('font-heading', 'text-3xl');
+    expect(screen.getByRole('img')).toHaveClass('size-29', 'font-heading', 'text-[40px]');
   });
 });

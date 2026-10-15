@@ -1,57 +1,33 @@
 import React from 'react';
 import { IconDeviceFloppy } from '@tabler/icons-react';
-import { Icon } from '@/shared/ui';
+import { Button, Icon } from '@/shared/ui';
 
 export interface ProfileActionsProps {
   isDirty: boolean;
   isValid: boolean;
   isSubmitting: boolean;
   onCancel: () => void;
-  /**
-   * Given for the pair rendered outside the form, where the button cannot
-   * submit. Omitted inside it, where the button is the form's submit and
-   * pressing Enter in a field still works.
-   */
-  onSave?: () => void;
 }
 
 /**
- * Cancel and save, rendered twice: once in the page header and once at the
- * foot of the form, for a narrow screen where the header pair is off the top.
- * They were written out twice, and the two copies had drifted into disabling
- * themselves on different conditions.
+ * Cancel and save, at the foot of the About panel. Save is the form's submit,
+ * so pressing Enter in a field saves too. Neither does anything until there is
+ * a change to keep or to drop.
  */
-export const ProfileActions: React.FC<ProfileActionsProps> = ({
-  isDirty,
-  isValid,
-  isSubmitting,
-  onCancel,
-  onSave,
-}) => (
+export const ProfileActions: React.FC<ProfileActionsProps> = ({ isDirty, isValid, isSubmitting, onCancel }) => (
   <>
-    <button
-      type="button"
-      onClick={onCancel}
-      disabled={isSubmitting || !isDirty}
-      className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-    >
+    <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting || !isDirty}>
       Cancel
-    </button>
+    </Button>
 
-    <button
-      type={onSave ? 'button' : 'submit'}
-      onClick={onSave}
-      disabled={!isValid || !isDirty || isSubmitting}
-      className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+    <Button
+      type="submit"
+      isLoading={isSubmitting}
+      disabled={!isValid || !isDirty}
+      leftIcon={isSubmitting ? undefined : <Icon as={IconDeviceFloppy} size={18} />}
     >
-      {isSubmitting ? (
-        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
-      ) : (
-        <Icon as={IconDeviceFloppy} size={16} aria-hidden="true" />
-      )}
-      <span className="md:hidden">{isSubmitting ? 'Saving...' : 'Save'}</span>
-      <span className="hidden md:inline">{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
-    </button>
+      {isSubmitting ? 'Saving...' : 'Save changes'}
+    </Button>
   </>
 );
 

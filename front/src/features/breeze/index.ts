@@ -3,6 +3,7 @@
 // dependency direction rule in the lint config enforces.
 export { BreezeProvider } from './BreezeProvider';
 export { BreezeBox } from './components/BreezeBox';
+export { BreezeSetting } from './components/BreezeSetting';
 export { useBreeze } from './useBreeze';
 export { useSignedOutBreeze } from './useSignedOutBreeze';
 export { BREEZE_STORAGE_KEY, readStoredBreeze, writeStoredBreeze } from './breezeStorage';

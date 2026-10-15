@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useAuth } from '@/hooks/useAuth';
 import type { User as UserModel } from '@/models';
 import { useUpdateUser, useUploadAvatar, useUser } from '../queries';
 
@@ -71,6 +72,10 @@ export function useProfile(userId: string | null): UseProfileResult {
   const profileQuery = useUser(userId);
   const updateUser = useUpdateUser(userId);
   const avatarUpload = useUploadAvatar(userId);
+  // The session holds its own copy of the person, which the sidebar and the
+  // greeting read. A write here has to reach it, or they show the old name and
+  // picture until the page is reloaded.
+  const { user: sessionUser, updateUser: updateSession } = useAuth();
 
   // Only failures this page causes itself. A failed read is reported by the
   // query rather than kept in a second piece of state to be cleared by hand.
@@ -102,7 +107,7 @@ export function useProfile(userId: string | null): UseProfileResult {
     try {
       // Named field by field rather than spread, so `createdAt` cannot be
       // sent back to a server that does not accept it.
-      await updateUser.mutateAsync({
+      const saved = await updateUser.mutateAsync({
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
@@ -111,6 +116,7 @@ export function useProfile(userId: string | null): UseProfileResult {
         department: values.department,
         avatar: values.avatar,
       });
+      if (sessionUser) updateSession({ ...sessionUser, ...saved });
       reset(values, { keepDirty: false });
       return true;
     } catch (err) {
@@ -138,6 +144,9 @@ export function useProfile(userId: string | null): UseProfileResult {
 
     try {
       const avatarUrl = await avatarUpload.mutateAsync(file);
+      // The server stored the picture on the record as the upload finished,
+      // before the form is saved, so the session learns of it now.
+      if (sessionUser) updateSession({ ...sessionUser, avatar: avatarUrl });
       setValue('avatar', avatarUrl, { shouldDirty: true, shouldValidate: true });
     } catch (err) {
       console.error('Avatar upload failed:', err);
