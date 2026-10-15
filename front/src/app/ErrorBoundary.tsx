@@ -1,5 +1,7 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { IconWind } from '@tabler/icons-react';
+import { Button, Icon } from '@/shared/ui';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -13,6 +15,10 @@ interface ErrorBoundaryState {
 /**
  * Catches render-time exceptions so an uncaught error shows a recoverable screen
  * instead of blanking the whole application.
+ *
+ * The screen stands alone: it sits above the router and every provider, so it
+ * can use neither a link nor the session, and it is its own `main` with its own
+ * `h1`. Its buttons are the shared `Button`, which needs no provider.
  */
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };
@@ -38,28 +44,31 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (fallback) return fallback;
 
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
-        <div role="alert" className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center max-w-md">
-          <p className="text-gray-900 font-medium mb-2">Something went wrong</p>
-          <p className="text-sm text-gray-600 mb-6">
+      <main className="flex min-h-screen items-center justify-center bg-ground bg-[image:var(--gradient-ground)] p-8">
+        <div
+          role="alert"
+          className="max-w-md rounded-modal border border-glass-border bg-surface p-8 text-center shadow-modal"
+        >
+          <div
+            className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-coral-tint text-coral-deep"
+            aria-hidden="true"
+          >
+            <Icon as={IconWind} size={28} />
+          </div>
+          <h1 className="mb-2 font-heading text-2xl font-bold text-ink">Something went wrong</h1>
+          <p className="mb-6 text-sm text-ink-secondary">
             The page could not be displayed. You can try again, and your saved work is not affected.
           </p>
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={this.handleReset}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 cursor-pointer"
-            >
+          <div className="flex flex-wrap justify-center gap-3">
+            <Button type="button" onClick={this.handleReset}>
               Try again
-            </button>
-            <button
-              onClick={() => window.location.assign('/')}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => window.location.assign('/')}>
               Back to boards
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 }
