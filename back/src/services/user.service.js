@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
+import { ErrorCode } from '../constants/errorCodes.js';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 
@@ -129,7 +130,9 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
 
   const isMatch = await bcrypt.compare(currentPassword, user.password);
   if (!isMatch) {
-    throw new ApiError(401, 'Current password is incorrect');
+    // 400, not 401: the person is signed in and this is a field they got
+    // wrong. A 401 is what a client reads as an ended session.
+    throw new ApiError(400, 'Current password is incorrect', [], ErrorCode.WRONG_CURRENT_PASSWORD);
   }
 
   const salt = await bcrypt.genSalt(env.SALT);

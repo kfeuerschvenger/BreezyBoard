@@ -14,6 +14,10 @@ export const ErrorCode = Object.freeze({
   // code for all three: telling them apart would tell a guesser which part of
   // the token was right.
   INVALID_RESET_TOKEN: 'INVALID_RESET_TOKEN',
+  // The current password given to a password change does not match. It is a
+  // 400 and never a 401: a client treats every 401 as an ended session and
+  // signs the person out, and a mistyped password is not that.
+  WRONG_CURRENT_PASSWORD: 'WRONG_CURRENT_PASSWORD',
   CONFLICT: 'CONFLICT',
   INTERNAL: 'INTERNAL',
 });
