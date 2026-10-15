@@ -36,7 +36,8 @@ const SIZE_CLASSES: Record<AvatarSize, string> = {
   sm: 'w-6 h-6 text-[10px]',
   md: 'w-8 h-8 text-xs',
   lg: 'w-12 h-12 text-lg',
-  xl: 'w-24 h-24 text-3xl font-heading',
+  // The profile's: 116 pixels, the initials in the display face at 40.
+  xl: 'size-29 text-[40px] font-heading',
 };
 
 const RING_CLASSES: Record<AvatarRing, string> = {

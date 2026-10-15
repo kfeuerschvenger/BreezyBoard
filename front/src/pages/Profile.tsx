@@ -1,64 +1,71 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import PageHeader from '@/components/PageHeader';
-import SuccessModal from '@/components/SuccessModal';
+import { IconLogout } from '@tabler/icons-react';
+import { ShellAction } from '@/app/layouts/shell/ShellAction';
 import { useAuth } from '@/hooks/useAuth';
-import { ProfileActions, ProfileForm, ProfileSummary, useProfile } from '@/features/users';
+import {
+  BreezePreferences,
+  PasswordPanel,
+  ProfileForm,
+  ProfileSummary,
+  SignOutCard,
+  useProfile,
+} from '@/features/users';
+import { useToast } from '@/shared/hooks/useToast';
+import { Button, Icon, LoadingScreen } from '@/shared/ui';
 
+/**
+ * The profile: who the person is, what they can change about themselves, how
+ * the interface behaves for them, and the way out.
+ *
+ * The cover, avatar and name come first, then two columns that stack below
+ * about 800 pixels: "About you" on the left, and "Your breeze", the password
+ * and the sign out card on the right. Sign out is also the view's action in
+ * the header, where the other views keep theirs.
+ */
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const toast = useToast();
+  const { user, logout } = useAuth();
 
   const profile = useProfile(user?._id ?? null);
   const { form, save, cancel, uploadAvatar } = profile;
-  const {
-    handleSubmit,
-    watch,
-    formState: { isDirty, isValid, isSubmitting },
-  } = form;
 
-  const [savedOpen, setSavedOpen] = React.useState(false);
-
-  const onSubmit = handleSubmit(async values => {
-    if (await save(values)) setSavedOpen(true);
+  const onSubmit = form.handleSubmit(async values => {
+    if (await save(values)) toast.show({ message: 'Profile saved.' });
   });
 
+  const signOut = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
+  if (profile.isLoading) return <LoadingScreen label="Loading profile..." showLabel fill="parent" />;
+
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      <PageHeader
-        title="Profile Settings"
-        subtitle="Manage your account information and preferences"
-        showBackButton
-        onBack={() => navigate('/')}
-      >
-        {/* The header pair appears only once there is something to save. */}
-        {!profile.isLoading && isDirty && (
-          <div className="flex items-center gap-3">
-            <ProfileActions
-              isDirty={isDirty}
-              isValid={isValid}
-              isSubmitting={isSubmitting}
-              onCancel={cancel}
-              onSave={onSubmit}
-            />
-          </div>
-        )}
-      </PageHeader>
+    <div className="mx-auto flex w-full max-w-250 animate-bb-view flex-col gap-6 pb-8">
+      <ShellAction>
+        <Button type="button" size="sm" variant="secondary" onClick={signOut} leftIcon={<Icon as={IconLogout} size={18} />}>
+          Sign out
+        </Button>
+      </ShellAction>
 
-      <div className="pt-2">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <ProfileSummary values={watch()} isUploadingAvatar={profile.isUploadingAvatar} onAvatarSelected={uploadAvatar} />
+      <ProfileSummary
+        values={form.watch()}
+        userId={user?._id ?? ''}
+        isUploadingAvatar={profile.isUploadingAvatar}
+        onAvatarSelected={uploadAvatar}
+      />
 
-          <ProfileForm form={form} error={profile.error} onSubmit={onSubmit} onCancel={cancel} />
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] items-start gap-4.5">
+        <ProfileForm form={form} error={profile.error} onSubmit={onSubmit} onCancel={cancel} />
+
+        <div className="flex flex-col gap-4.5">
+          <BreezePreferences />
+          <PasswordPanel />
+          <SignOutCard onSignOut={signOut} />
         </div>
       </div>
-
-      <SuccessModal
-        open={savedOpen}
-        onClose={() => setSavedOpen(false)}
-        title="Profile saved"
-        message="Your profile has been updated successfully."
-      />
     </div>
   );
 };
