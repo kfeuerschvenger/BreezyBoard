@@ -47,6 +47,21 @@ describe('NotFound', () => {
     expect(screen.queryByRole('link', { name: 'Go to sign in' })).not.toBeInTheDocument();
   });
 
+  // The title is not in a strip above the screen with its sentence far below
+  // it: the h1, the sentence and the way out are one block, in both cases.
+  it.each([
+    ['signed in', true],
+    ['signed out', false],
+  ])('keeps the h1, the sentence and the link in one block when %s', (_label, isAuthenticated) => {
+    mockedUseAuth.mockReturnValue(authState({ isAuthenticated }));
+
+    renderPage();
+
+    const block = screen.getByRole('heading', { level: 1 }).parentElement as HTMLElement;
+    expect(block).toHaveTextContent(/nothing at this address/i);
+    expect(block.querySelector('a')).not.toBeNull();
+  });
+
   it('sends a signed out visitor to sign in, and does not redirect them', () => {
     mockedUseAuth.mockReturnValue(authState({ isAuthenticated: false }));
 
