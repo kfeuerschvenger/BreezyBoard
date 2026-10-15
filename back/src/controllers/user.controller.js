@@ -9,8 +9,12 @@ import ApiError from '../utils/apiError.js';
 const toPublicUser = (userDoc, req) => {
   if (!userDoc) return null;
 
-  // If it's a Mongoose document, toObject() for safe manipulation
-  const user = typeof userDoc.toObject === 'function' ? userDoc.toObject() : { ...userDoc };
+  // A Mongoose document goes through toJSON, the one place the model decides
+  // how a person is presented: names and place capitalized (they are stored
+  // lowercase), no password, no version, no token counter. toObject() skips
+  // that transform, which is how a user read here came back as "ada lovelace"
+  // while the same person from the session read "Ada Lovelace".
+  const user = typeof userDoc.toJSON === 'function' ? userDoc.toJSON() : { ...userDoc };
 
   // If avatar is present and starts with a slash, build a full URL
   if (user.avatar && typeof user.avatar === 'string' && user.avatar.startsWith('/')) {
