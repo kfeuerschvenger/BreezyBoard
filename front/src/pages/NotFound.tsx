@@ -3,7 +3,6 @@ import { IconSearchOff } from '@tabler/icons-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
 import { LoadingScreen, Icon } from '@/shared/ui';
-import PageHeader from '../components/PageHeader';
 
 export interface NotFoundProps {
   /** What was not found. It is the page's h1 and the first words of the tab title. */
@@ -26,6 +25,12 @@ const LINK_CLASSES =
  * one gets the same message and a way to sign in, and is never redirected:
  * sending them to `/login` would make the address they typed vanish and tell
  * them nothing about what happened to it.
+ *
+ * The message is one composition in both cases, the sky tinted circle, the h1
+ * in the display face, the sentence and the way out, entering on `bbUp` like
+ * every other empty state. The h1 sits with its sentence rather than in a
+ * header strip above it, which would put the title and what it says at
+ * opposite ends of the screen.
  */
 const NotFound = ({
   title = 'Page not found',
@@ -38,10 +43,14 @@ const NotFound = ({
   if (loading) return <LoadingScreen label="Loading" />;
 
   const message = (
-    <div className="text-center">
-      <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-line-06" aria-hidden="true">
-        <Icon as={IconSearchOff} size={28} className="text-ink-secondary" />
+    <div className="animate-bb-up text-center">
+      <div
+        className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-sky-tint text-sky-deep"
+        aria-hidden="true"
+      >
+        <Icon as={IconSearchOff} size={28} />
       </div>
+      <h1 className="mb-2 font-heading text-[26px] font-bold tracking-tight text-ink">{title}</h1>
       <p className="mx-auto mb-6 max-w-md text-ink-secondary">{description}</p>
       {isAuthenticated ? (
         <Link to="/" className={LINK_CLASSES}>
@@ -59,17 +68,11 @@ const NotFound = ({
   // header this sits in: rendering a `main` of its own would nest a second
   // landmark in the first. A signed out one has no shell and is its own page.
   if (isAuthenticated) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title={title} />
-        <div className="flex flex-1 items-center justify-center px-4 py-12">{message}</div>
-      </div>
-    );
+    return <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-12">{message}</div>;
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-ground px-4 py-16">
-      <h1 className="mb-6 text-center font-heading text-2xl font-bold text-ink">{title}</h1>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-ground bg-[image:var(--gradient-ground)] px-4 py-16">
       {message}
     </main>
   );
