@@ -1703,8 +1703,8 @@ check('a hovered new board tile rises 3 pixels', newHovered.translate, '0px -3px
 check('a hovered new board tile takes the accent outline', await paintOf(homePage, newHovered.borderTopColor), await paintOf(homePage, await tokenValue(homePage, '--color-accent')));
 await homePage.mouse.move(5, 5);
 await newTile.click();
-await homePage.getByRole('dialog', { name: 'Create New Board' }).waitFor();
-check('the new board tile opens the create board dialog', await homePage.getByRole('dialog', { name: 'Create New Board' }).isVisible(), true);
+await homePage.getByRole('dialog', { name: 'Create new board' }).waitFor();
+check('the new board tile opens the create board dialog', await homePage.getByRole('dialog', { name: 'Create new board' }).isVisible(), true);
 
 // The dialog offers the six hues, in the hues' own order, as one named group.
 const swatches = homePage.getByRole('group', { name: 'Board Color' }).getByRole('radio');
@@ -2017,7 +2017,7 @@ log('\n--- the task modal, signed in at 1440 ---');
 // page that has reduced motion, so the wind is absent from the header strip
 // and the text on it is measured against the gradient alone.
 await boardPage.getByRole('button', { name: 'Gate high task', exact: true }).click();
-const taskModal = boardPage.getByRole('dialog', { name: 'Edit Task' });
+const taskModal = boardPage.getByRole('dialog', { name: 'Edit task' });
 await taskModal.waitFor();
 await settled(boardPage, { within: '[role="dialog"]', label: 'the task modal to finish opening' });
 
@@ -2533,7 +2533,7 @@ for (const [mode, reducedMotion, breeze] of [
   check(`${mode}: the card to be blown away is the one the server made`, topId, topCreated._id);
 
   await pg.getByRole('button', { name: top, exact: true }).click(); // NOSONAR javascript:S9382
-  const exitDialog = pg.getByRole('dialog', { name: 'Edit Task' });
+  const exitDialog = pg.getByRole('dialog', { name: 'Edit task' });
   await exitDialog.waitFor(); // NOSONAR javascript:S9382
   await settled(pg, { within: '[role="dialog"]', label: 'the task modal to finish opening before the card is blown away' }); // NOSONAR javascript:S9382
   await armExitRecorder(pg, below); // NOSONAR javascript:S9382

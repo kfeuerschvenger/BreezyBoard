@@ -71,7 +71,7 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
     <Modal
       open={open}
       onClose={close}
-      title="Add Members"
+      title="Add members"
       subtitle={boardTitle ? `Add team members to "${boardTitle}"` : 'Add team members'}
       footer={
         <>

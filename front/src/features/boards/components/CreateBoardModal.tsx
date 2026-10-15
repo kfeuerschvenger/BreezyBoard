@@ -203,7 +203,7 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
     <Modal
       open={open}
       onClose={onClose}
-      title="Create New Board"
+      title="Create new board"
       subtitle="Set up your project board with custom settings"
       footer={
         <div className="flex w-full items-center justify-end gap-3">

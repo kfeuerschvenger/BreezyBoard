@@ -24,7 +24,7 @@ test.describe('editing and deleting a board from its page', () => {
     const originalColor = (await before.json()).data.color._id;
 
     await chooseFromBoardMenu(page, 'Edit board');
-    const dialog = page.getByRole('dialog', { name: 'Edit Board' });
+    const dialog = page.getByRole('dialog', { name: 'Edit board' });
     await expect(dialog.getByRole('textbox', { name: /board name/i })).toHaveValue(/E2E Seeded/);
 
     await dialog.getByRole('textbox', { name: /board name/i }).fill('Renamed on the board page');
@@ -214,7 +214,7 @@ test.describe('adding members from the board page', () => {
     await page.getByRole('heading', { level: 1 }).waitFor();
 
     await chooseFromBoardMenu(page, 'Add members');
-    const dialog = page.getByRole('dialog', { name: 'Add Members' });
+    const dialog = page.getByRole('dialog', { name: 'Add members' });
     await dialog.getByRole('textbox', { name: 'Search team members' }).fill(lastName);
     // The server stores names in lower case, so the row is matched without case.
     await dialog.getByRole('button', { name: new RegExp(lastName, 'i') }).click();

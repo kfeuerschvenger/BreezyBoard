@@ -109,7 +109,7 @@ test.describe('board core loop', () => {
 
     await test.step('the card opens for editing', async () => {
       await page.locator('[role="article"]').first().click();
-      await expect(page.getByRole('dialog', { name: 'Edit Task' })).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Edit task' })).toBeVisible();
     });
 
     expect(pageErrors, 'no uncaught exception may reach the window').toEqual([]);
@@ -265,7 +265,7 @@ test.describe('board core loop', () => {
     await page.getByText(boardName).first().click();
     await addCard(page, 'Backlog', 'Modal task');
 
-    const dialog = page.getByRole('dialog', { name: 'Edit Task' });
+    const dialog = page.getByRole('dialog', { name: 'Edit task' });
 
     await test.step('the card opens in a centered modal that names its place', async () => {
       await page.getByRole('button', { name: 'Modal task', exact: true }).click();

@@ -71,7 +71,7 @@ const openBoard = async () => {
 };
 const openCard = async (name = 'Card with a draft') => {
   await page.getByRole('button', { name, exact: true }).click();
-  await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
+  await page.getByRole('dialog', { name: 'Edit task' }).waitFor();
   // The form is built from the saved task and then from the draft, a render
   // after the dialog is on screen, so a read before the title has a value is a
   // read of a form still being filled in.

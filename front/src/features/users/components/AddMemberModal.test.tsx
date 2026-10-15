@@ -75,7 +75,7 @@ describe('AddMemberModal searching', () => {
   it('names the board it is adding people to', async () => {
     renderModal();
 
-    expect(await screen.findByRole('dialog', { name: /Add Members/ })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /Add members/ })).toBeInTheDocument();
     expect(screen.getByText('Add team members to "Launch Plan"')).toBeInTheDocument();
   });
 

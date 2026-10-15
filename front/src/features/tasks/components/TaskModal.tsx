@@ -28,7 +28,7 @@ export interface TaskModalProps {
   onDelete?: (task: StoredTask) => Promise<void>;
 }
 
-const HEADING = 'Edit Task';
+const HEADING = 'Edit task';
 
 const DELETE_FAILED = 'The task could not be blown away. Check your connection and try again.';
 

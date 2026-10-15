@@ -263,10 +263,10 @@ describe('a dialog opened from the panel', () => {
     await openPanel(user);
 
     await user.click(screen.getByRole('button', { name: 'Create board' }));
-    await screen.findByRole('dialog', { name: 'Create New Board' });
+    await screen.findByRole('dialog', { name: 'Create new board' });
     await user.keyboard('{Escape}');
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create New Board' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create new board' })).not.toBeInTheDocument());
     expect(panel()).toHaveAttribute('role', 'dialog');
     expect(panel()).not.toHaveAttribute('inert');
   });

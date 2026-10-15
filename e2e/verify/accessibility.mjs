@@ -358,7 +358,7 @@ await page.locator('[id^="DndLiveRegion"]', { hasText: 'cancelled' }).waitFor();
 // assistive technology, which would take the close button with it if the
 // button were inside it, so that is asserted beside the scan.
 await page.getByRole('button', { name: 'Axe card', exact: true }).click();
-const taskDialog = page.getByRole('dialog', { name: 'Edit Task' });
+const taskDialog = page.getByRole('dialog', { name: 'Edit task' });
 await taskDialog.waitFor();
 await settled(page, { within: '[role="dialog"]', label: 'the task modal to finish opening' });
 check('the task modal is a modal dialog', await taskDialog.getAttribute('aria-modal'), 'true');
@@ -459,7 +459,7 @@ await page.keyboard.press('Escape');
 // board the person is left on, and the card is caught again so what follows
 // finds the board as it was.
 await page.getByRole('button', { name: 'Axe menu task', exact: true }).click();
-await page.getByRole('dialog', { name: 'Edit Task' }).getByRole('button', { name: 'Blow it away' }).click();
+await page.getByRole('dialog', { name: 'Edit task' }).getByRole('button', { name: 'Blow it away' }).click();
 await page.getByRole('dialog').waitFor({ state: 'detached' });
 await page.getByTestId('toast').waitFor();
 check('the toast that follows a delete offers Catch it', await page.getByTestId('toast').getByRole('button', { name: 'Catch it' }).count(), 1);
@@ -482,18 +482,18 @@ check(
   'Edit board|Add members|Delete board',
 );
 await page.getByRole('menuitem', { name: 'Add members' }).click();
-await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
+await page.getByRole('dialog', { name: 'Add members' }).waitFor();
 await page.getByRole('textbox', { name: 'Search team members' }).waitFor();
 await settled(page, { within: '[role="dialog"]', label: 'the add members dialog to finish opening' });
 await scan('board, add members dialog open');
 // A person chosen: the row in its selected tint, the chip row above the list and
 // the count in the footer.
-await page.getByRole('dialog', { name: 'Add Members' }).locator('[aria-pressed="false"]').first().click();
+await page.getByRole('dialog', { name: 'Add members' }).locator('[aria-pressed="false"]').first().click();
 await page.getByText('1 member selected').first().waitFor();
 await settled(page, { within: '[role="dialog"]', label: 'the selection to finish arriving' });
 await scan('board, add members dialog, one person chosen');
 await page.keyboard.press('Escape');
-await page.getByRole('dialog', { name: 'Add Members' }).waitFor({ state: 'hidden' });
+await page.getByRole('dialog', { name: 'Add members' }).waitFor({ state: 'hidden' });
 
 // The breadcrumb above the board reads Home, Boards, then the board. Home and
 // Boards are links, to the page and to its grid of boards, and the last entry
@@ -522,7 +522,7 @@ check(
 // group is where a missing legend or an unnamed input would show.
 await page.getByRole('button', { name: /^options for /i }).click();
 await page.getByRole('menuitem', { name: 'Edit board' }).click();
-await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
+await page.getByRole('dialog', { name: 'Edit board' }).waitFor();
 await page.getByRole('radio').first().waitFor({ state: 'attached' });
 await scan('board, edit dialog open');
 await page.keyboard.press('Escape');
