@@ -91,10 +91,13 @@ export function useProfile(userId: string | null): UseProfileResult {
 
   // Fill the form from whatever the cache holds. This also runs after the
   // window regains focus and the record turns out to have changed elsewhere,
-  // which the fetch-once effect it replaced could not do.
+  // which the fetch-once effect it replaced could not do. A field the person
+  // has changed and not saved keeps what they typed: a picture upload refreshes
+  // the record while they are in the middle of the form, and a plain reset
+  // would throw their typing away.
   useEffect(() => {
     if (!profileQuery.data) return;
-    reset(toFormValues(profileQuery.data), { keepDirty: false });
+    reset(toFormValues(profileQuery.data), { keepDirtyValues: true });
   }, [profileQuery.data, reset]);
 
   const save = async (values: ProfileFormValues): Promise<boolean> => {
@@ -106,7 +109,11 @@ export function useProfile(userId: string | null): UseProfileResult {
     setWriteError(null);
     try {
       // Named field by field rather than spread, so `createdAt` cannot be
-      // sent back to a server that does not accept it.
+      // sent back to a server that does not accept it. The avatar is not among
+      // them: the upload stores the picture itself, and the form holds the
+      // address the API answers with for drawing, which is absolute and built
+      // from the request. Written back, it would replace the stored path with
+      // an address that stops being right the day the site moves.
       const saved = await updateUser.mutateAsync({
         firstName: values.firstName,
         lastName: values.lastName,
@@ -114,7 +121,6 @@ export function useProfile(userId: string | null): UseProfileResult {
         location: values.location,
         role: values.role,
         department: values.department,
-        avatar: values.avatar,
       });
       if (sessionUser) updateSession({ ...sessionUser, ...saved });
       reset(values, { keepDirty: false });
@@ -147,7 +153,9 @@ export function useProfile(userId: string | null): UseProfileResult {
       // The server stored the picture on the record as the upload finished,
       // before the form is saved, so the session learns of it now.
       if (sessionUser) updateSession({ ...sessionUser, avatar: avatarUrl });
-      setValue('avatar', avatarUrl, { shouldDirty: true, shouldValidate: true });
+      // Not dirty: the picture is already stored, so there is nothing for Save
+      // to keep.
+      setValue('avatar', avatarUrl, { shouldDirty: false, shouldValidate: true });
     } catch (err) {
       console.error('Avatar upload failed:', err);
       setWriteError('Avatar upload failed. Please try again.');
