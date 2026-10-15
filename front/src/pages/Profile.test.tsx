@@ -90,6 +90,13 @@ describe('Profile rendering', () => {
     expect(screen.getByPlaceholderText('Enter department')).toHaveValue('Analytical Engine');
   });
 
+  it('names the tab Profile', async () => {
+    renderProfile();
+
+    await screen.findByRole('heading', { level: 1, name: 'Ada Lovelace' });
+    expect(document.title).toBe('Profile | BreezyBoard');
+  });
+
   it('names the page with the person, as its one h1, and says who and where they are', async () => {
     renderProfile();
 

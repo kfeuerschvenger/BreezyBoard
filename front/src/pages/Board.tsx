@@ -16,6 +16,7 @@ import {
 } from '@/features/tasks';
 import type { MoveTarget, StoredTask } from '@/features/tasks';
 import { IconPlus } from '@tabler/icons-react';
+import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
 import { Button, LoadingScreen, Icon } from '@/shared/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { ShellAction } from '@/app/layouts/shell/ShellAction';
@@ -35,6 +36,9 @@ const Board = () => {
   const { user } = useAuth();
   const { board, columns, tasks, taskColors, cache, isLoading, error, notFound } = useBoardData(boardId);
   const { data: taskPalette } = useColors('task');
+  // A board that cannot be shown hands the screen to NotFound, which names the
+  // tab itself, so the board stands aside rather than overwrite it.
+  useDocumentTitle(notFound ? null : `${board?.title ?? 'Board'} | BreezyBoard`);
 
   const drag = useTaskDragAndDrop({
     tasks,

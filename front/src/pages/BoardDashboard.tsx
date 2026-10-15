@@ -15,6 +15,7 @@ import {
 import { AddMemberModal } from '@/features/users';
 import type { Board } from '@/models';
 import { AuthService } from '@/services';
+import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
 import { Button, EmptyState, LoadingScreen, Icon } from '@/shared/ui';
 import { ShellAction } from '@/app/layouts/shell/ShellAction';
 import { useShell } from '@/app/layouts/shell/shellContext';
@@ -70,6 +71,7 @@ const useScrollToBoards = (ready: boolean) => {
 
 const BoardDashboard: React.FC = () => {
   const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
+  useDocumentTitle('Home | BreezyBoard');
 
   const dashboard = useBoardDashboard();
   const boardsHeading = useScrollToBoards(!dashboard.isLoading && !dashboard.error);
