@@ -152,9 +152,11 @@ describe('Profile rendering', () => {
 
     renderProfile();
 
-    expect(await screen.findByText('Breezing since January 2026')).toBeInTheDocument();
+    const line = (await screen.findByText('Breezing since January 2026')).closest('p') as HTMLElement;
     expect(screen.queryByText('London')).not.toBeInTheDocument();
     expect(screen.queryByText('Unknown')).not.toBeInTheDocument();
+    // No dangling separator where the place would have been.
+    expect(line).toHaveTextContent(/^Breezing since January 2026$/);
   });
 
   it('keeps the cover as decoration, hidden from assistive technology', async () => {
@@ -414,14 +416,19 @@ describe('Profile, Your breeze', () => {
     expect(radios.filter(radio => radio.checked).map(radio => radio.value)).toEqual(['calm']);
   });
 
-  it('saves a chosen level for the person', async () => {
+  it.each([
+    ['Still', 'still'],
+    ['Calm', 'calm'],
+    ['Gusty', 'gusty'],
+  ])('saves %s for the person as %s', async (label, level) => {
     const user = userEvent.setup();
     renderProfile();
     await screen.findByRole('heading', { level: 1 });
 
-    await user.click(within(breezePanel()).getByRole('radio', { name: 'Gusty' }));
+    await user.click(within(breezePanel()).getByRole('radio', { name: label }));
 
-    await waitFor(() => expect(mockedUserService.update).toHaveBeenCalledWith('user-ada', { breeze: 'gusty' }));
+    await waitFor(() => expect(mockedUserService.update).toHaveBeenCalledWith('user-ada', { breeze: level }));
+    expect(mockedUserService.update).toHaveBeenCalledTimes(1);
   });
 
   it('says that sway is the Gusty level and nothing else, and has no switch of its own for it', async () => {
