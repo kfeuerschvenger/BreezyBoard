@@ -23,6 +23,47 @@ beforeEach(() => {
   vi.mocked(AuthService.me).mockReset().mockResolvedValue(ADA);
 });
 
+describe('AuthProvider clearSession', () => {
+  const mount = async () => {
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId('name')).toHaveTextContent('Ada'));
+  };
+
+  it('drops the person and the stored session, and remembers why', async () => {
+    await mount();
+
+    act(() => context.clearSession('password-changed'));
+
+    expect(screen.getByTestId('name')).toHaveTextContent('nobody');
+    expect(context.isAuthenticated).toBe(false);
+    expect(context.sessionEndReason).toBe('password-changed');
+    expect(localStorage.getItem('token')).toBeNull();
+  });
+
+  it('has no reason when none is given', async () => {
+    await mount();
+
+    act(() => context.clearSession());
+
+    expect(context.sessionEndReason).toBeNull();
+  });
+
+  it('forgets the reason once somebody signs in again', async () => {
+    await mount();
+    act(() => context.clearSession('password-changed'));
+    vi.mocked(AuthService.login).mockResolvedValue({ token: 't2', user: ADA } as never);
+
+    await act(() => context.login({ email: 'ada@example.com', password: 'x' }));
+
+    expect(context.sessionEndReason).toBeNull();
+    expect(context.isAuthenticated).toBe(true);
+  });
+});
+
 describe('AuthProvider updateUser', () => {
   it('replaces the person in this tab and in the stored session', async () => {
     render(

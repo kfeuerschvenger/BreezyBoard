@@ -17,12 +17,16 @@ import './index.css';
 
 // Component to protect routes that require authentication
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, sessionEndReason } = useAuth();
 
   if (loading) return <LoadingScreen label="Loading" />;
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // A session dropped by a password change redirects here the instant it is
+    // gone, ahead of any navigation the page that dropped it makes, so the
+    // sign in screen's confirmation has to ride on this redirect.
+    const state = sessionEndReason === 'password-changed' ? { passwordReset: true } : undefined;
+    return <Navigate to="/login" replace state={state} />;
   }
   return <>{children}</>;
 };

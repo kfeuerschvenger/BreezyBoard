@@ -31,7 +31,10 @@ export function useChangePassword(): UseChangePasswordResult {
       return apiErrorCodeOf(error) === 'WRONG_CURRENT_PASSWORD' ? 'wrong-current' : 'failed';
     }
 
-    clearSession();
+    // The reason matters: dropping the session sends a page behind the sign in
+    // guard to the sign in screen before the navigation below is applied, and
+    // the guard's redirect is the one that has to carry the confirmation.
+    clearSession('password-changed');
     navigate('/login', { replace: true, state: { passwordReset: true } });
     return undefined;
   };

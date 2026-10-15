@@ -3,13 +3,14 @@ import type { ReactNode } from 'react';
 import { AuthService } from '@/services';
 import type { User } from '@/models';
 import { clearAuth } from '@/utils/auth.helper';
-import { AuthContext, type AuthContextType } from './AuthContext';
+import { AuthContext, type AuthContextType, type SessionEndReason } from './AuthContext';
 import SessionManager from '@/features/session/SessionManager';
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionEndReason, setSessionEndReason] = useState<SessionEndReason | null>(null);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -58,6 +59,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.setItem('user', JSON.stringify(user));
     setUser(user);
     setIsAuthenticated(true);
+    setSessionEndReason(null);
   };
 
   const register = async (credentials: { firstName: string; lastName: string; email: string; password: string }) => {
@@ -66,12 +68,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.setItem('user', JSON.stringify(user));
     setUser(user);
     setIsAuthenticated(true);
+    setSessionEndReason(null);
   };
 
-  const clearSession = () => {
+  const clearSession = (reason?: SessionEndReason) => {
     clearAuth();
     setUser(null);
     setIsAuthenticated(false);
+    setSessionEndReason(reason ?? null);
   };
 
   const updateUser = (next: User) => {
@@ -95,6 +99,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     register,
     logout,
     clearSession,
+    sessionEndReason,
     updateUser,
     isAuthenticated,
     loading,
