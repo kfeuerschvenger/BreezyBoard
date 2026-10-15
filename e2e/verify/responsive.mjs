@@ -386,7 +386,7 @@ const authed = [
       // The sidebar's plus button opens the same dialog but is not on screen
       // while the sidebar is a closed panel.
       await page.getByRole('button', { name: 'New board' }).first().click();
-      await page.getByRole('dialog', { name: 'Create New Board' }).waitFor();
+      await page.getByRole('dialog', { name: 'Create new board' }).waitFor();
     },
   },
   {
@@ -396,7 +396,7 @@ const authed = [
       await page.getByText('Your boards').waitFor();
       await page.getByRole('button', { name: /^Options for / }).first().click();
       await page.getByRole('button', { name: 'Add Member' }).click();
-      await page.getByRole('dialog', { name: 'Add Members' }).waitFor();
+      await page.getByRole('dialog', { name: 'Add members' }).waitFor();
     },
   },
   {
@@ -489,7 +489,7 @@ const authed = [
       await page.getByText('Short task', { exact: true }).waitFor();
       await page.getByRole('button', { name: /^Options for / }).click();
       await page.getByRole('menuitem', { name: 'Edit board' }).click();
-      await page.getByRole('dialog', { name: 'Edit Board' }).waitFor();
+      await page.getByRole('dialog', { name: 'Edit board' }).waitFor();
       await page.getByRole('radio').first().waitFor({ state: 'attached' });
     },
   },
@@ -542,7 +542,7 @@ const authed = [
       await page.goto(`${FRONT}/board/${boardId}`);
       await page.getByText('Short task', { exact: true }).waitFor();
       await page.getByText('Short task', { exact: true }).click();
-      await page.getByRole('dialog', { name: 'Edit Task' }).waitFor();
+      await page.getByRole('dialog', { name: 'Edit task' }).waitFor();
     },
   },
   {
@@ -754,7 +754,7 @@ for (const viewport of VIEWPORTS) { // NOSONAR javascript:S9382 sequential on pu
   await page.goto(`${FRONT}/board/${boardId}`); // NOSONAR javascript:S9382
   await page.getByText('Short task', { exact: true }).waitFor(); // NOSONAR javascript:S9382
   await page.getByText('Short task', { exact: true }).click(); // NOSONAR javascript:S9382
-  await page.getByRole('dialog', { name: 'Edit Task' }).waitFor(); // NOSONAR javascript:S9382
+  await page.getByRole('dialog', { name: 'Edit task' }).waitFor(); // NOSONAR javascript:S9382
   await settle(page); // NOSONAR javascript:S9382
   await dialogStill(page); // NOSONAR javascript:S9382
 

@@ -213,7 +213,7 @@ describe('creating a board from the sidebar', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create board' }));
 
-    expect(await screen.findByRole('dialog', { name: 'Create New Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create new board' })).toBeInTheDocument();
   });
 
   it('opens the same dialog from a view that asks the shell for it', async () => {
@@ -237,7 +237,7 @@ describe('creating a board from the sidebar', () => {
     expect(within(screen.getByRole('main')).queryByRole('button', { name: 'New board' })).not.toBeInTheDocument();
     await user.click(action);
 
-    expect(await screen.findByRole('dialog', { name: 'Create New Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create new board' })).toBeInTheDocument();
   });
 });
 

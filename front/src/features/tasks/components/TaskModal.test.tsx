@@ -439,7 +439,7 @@ describe('TaskModal title', () => {
       />
     );
 
-    expect(await screen.findByRole('dialog', { name: 'Edit Task' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Edit task' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /create/i })).not.toBeInTheDocument();
   });
 });
@@ -558,9 +558,9 @@ describe('TaskModal on a task that exists', () => {
       const { onClose } = renderExisting();
       await waitForColorsLoaded();
 
-      const dialog = screen.getByRole('dialog', { name: 'Edit Task' });
+      const dialog = screen.getByRole('dialog', { name: 'Edit task' });
       expect(within(dialog).getByText('Launch Plan · In motion')).toBeInTheDocument();
-      expect(within(dialog).getByRole('heading', { name: 'Edit Task', level: 2 })).toBeInTheDocument();
+      expect(within(dialog).getByRole('heading', { name: 'Edit task', level: 2 })).toBeInTheDocument();
 
       await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Close' }));
       expect(onClose).toHaveBeenCalledTimes(1);

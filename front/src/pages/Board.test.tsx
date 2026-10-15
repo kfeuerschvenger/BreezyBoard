@@ -429,7 +429,7 @@ describe('Board page adding and saving a task', () => {
 
       await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
 
-      expect(await screen.findByRole('dialog', { name: 'Edit Task' })).toBeInTheDocument();
+      expect(await screen.findByRole('dialog', { name: 'Edit task' })).toBeInTheDocument();
     });
 
     it('saves the edit and closes the modal when the server accepts it', async () => {
@@ -472,7 +472,7 @@ describe('Board page adding and saving a task', () => {
       renderBoard();
 
       await user.click(await screen.findByRole('button', { name: 'Write the spec' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Edit Task' });
+      const dialog = await screen.findByRole('dialog', { name: 'Edit task' });
       expect(within(dialog).getByText('Launch Plan · To Do')).toBeInTheDocument();
 
       const moveTo = within(dialog).getByRole('group', { name: /move to/i });

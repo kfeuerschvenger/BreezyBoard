@@ -86,7 +86,7 @@ export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalP
     <Modal
       open={open}
       onClose={onClose}
-      title="Edit Board"
+      title="Edit board"
       subtitle="Change the name, description or colour"
       footer={
         <div className="flex w-full flex-wrap items-center justify-end gap-3">

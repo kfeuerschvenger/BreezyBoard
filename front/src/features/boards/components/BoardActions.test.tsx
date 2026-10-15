@@ -76,7 +76,7 @@ describe('BoardActions', () => {
 
     await openEditor();
 
-    expect(await screen.findByRole('dialog', { name: 'Edit Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Edit board' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /board name/i })).toHaveValue('Launch Plan');
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -143,7 +143,7 @@ describe('BoardActions adding members', () => {
   const openAddMembers = async () => {
     await userEvent.click(trigger());
     await userEvent.click(screen.getByRole('menuitem', { name: 'Add members' }));
-    return screen.findByRole('dialog', { name: /Add Members/ });
+    return screen.findByRole('dialog', { name: /Add members/ });
   };
 
   const addAda = async () => {
