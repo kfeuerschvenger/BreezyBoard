@@ -1,29 +1,19 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthService } from '@/services';
-import type { User } from '@/models';
+import { useAuth } from '@/hooks/useAuth';
 import { UserMenu } from '@/features/users';
 
 /**
  * The page header's account control: who is signed in, and the two things
  * they can do about it.
  *
- * All this holds is the signed in person and what the two actions do.
- * Everything drawn is `features/users/UserMenu`.
+ * The person is read from the auth context and not from the stored session
+ * once on mount, so a name or a picture changed on the profile page shows here
+ * at once. Everything drawn is `features/users/UserMenu`.
  */
 const UserAvatar: React.FC = () => {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    try {
-      setCurrentUser(AuthService.getCurrentUser() ?? null);
-    } catch (error) {
-      // A corrupt stored session must not take the page down with it.
-      console.error('Failed to get current user', error);
-      setCurrentUser(null);
-    }
-  }, []);
+  const { user: currentUser } = useAuth();
 
   const logout = async () => {
     try {

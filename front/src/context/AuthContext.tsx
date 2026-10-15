@@ -12,6 +12,13 @@ export interface AuthContextType {
    * request would only come back 401.
    */
   clearSession: () => void;
+  /**
+   * Replaces the signed in person's record in this tab and in the stored
+   * session, for a write that changed it, so everything that shows the person
+   * (the sidebar's account button, the greeting) shows the change without a
+   * reload.
+   */
+  updateUser: (user: User) => void;
   isAuthenticated: boolean;
   loading: boolean;
 }
