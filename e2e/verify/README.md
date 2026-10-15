@@ -93,11 +93,12 @@ It earned its keep before it was even finished. The first measurement reported e
 
 It also confirmed the prediction in section 10.2 of the revival plan, word for word: the task editor reports `aria-dialog-name`, an unlabelled dialog, which no lint rule and no unit test in this repository had ever noticed.
 
-**`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. It also asserts that the page makes no request to another origin, that the policy names no font host, and that the Bricolage Grotesque and Instrument Sans files load from the application origin with status 200. Bring that stack up first:
+**`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. It also asserts that the page makes no request to another origin, that the policy names no font host, and that the Bricolage Grotesque and Instrument Sans files load from the application origin with status 200. It also opens the profile, uploads a picture and asserts that the picture is drawn from the application origin, which needs the policy to allow it and nginx to pass the page's own host and port through to the API. Bring that stack up first:
 
 ```bash
 MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-only \
-  CORS_ORIGINS=http://localhost:8080 HTTP_PORT=8080 \
+  CORS_ORIGINS=http://localhost:8080 FRONTEND_URL=http://localhost:8080 \
+  SMTP_HOST=localhost MAIL_FROM='BreezyBoard <no-reply@example.test>' HTTP_PORT=8080 \
   docker compose -f docker-compose.prod.yml up -d --build
 ```
 

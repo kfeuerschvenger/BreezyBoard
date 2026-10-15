@@ -88,6 +88,40 @@ if (!fontReport.heading.includes('Bricolage')) fontProblems.push('a heading did 
 if (!fontReport.body.includes('Instrument Sans')) fontProblems.push('body text did not resolve to Instrument Sans');
 log('font files from the app origin:', fontResponses.filter(f => f.url.startsWith(BASE)).length);
 
+// The profile is a page of its own with an upload on it: the picture is sent to
+// the API, stored, and drawn from the address the API answers with, which the
+// policy has to allow and nginx has to serve. A policy that blocked the image,
+// or a proxy that did not route /uploads, would leave the initials in place.
+const PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+);
+const profileProblems = [];
+await page.goto(`${BASE}/profile`, { waitUntil: 'networkidle' });
+await page.getByRole('heading', { level: 1 }).waitFor({ timeout: 15000 }).catch(() => profileProblems.push('the profile did not render'));
+await page.getByLabel('Change avatar').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PIXEL_PNG });
+await page.locator('main header img').waitFor({ timeout: 15000 }).catch(() => profileProblems.push('the uploaded avatar was never drawn'));
+await page.waitForLoadState('networkidle').catch(() => {});
+// The picture loads lazily and after the network has gone quiet it may still
+// be arriving, so what is awaited is the image itself.
+await page
+  .waitForFunction(
+    () => {
+      const image = document.querySelector('main header img');
+      return Boolean(image?.complete && image.naturalWidth > 0);
+    },
+    null,
+    { timeout: 15000 }
+  )
+  .catch(() => {});
+const avatarImage = await page.evaluate(() => {
+  const image = document.querySelector('main header img');
+  return image ? { src: image.src, complete: image.complete, width: image.naturalWidth } : null;
+});
+const avatarDrawn = Boolean(avatarImage?.complete && avatarImage.width > 0);
+log('profile avatar uploaded and drawn:', avatarDrawn, JSON.stringify(avatarImage));
+if (!avatarDrawn) profileProblems.push('the uploaded avatar did not load');
+
 await page.screenshot({ path: 'prod-csp.png', fullPage: true });
 
 await browser.close();
@@ -101,4 +135,5 @@ section('CONSOLE ERRORS', consoleErrors);
 section('FAILED REQUESTS', failedRequests);
 section('REQUESTS TO OTHER ORIGINS', foreignRequests);
 section('FONT PROBLEMS', fontProblems);
-process.exit(cspViolations.length || fontProblems.length || foreignRequests.length ? 1 : 0);
+section('PROFILE PROBLEMS', profileProblems);
+process.exit(cspViolations.length || fontProblems.length || foreignRequests.length || profileProblems.length ? 1 : 0);
