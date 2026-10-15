@@ -1,6 +1,6 @@
 import React from 'react';
 import useTextFile from '@/hooks/useTextFile';
-import { Button, Modal } from '@/shared/ui';
+import { Button, LoadingScreen, Modal } from '@/shared/ui';
 
 type LegalModalProps = {
   open: boolean;
@@ -43,7 +43,7 @@ const LegalModal: React.FC<LegalModalProps> = ({ open, onClose, title, filePath 
         </div>
       }
     >
-      {loading && <p className="text-sm text-ink-secondary">Loading...</p>}
+      {loading && <LoadingScreen label="Loading document..." showLabel fill="inline" />}
 
       {error && (
         <div role="alert" className="text-sm text-danger-strong">
