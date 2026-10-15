@@ -9,8 +9,13 @@ import type { User } from '@/models';
 // Characterization, written against the component as it stands before
 // section 12.5 turns it into users/UserMenu.
 vi.mock('@/services', () => ({
-  AuthService: { getCurrentUser: vi.fn(), logout: vi.fn() },
+  AuthService: { logout: vi.fn() },
 }));
+
+// The person comes from the auth context, which is what lets a change made on
+// the profile page reach this control.
+const auth = vi.hoisted(() => ({ user: null as unknown }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: auth.user }) }));
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -39,28 +44,34 @@ const trigger = () => screen.getByRole('button', { expanded: false });
 
 beforeEach(() => {
   navigate.mockReset();
-  mockedAuthService.getCurrentUser.mockReset().mockReturnValue(ADA);
+  auth.user = ADA;
   mockedAuthService.logout.mockReset().mockResolvedValue(undefined);
 });
 
 describe('UserAvatar when there is nobody signed in', () => {
   it('renders nothing at all rather than an empty avatar', () => {
-    mockedAuthService.getCurrentUser.mockReturnValue(null);
+    auth.user = null;
 
     const { container } = renderMenu();
 
     expect(container).toBeEmptyDOMElement();
   });
+});
 
-  it('survives an auth store that throws instead of answering', () => {
-    mockedAuthService.getCurrentUser.mockImplementation(() => {
-      throw new Error('corrupt');
-    });
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+describe('UserAvatar when the person changes', () => {
+  it('shows the new name and picture without being remounted', () => {
+    const { rerender } = renderMenu();
+    expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
 
-    const { container } = renderMenu();
+    auth.user = { ...ADA, firstName: 'Augusta', avatar: '/uploads/augusta.png' };
+    rerender(
+      <MemoryRouter>
+        <UserAvatar />
+      </MemoryRouter>
+    );
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText('Augusta Lovelace')).toBeInTheDocument();
+    expect(document.querySelector('img')).toHaveAttribute('src', '/uploads/augusta.png');
   });
 });
 
@@ -73,7 +84,7 @@ describe('UserAvatar menu', () => {
   });
 
   it('shows the avatar image instead of initials when there is one', () => {
-    mockedAuthService.getCurrentUser.mockReturnValue({ ...ADA, avatar: '/uploads/ada.png' });
+    auth.user = { ...ADA, avatar: '/uploads/ada.png' };
 
     const { container } = renderMenu();
 

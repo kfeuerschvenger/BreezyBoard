@@ -74,6 +74,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsAuthenticated(false);
   };
 
+  const updateUser = (next: User) => {
+    try {
+      localStorage.setItem('user', JSON.stringify(next));
+    } catch (error) {
+      console.warn('Could not store the updated user', error);
+    }
+    setUser(next);
+  };
+
   const logout = async () => {
     await AuthService.logout();
     setUser(null);
@@ -86,6 +95,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     register,
     logout,
     clearSession,
+    updateUser,
     isAuthenticated,
     loading,
   };
