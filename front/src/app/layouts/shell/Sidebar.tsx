@@ -23,6 +23,11 @@ export interface SidebarProps {
  * links at its foot are inside one: content outside every landmark is
  * unreachable by the landmark navigation of a screen reader.
  *
+ * Its fill is white below the large breakpoint and glass from it up. As a
+ * column it floats over the page's own light ground, where its small grey
+ * text keeps 4.5:1. As a panel it floats over the navy scrim, which darkens
+ * whatever shows through glass to about 2.5:1 for that same text.
+ *
  * It is a column with a scrolling middle. The boards take whatever height is
  * left between the fixed parts above and below them, so the account button is
  * always at the foot of the screen and never pushed off it.
@@ -35,7 +40,7 @@ export const Sidebar = ({ onCreateBoard, onNavigate, onClose, className = '' }: 
   return (
     <aside
       aria-label="Sidebar"
-      className={`min-h-0 flex-col gap-[18px] rounded-panel border border-glass-border bg-glass px-3 pb-3 pt-[18px] shadow-sidebar backdrop-blur-[20px] backdrop-saturate-150 ${className}`}
+      className={`min-h-0 flex-col gap-[18px] rounded-panel border border-glass-border bg-surface px-3 pb-3 pt-[18px] shadow-sidebar lg:bg-glass lg:backdrop-blur-[20px] lg:backdrop-saturate-150 ${className}`}
     >
       <div className="flex items-center justify-between gap-2">
         <BrandMark sway={level !== 'still'} onNavigate={onNavigate} />
