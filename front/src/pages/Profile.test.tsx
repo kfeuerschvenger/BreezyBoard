@@ -215,9 +215,11 @@ describe('Profile editing', () => {
       location: 'London',
       role: 'Engineer',
       department: 'Analytical Engine',
-      avatar: '',
     });
     expect(payload).not.toHaveProperty('createdAt');
+    // The upload stores the picture; the address the form holds for drawing it
+    // is absolute and must never replace the stored path.
+    expect(payload).not.toHaveProperty('avatar');
   });
 
   // The sidebar and the greeting read the session's copy of the person, not
@@ -341,6 +343,36 @@ describe('Profile avatar', () => {
 
     await waitFor(() => expect(mockedUserService.uploadAvatar).toHaveBeenCalledWith('user-ada', file));
     await waitFor(() => expect(document.querySelector('img')).toHaveAttribute('src', '/uploads/avatars/ada.png'));
+  });
+
+  it('leaves nothing to save once the picture is stored', async () => {
+    const user = userEvent.setup();
+    renderProfile();
+    await waitFor(() => expect(firstNameInput()).toHaveValue('Ada'));
+
+    await user.upload(screen.getByLabelText('Change avatar'), new File(['bytes'], 'ada.png', { type: 'image/png' }));
+    await waitFor(() => expect(document.querySelector('img')).toHaveAttribute('src', '/uploads/avatars/ada.png'));
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it('keeps what was typed in the form while the picture is uploaded', async () => {
+    const user = userEvent.setup();
+    mockedUserService.getById
+      .mockResolvedValueOnce(PROFILE)
+      .mockResolvedValue({ ...PROFILE, avatar: '/uploads/avatars/ada.png' });
+    renderProfile();
+    await waitFor(() => expect(firstNameInput()).toHaveValue('Ada'));
+
+    await user.clear(firstNameInput());
+    await user.type(firstNameInput(), 'Augusta');
+    await user.upload(screen.getByLabelText('Change avatar'), new File(['bytes'], 'ada.png', { type: 'image/png' }));
+
+    // The upload refreshes the stored record, which is the moment a plain reset
+    // would have put the old name back.
+    await waitFor(() => expect(document.querySelector('img')).toHaveAttribute('src', '/uploads/avatars/ada.png'));
+    expect(firstNameInput()).toHaveValue('Augusta');
+    expect(saveButton()).toBeEnabled();
   });
 
   it('hands the new picture to the session as soon as it is stored', async () => {
