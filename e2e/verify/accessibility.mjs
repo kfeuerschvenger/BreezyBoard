@@ -449,9 +449,57 @@ await scan('board not found');
 // without either being measured. A surface nobody scans is a surface nobody
 // knows about.
 await page.goto(`${FRONT}/profile`);
-await page.getByText('Profile Settings').waitFor();
+await page.getByRole('heading', { level: 1 }).waitFor();
 await settled(page, { label: 'the profile page to stop animating' });
 await scan('profile');
+
+// What axe has no rule for on the profile: the order of its panels, that the
+// two preferences that are not built are switches that are off and disabled
+// with a name and a description each, that the Breeze level is a named radio
+// group of four, and that Sign out is offered twice, in the header and in its
+// card, under the same name.
+check(
+  'the profile has four panels, in order',
+  (await page.locator('main section[aria-labelledby] h2').allTextContents()).join('|'),
+  'About you|Your breeze|Password|Sign out',
+);
+check('the Breeze level is one radio group of four', await page.getByRole('radiogroup', { name: 'Breeze level' }).getByRole('radio').count(), 4);
+const comingSoon = await page.getByRole('switch').evaluateAll(items =>
+  items.map(item => ({
+    name: document.getElementById(item.getAttribute('aria-labelledby'))?.textContent,
+    description: document.getElementById(item.getAttribute('aria-describedby'))?.textContent?.slice(0, 11),
+    off: item.getAttribute('aria-checked') === 'false' && item.disabled,
+  })),
+);
+check(
+  'the two coming preferences are named, described as Coming soon, off and disabled',
+  comingSoon.map(item => `${item.name}:${item.description}:${item.off}`).join('|'),
+  'Due-date nudges:Coming soon:true|Weekly digest:Coming soon:true',
+);
+check('Sign out is offered in the header and in its card', await page.getByRole('button', { name: 'Sign out', exact: true }).count(), 2);
+check('the avatar can be changed with the keyboard: its input is named and focusable', await page.getByLabel('Change avatar').evaluate(input => input.tabIndex >= 0 && !input.disabled), true);
+
+// The password panel with a refusal showing: an error under the field it
+// belongs to, announced, and the field marked invalid.
+const passwordPanel = page.getByRole('region', { name: 'Password' });
+await passwordPanel.getByLabel('Current password', { exact: true }).fill('NotMyPassw0rd');
+await passwordPanel.getByLabel('New password', { exact: true }).fill('FreshPassw0rd');
+await passwordPanel.getByLabel('Confirm new password', { exact: true }).fill('FreshPassw0rd');
+await passwordPanel.getByRole('button', { name: 'Change password' }).click();
+await passwordPanel.getByRole('alert').waitFor();
+await scan('profile, password refused');
+check(
+  'the refused current password is marked invalid and described by its error',
+  `${await passwordPanel.getByLabel('Current password', { exact: true }).getAttribute('aria-invalid')} ${await passwordPanel.getByLabel('Current password', { exact: true }).evaluate(input => document.getElementById(input.getAttribute('aria-describedby'))?.textContent)}`,
+  'true That is not your current password',
+);
+
+// A name and a place typed on the profile are saved, and the toast that says
+// so is a live region scanned showing.
+await page.getByLabel('First name').fill('Axel');
+await page.getByRole('button', { name: 'Save changes' }).click();
+await page.getByTestId('toast').waitFor();
+await scan('profile, saved toast showing');
 
 await browser.close();
 

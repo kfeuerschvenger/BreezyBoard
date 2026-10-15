@@ -705,7 +705,7 @@ for (const name of ['Av sky', 'Ada Lovelace']) { // NOSONAR javascript:S9382 seq
     avatarSizes.push(box);
   }
 }
-check('the avatar sizes are 24, 32, 48 and 96', avatarSizes.join(' '), '24 32 48 96');
+check('the avatar sizes are 24, 32, 48 and the profile\'s 116', avatarSizes.join(' '), '24 32 48 116');
 const surfaceRing = await page.locator('#probe-host [aria-label="Ada Lovelace"]').nth(0).evaluate(el => getComputedStyle(el).boxShadow);
 const groundRing = await page.locator('#probe-host [aria-label="Ada Lovelace"]').nth(1).evaluate(el => getComputedStyle(el).boxShadow);
 check('the surface ring is a 2 pixel white ring', surfaceRing.includes('rgb(255, 255, 255) 0px 0px 0px 2px'), true);
@@ -2578,6 +2578,175 @@ for (const [mode, reducedMotion, breeze] of [
   await exitContext.close(); // NOSONAR javascript:S9382
 }
 await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze: 'breezy' } });
+
+log('\n--- the profile ---');
+
+// A block of its own: this section names a lot of locators and boxes, and the
+// names it picks are the ones the sections above already hold.
+{
+
+const PROFILE_SIZE = { width: 1440, height: 900 };
+const profileContext = await browser.newContext({ viewport: PROFILE_SIZE, reducedMotion: 'reduce' });
+const profilePage = await signIn(profileContext);
+await profilePage.goto(`${FRONT}/profile`);
+await profilePage.getByRole('heading', { level: 1 }).waitFor();
+await settled(profilePage, { label: 'the profile to stop animating' });
+
+const profileStructure = await profilePage.evaluate(() => ({
+  h1: [...document.querySelectorAll('h1')].map(h => h.textContent),
+  levels: [...document.querySelectorAll('main h1, main h2, main h3')].map(h => h.tagName).join(' '),
+  panels: [...document.querySelectorAll('main section h2')].map(h => h.textContent),
+  sections: [...document.querySelectorAll('main section[aria-labelledby]')].length,
+}));
+check('the profile has exactly one h1, the name', `${profileStructure.h1.length} ${profileStructure.h1[0]}`, '1 Token Gate');
+check('the panels are h2 sections in order', profileStructure.panels.join('|'), 'About you|Your breeze|Password|Sign out');
+check('the headings never skip a level', profileStructure.levels, 'H1 H2 H2 H2 H2');
+check('each panel is a named section', profileStructure.sections, 4);
+
+const profileHeader = profilePage.locator('main header').first();
+const profileCover = profileHeader.locator(':scope > div[aria-hidden="true"]');
+const coverBox = await profileCover.boundingBox();
+const coverStyle = await styleOf(profileCover, ['borderTopLeftRadius', 'backgroundImage']);
+check('the cover is 220 pixels tall with the hero radius', `${Math.round(coverBox.height)} ${coverStyle.borderTopLeftRadius}`, '220 28px');
+check('the cover is the sky gradient until an image exists', coverStyle.backgroundImage.includes('oklch(0.5 0.13 232)'), true);
+
+const profileAvatar = profileHeader.locator('div.rounded-full').first();
+const avatarBox = await profileAvatar.boundingBox();
+const avatarStyle = await styleOf(profileAvatar, ['boxShadow', 'fontSize', 'fontFamily']);
+check('the avatar is a 116 pixel circle', `${Math.round(avatarBox.width)} ${Math.round(avatarBox.height)}`, '116 116');
+check('the avatar overlaps the cover by 58 pixels', Math.round(coverBox.y + coverBox.height - avatarBox.y), 58);
+check('the avatar has a 5 pixel ring in the ground colour', avatarStyle.boxShadow.includes('0px 0px 0px 5px') && avatarStyle.boxShadow.includes('rgb(243, 246, 249)'), true);
+check('its initials are 40 pixels in the display face', `${avatarStyle.fontSize} ${leads(avatarStyle.fontFamily, 'Bricolage Grotesque')}`, '40px true');
+
+const profileName = profileHeader.getByRole('heading', { level: 1 });
+const nameBox = await profileName.boundingBox();
+const nameStyle = await styleOf(profileName, ['fontSize', 'fontWeight', 'fontFamily', 'letterSpacing']);
+check('the name is 34 pixels, bold, in the display face, tracked -0.03em', `${nameStyle.fontSize} ${nameStyle.fontWeight} ${leads(nameStyle.fontFamily, 'Bricolage Grotesque')} ${nameStyle.letterSpacing}`, '34px 700 true -1.02px');
+check('the name sits wholly below the cover, never on the gradient', nameBox.y >= coverBox.y + coverBox.height, true);
+const since = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+check('the line under the name says Member and General', await profileHeader.getByText('Member · General').count(), 1);
+check('and says since when, as the month and the year', await profileHeader.getByText(`Breezing since ${since}`).count(), 1);
+
+const cameraLabel = profileHeader.locator('label', { has: profilePage.getByLabel('Change avatar') });
+const cameraBox = await cameraLabel.boundingBox();
+check('the camera button is 44 pixels square', `${Math.round(cameraBox.width)} ${Math.round(cameraBox.height)}`, '44 44');
+check('and sits on the avatar, at its lower right edge', cameraBox.x + cameraBox.width <= avatarBox.x + avatarBox.width + 1 && cameraBox.y + cameraBox.height <= avatarBox.y + avatarBox.height + 1, true);
+await profilePage.getByLabel('Change avatar').focus();
+const cameraRing = await cameraLabel.evaluate(el => `${getComputedStyle(el).outlineStyle} ${getComputedStyle(el).boxShadow}`);
+check('the camera button draws a focus ring while its input has focus', cameraRing.includes('solid') || cameraRing.includes('0px 0px 0px'), true);
+
+const panels = profilePage.locator('main section[aria-labelledby]');
+const aboutBox = await panels.nth(0).boundingBox();
+const breezeBox = await panels.nth(1).boundingBox();
+const panelStyle = await styleOf(panels.nth(0), ['borderTopLeftRadius', 'backgroundColor', 'backdropFilter', 'boxShadow']);
+check('the panels have the panel radius', panelStyle.borderTopLeftRadius, '24px');
+check('and are frosted: 82 percent white with a 14 pixel blur', `${panelStyle.backgroundColor} ${panelStyle.backdropFilter}`, 'rgba(255, 255, 255, 0.82) blur(14px)');
+check('and cast the tile shadow', panelStyle.boxShadow.includes('0px 14px 34px -24px'), true);
+check('at 1440 the About panel and the Your breeze column sit side by side, tops aligned', `${breezeBox.x > aboutBox.x + aboutBox.width - 1} ${Math.round(breezeBox.y) === Math.round(aboutBox.y)}`, 'true true');
+check('the page is at most 1000 pixels wide', Math.round(await profilePage.locator('main > div').first().evaluate(el => el.getBoundingClientRect().width)) <= 1000, true);
+
+// The Breeze panel: the same four choices as the sidebar, at 38 pixels.
+const breezePanel = profilePage.getByRole('region', { name: 'Your breeze' });
+const profileBreeze = breezePanel.getByRole('radiogroup', { name: /^Breeze level/ });
+const segments = await profileBreeze.locator('label').evaluateAll(labels => labels.map(l => `${l.textContent}:${Math.round(l.getBoundingClientRect().height)}`));
+check('the profile control offers Still, Calm, Breezy, Gusty at 38 pixels', segments.join(' '), 'Still:38 Calm:38 Breezy:38 Gusty:38');
+check('Breezy is chosen for a new account', await profileBreeze.getByRole('radio', { name: 'Breezy' }).isChecked(), true);
+check('there is no switch for card sway', await profilePage.getByRole('switch', { name: /sway/i }).count(), 0);
+
+const switches = await breezePanel.getByRole('switch').evaluateAll(items =>
+  items.map(item => ({
+    name: document.getElementById(item.getAttribute('aria-labelledby'))?.textContent,
+    note: document.getElementById(item.getAttribute('aria-describedby'))?.textContent,
+    disabled: item.disabled,
+    checked: item.getAttribute('aria-checked'),
+    box: `${Math.round(item.getBoundingClientRect().width)}x${Math.round(item.getBoundingClientRect().height)}`,
+  }))
+);
+check('the two coming preferences are switches, off and disabled', switches.map(item => `${item.name} ${item.disabled} ${item.checked}`).join('|'), 'Due-date nudges true false|Weekly digest true false');
+check('and each says Coming soon in words', switches.every(item => item.note.startsWith('Coming soon')), true);
+check('and each switch is 44 by 26', switches.map(item => item.box).join(' '), '44x26 44x26');
+
+// The save and cancel buttons wait for a change.
+check('nothing is offered to save before a change', `${await profilePage.getByRole('button', { name: 'Save changes' }).isDisabled()} ${await panels.nth(0).getByRole('button', { name: 'Cancel' }).isDisabled()}`, 'true true');
+
+// Under a reduced motion preference the wind is held still and the control says
+// so, keeping the choice it holds. This context asks for it.
+check('reduced motion: the readout says so instead of a speed', await breezePanel.getByText('Reduced motion', { exact: true }).count(), 1);
+check('reduced motion: the group is named for it', await breezePanel.getByRole('radiogroup', { name: 'Breeze level, held still because your system asks for reduced motion' }).count(), 1);
+check('reduced motion: the stored choice stays selected', await breezePanel.getByRole('radio', { name: 'Breezy' }).isChecked(), true);
+
+// Text on the frosted panels and the ground, against what is painted behind it.
+for (const [label, locator, token] of [
+  ['the name', profileName, '--color-ink'],
+  ['the line under the name', profileHeader.getByText('Member · General'), '--color-ink-body'],
+  ['the since line', profileHeader.getByText(`Breezing since ${since}`), '--color-ink-secondary'],
+  ['a panel title', panels.nth(1).getByRole('heading', { level: 2 }), '--color-ink'],
+  ['a panel description', profilePage.getByText('How much the interface moves, and what it tells you.'), '--color-ink-secondary'],
+  ['the speed readout', breezePanel.getByText('Reduced motion', { exact: true }), '--color-ink-tertiary'],
+  ['the reduced motion sentence', breezePanel.getByText(/^Your system asks for reduced motion/), '--color-ink-secondary'],
+  ['a coming soon note', breezePanel.getByText(/^Coming soon: a reminder/), '--color-ink-secondary'],
+  ['a field label', panels.nth(0).getByText('First name', { exact: true }), '--color-ink-secondary'],
+  ['the password rule hint', profilePage.getByText(/^At least 8 characters, with a lowercase/), '--color-ink-tertiary'],
+]) { // NOSONAR javascript:S9382 sequential on purpose: each photograph borrows the page's text colour and puts it back, so the elements cannot be photographed at once
+  const behind = await extremeBehind(profilePage, locator, 'darkest'); // NOSONAR javascript:S9382
+  await reportPairs(profilePage, [[`${label} on the darkest pixel behind it (${behind})`, token, `rgb(${behind})`, 4.5]]); // NOSONAR javascript:S9382
+}
+await profileContext.close();
+
+// With motion allowed the readout is a speed, and the sway follows the level
+// and nothing else. At Gusty every card sways; choosing any lower level on the
+// profile stops them, with no second switch to disagree with it.
+const swayContext = await browser.newContext({ viewport: PROFILE_SIZE, reducedMotion: 'no-preference' });
+const swayPage = await signIn(swayContext);
+// What the board's cards are doing: "all" when every one of them sways (and
+// there is at least one), "none" when no card does.
+const swayingCards = () =>
+  swayPage.evaluate(() => {
+    const cards = [...document.querySelectorAll('[data-task-card]')];
+    const swaying = cards.filter(c => getComputedStyle(c).animationName.startsWith('bbSway')).length;
+    if (cards.length > 0 && swaying === cards.length) return 'all';
+    return swaying === 0 ? 'none' : `${swaying} of ${cards.length}`;
+  });
+const chooseOnProfile = async name => {
+  await swayPage.goto(`${FRONT}/profile`);
+  await swayPage.getByRole('heading', { level: 1 }).waitFor();
+  const saved = swayPage.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/users/'), { timeout: WAIT_MS });
+  await swayPage.getByRole('region', { name: 'Your breeze' }).locator('label', { hasText: new RegExp(`^${name}$`) }).click();
+  await saved;
+  await swayPage.goto(gateBoardUrl);
+  await swayPage.getByText('Gate high task', { exact: true }).waitFor();
+  await settled(swayPage, { label: `the board at ${name} to stop animating` });
+};
+await swayPage.goto(`${FRONT}/profile`);
+await swayPage.getByRole('heading', { level: 1 }).waitFor();
+check('with motion allowed the readout is a speed', await swayPage.getByRole('region', { name: 'Your breeze' }).getByText('38 km/h').count(), 1);
+await chooseOnProfile('Gusty');
+check('choosing Gusty on the profile makes every card sway', await swayingCards(), 'all');
+for (const level of ['Breezy', 'Calm', 'Still']) { // NOSONAR javascript:S9382 sequential on purpose: each choice is a write to one stored value that the next page load reads back
+  await chooseOnProfile(level); // NOSONAR javascript:S9382
+  check(`choosing ${level} on the profile stops the sway`, await swayingCards(), 'none'); // NOSONAR javascript:S9382
+}
+await swayContext.close();
+await page.request.put(`${API}/users/${boardMe._id}`, { ...homeAuth, data: { breeze: 'breezy' } });
+
+// A phone: the two columns stack, the cover keeps its height and the name
+// stays below it.
+const phoneContext = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+const phonePage = await signIn(phoneContext);
+await phonePage.goto(`${FRONT}/profile`);
+await phonePage.getByRole('heading', { level: 1 }).waitFor();
+await settled(phonePage, { label: 'the profile to stop animating at 390 pixels' });
+const phonePanels = phonePage.locator('main section[aria-labelledby]');
+const phoneAbout = await phonePanels.nth(0).boundingBox();
+const phoneBreeze = await phonePanels.nth(1).boundingBox();
+const phoneCover = await phonePage.locator('main header > div[aria-hidden="true"]').boundingBox();
+const phoneName = await phonePage.locator('main header h1').boundingBox();
+check('at 390 the panels stack in one column', `${Math.round(phoneBreeze.x) === Math.round(phoneAbout.x)} ${phoneBreeze.y > phoneAbout.y + phoneAbout.height}`, 'true true');
+check('at 390 the cover is still 220 pixels tall', Math.round(phoneCover.height), 220);
+check('at 390 the name is below the cover', phoneName.y >= phoneCover.y + phoneCover.height, true);
+check('at 390 the document does not scroll sideways', await phonePage.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0);
+await phoneContext.close();
+}
 
 await browser.close();
 

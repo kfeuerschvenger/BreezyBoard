@@ -563,18 +563,34 @@ const authed = [
     name: 'profile',
     open: async () => {
       await page.goto(`${FRONT}/profile`);
-      await page.getByText('Profile Settings').waitFor();
+      await page.getByRole('heading', { level: 1 }).waitFor();
     },
   },
   {
-    name: 'profile, saved modal',
+    // The toast that confirms a save, over the page, at every width.
+    name: 'profile, saved toast',
     open: async () => {
       await page.goto(`${FRONT}/profile`);
-      await page.getByText('Profile Settings').waitFor();
+      await page.getByRole('heading', { level: 1 }).waitFor();
       // Saving is disabled until the form is dirty.
-      await page.getByLabel('First Name').fill(`Responsive${Date.now() % 1000}`);
-      await page.getByRole('button', { name: /^Save/ }).first().click();
-      await page.getByRole('dialog').waitFor();
+      await page.getByLabel('First name').fill(`Responsive${Date.now() % 1000}`);
+      await page.getByRole('button', { name: 'Save changes' }).click();
+      await page.getByTestId('toast').waitFor();
+    },
+  },
+  {
+    // The password panel with a refusal under its field: the longest the
+    // panel gets, with its error text and its three reveal toggles.
+    name: 'profile, password refused',
+    open: async () => {
+      await page.goto(`${FRONT}/profile`);
+      await page.getByRole('heading', { level: 1 }).waitFor();
+      const panel = page.getByRole('region', { name: 'Password' });
+      await panel.getByLabel('Current password', { exact: true }).fill('NotMyPassw0rd');
+      await panel.getByLabel('New password', { exact: true }).fill('FreshPassw0rd');
+      await panel.getByLabel('Confirm new password', { exact: true }).fill('FreshPassw0rd');
+      await panel.getByRole('button', { name: 'Change password' }).click();
+      await panel.getByText('That is not your current password').waitFor();
     },
   },
 ];
