@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithQuery } from '@/test/renderWithQuery';
+import { createTestQueryClient, renderWithQuery } from '@/test/renderWithQuery';
+import { ToastProvider } from '@/shared/ui';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AxiosError, AxiosHeaders } from 'axios';
 import Board from './Board';
@@ -208,6 +211,44 @@ describe('Board page rendering', () => {
     expect(screen.getByRole('link', { name: 'Back to my boards' })).toHaveAttribute('href', '/');
     expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.title).toBe('Board not found | BreezyBoard');
+  });
+
+  // Effects run child first. When the page is shown again for an address the
+  // cache already knows is missing, the not found page is there from the first
+  // render, and a parent that set its own title in that same pass would take
+  // the tab from it.
+  it('keeps the not found title when the missing board is shown again from the cache', async () => {
+    mockedBoardService.getById.mockRejectedValue(rejectedWith(404));
+    mockedTaskService.getByBoard.mockRejectedValue(rejectedWith(404));
+    const queryClient = createTestQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
+    );
+    const page = (
+      <MemoryRouter initialEntries={[`/board/${BOARD_ID}`]}>
+        <Routes>
+          <Route path="/board/:boardId" element={<Board />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const first = render(page, { wrapper });
+    await screen.findByRole('heading', { level: 1, name: 'Board not found' });
+    first.unmount();
+    // An errored query refetches when it is mounted again, and while it does
+    // it reads as loading. Left as it is, the cached failure is not there to
+    // be drawn in the first pass.
+    queryClient.setDefaultOptions({
+      queries: { retry: false, refetchOnWindowFocus: false, staleTime: Infinity, retryOnMount: false },
+    });
+    document.title = 'Home | BreezyBoard';
+
+    render(page, { wrapper });
+
+    await screen.findByRole('heading', { level: 1, name: 'Board not found' });
     expect(document.title).toBe('Board not found | BreezyBoard');
   });
 
