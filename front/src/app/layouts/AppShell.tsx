@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Outlet, useLocation, useMatch } from 'react-router-dom';
 import { IconMenu2 } from '@tabler/icons-react';
@@ -33,7 +33,9 @@ const SIDEBAR_ID = 'app-sidebar';
  * inside it, the rest of the page is inert, Escape and a press on the scrim
  * close it, and focus goes back to the button that opened it. Choosing a
  * destination closes it too, because the panel has done its job and would
- * otherwise sit over the page that was just asked for. While it is closed it
+ * otherwise sit over the page that was just asked for; focus then goes to the
+ * main region, the start of the page that was asked for, and not to the menu
+ * button. While it is closed it
  * is invisible and inert, so its links are neither seen nor tabbed to.
  *
  * The create board dialog is hosted here, because the sidebar and the home
@@ -60,6 +62,11 @@ const ShellFrame = ({ children }: { children?: ReactNode }) => {
   const [panelOpen, setPanelOpen] = useState(false);
   const [shownPath, setShownPath] = useState(pathname);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  // Whether the panel is closing because a destination was chosen, as opposed
+  // to being dismissed. Read when it has closed, which is why it is a ref.
+  const leavingForDestination = useRef(false);
+  const wasDialog = useRef(false);
 
   // Both adjustments are made while rendering, which is how React asks for
   // state that follows other state: an effect would paint one frame of the
@@ -75,7 +82,32 @@ const ShellFrame = ({ children }: { children?: ReactNode }) => {
   const asDialog = !isLarge && panelOpen;
   const closePanel = () => setPanelOpen(false);
 
+  const chooseDestination = () => {
+    leavingForDestination.current = true;
+    closePanel();
+  };
+  const openPanel = () => {
+    leavingForDestination.current = false;
+    setPanelOpen(true);
+  };
+
+  // A new address closes the panel as a destination does, whichever control
+  // asked for it.
+  useEffect(() => {
+    leavingForDestination.current = true;
+  }, [pathname]);
+
   useFocusTrap(panelRef, asDialog);
+
+  // Dismissing the panel gives focus back to the button that opened it, which
+  // the trap does. Choosing a destination moves on instead: the button is not
+  // where the person is going, and the trap's restore would leave focus there,
+  // or on the page body if the button is gone. This runs after the trap's
+  // cleanup, so the page's main region wins.
+  useEffect(() => {
+    if (wasDialog.current && !asDialog && leavingForDestination.current) mainRef.current?.focus();
+    wasDialog.current = asDialog;
+  }, [asDialog]);
   // A dialog opened from the panel, such as the create board form, answers
   // Escape itself. Both listeners hear the same key, and the panel must not
   // close underneath a dialog that has just closed.
@@ -92,7 +124,7 @@ const ShellFrame = ({ children }: { children?: ReactNode }) => {
       aria-label="Open navigation"
       aria-expanded={panelOpen}
       aria-controls={SIDEBAR_ID}
-      onClick={() => setPanelOpen(true)}
+      onClick={openPanel}
       className="-ml-2 lg:hidden"
     >
       <Icon as={IconMenu2} size={22} />
@@ -118,7 +150,7 @@ const ShellFrame = ({ children }: { children?: ReactNode }) => {
         >
           <Sidebar
             onCreateBoard={shell.openCreateBoard}
-            onNavigate={closePanel}
+            onNavigate={chooseDestination}
             onClose={closePanel}
             className="flex w-full"
           />
@@ -138,7 +170,9 @@ const ShellFrame = ({ children }: { children?: ReactNode }) => {
           <ShellHeader slotRef={setHeaderSlot} menuButton={menuButton} />
           <main
             id="main"
-            className={`flex min-h-0 flex-1 flex-col px-1 ${onBoard ? 'overflow-hidden' : 'overflow-y-auto pb-8 pt-2'}`}
+            ref={mainRef}
+            tabIndex={-1}
+            className={`flex min-h-0 flex-1 flex-col px-1 outline-none ${onBoard ? 'overflow-hidden' : 'overflow-y-auto pb-8 pt-2'}`}
           >
             {children ?? <Outlet />}
           </main>
