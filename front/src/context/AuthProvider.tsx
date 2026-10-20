@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AuthService } from '@/services';
 import type { User } from '@/models';
 import { clearAuth } from '@/utils/auth.helper';
@@ -11,6 +12,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionEndReason, setSessionEndReason] = useState<SessionEndReason | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -44,6 +46,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key === 'token' && !event.newValue) {
+        queryClient.clear();
         setUser(null);
         setIsAuthenticated(false);
       }
@@ -51,7 +54,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+  }, [queryClient]);
 
   const login = async (credentials: { email: string; password: string }) => {
     const { token, user } = await AuthService.login(credentials);
@@ -71,8 +74,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSessionEndReason(null);
   };
 
+  // The server state cache is not keyed by person: a board, a task or the
+  // dashboard totals are stored under keys that name no user, and stay fresh
+  // for 30 seconds. Every way a session ends therefore empties it, or the
+  // next person to sign in on this tab is shown the previous one's boards.
   const clearSession = (reason?: SessionEndReason) => {
     clearAuth();
+    queryClient.clear();
     setUser(null);
     setIsAuthenticated(false);
     setSessionEndReason(reason ?? null);
@@ -89,6 +97,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     await AuthService.logout();
+    queryClient.clear();
     setUser(null);
     setIsAuthenticated(false);
   };

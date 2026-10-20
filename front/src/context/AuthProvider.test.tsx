@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthService } from '@/services';
 import { useAuth } from '@/hooks/useAuth';
 import type { User } from '@/models';
@@ -23,15 +24,34 @@ beforeEach(() => {
   vi.mocked(AuthService.me).mockReset().mockResolvedValue(ADA);
 });
 
-describe('AuthProvider clearSession', () => {
-  const mount = async () => {
-    render(
+let queryClient: QueryClient;
+
+const mountProvider = () => {
+  queryClient = new QueryClient();
+  queryClient.setQueryData(['boards'], [{ _id: 'board-ada' }]);
+
+  render(
+    <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Probe />
       </AuthProvider>
-    );
+    </QueryClientProvider>
+  );
+};
+
+describe('AuthProvider clearSession', () => {
+  const mount = async () => {
+    mountProvider();
     await waitFor(() => expect(screen.getByTestId('name')).toHaveTextContent('Ada'));
   };
+
+  it('empties the query cache, so the next person on this tab sees none of this one', async () => {
+    await mount();
+
+    act(() => context.clearSession('password-changed'));
+
+    expect(queryClient.getQueryData(['boards'])).toBeUndefined();
+  });
 
   it('drops the person and the stored session, and remembers why', async () => {
     await mount();
@@ -64,13 +84,34 @@ describe('AuthProvider clearSession', () => {
   });
 });
 
+describe('AuthProvider logout', () => {
+  it('empties the query cache once the server has been told', async () => {
+    mountProvider();
+    await waitFor(() => expect(screen.getByTestId('name')).toHaveTextContent('Ada'));
+    vi.mocked(AuthService.logout).mockResolvedValue(undefined);
+
+    await act(() => context.logout());
+
+    expect(queryClient.getQueryData(['boards'])).toBeUndefined();
+    expect(context.isAuthenticated).toBe(false);
+  });
+
+  it('empties the query cache when another tab signs out', async () => {
+    mountProvider();
+    await waitFor(() => expect(screen.getByTestId('name')).toHaveTextContent('Ada'));
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'token', newValue: null }));
+    });
+
+    expect(queryClient.getQueryData(['boards'])).toBeUndefined();
+    expect(context.isAuthenticated).toBe(false);
+  });
+});
+
 describe('AuthProvider updateUser', () => {
   it('replaces the person in this tab and in the stored session', async () => {
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>
-    );
+    mountProvider();
     await waitFor(() => expect(screen.getByTestId('name')).toHaveTextContent('Ada'));
 
     act(() => context.updateUser({ ...ADA, firstName: 'Augusta' }));
@@ -80,11 +121,7 @@ describe('AuthProvider updateUser', () => {
   });
 
   it('keeps the copy in this tab when the stored session cannot be written', async () => {
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>
-    );
+    mountProvider();
     await waitFor(() => expect(screen.getByTestId('name')).toHaveTextContent('Ada'));
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('quota');
