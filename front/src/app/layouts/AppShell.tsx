@@ -143,8 +143,9 @@ const ShellFrame = ({ children }: { children?: ReactNode }) => {
           ref={panelRef}
           role={asDialog ? 'dialog' : undefined}
           aria-label={asDialog ? 'Navigation' : undefined}
+          tabIndex={-1}
           inert={!isLarge && !panelOpen}
-          className={`fixed bottom-3 left-3 top-3 z-40 flex w-[min(300px,calc(100vw-3rem))] min-h-0 transition-[transform,visibility] duration-300 ease-standard lg:visible lg:static lg:z-[2] lg:my-3 lg:ml-3 lg:w-auto lg:translate-x-0 ${
+          className={`outline-none fixed bottom-3 left-3 top-3 z-40 flex w-[min(300px,calc(100vw-3rem))] min-h-0 transition-[transform,visibility] duration-300 ease-standard lg:visible lg:static lg:z-[2] lg:my-3 lg:ml-3 lg:w-auto lg:translate-x-0 ${
             panelOpen ? 'visible translate-x-0' : 'invisible -translate-x-[calc(100%+1.5rem)]'
           }`}
         >

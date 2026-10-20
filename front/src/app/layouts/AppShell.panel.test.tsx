@@ -129,6 +129,17 @@ describe('the sidebar as a panel', () => {
     expect(panel()).toContainElement(document.activeElement as HTMLElement);
   });
 
+  // The focus trap falls back to the panel when nothing inside can take focus,
+  // and a div takes focus only with a tabindex.
+  it('can take focus itself, for the trap to fall back to', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await openPanel(user);
+
+    expect(panel()).toHaveAttribute('tabindex', '-1');
+    expect(panel()).toHaveClass('outline-none');
+  });
+
   it('holds Tab inside the panel in both directions', async () => {
     const user = userEvent.setup();
     renderShell();

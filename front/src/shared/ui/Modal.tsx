@@ -146,8 +146,9 @@ export function Modal({
             exit={{ ...leaving, pointerEvents: 'none', transition: exitTransition(0.2) }}
             role="dialog"
             aria-modal="true"
+            tabIndex={-1}
             {...naming}
-            className={`relative flex w-full flex-col overflow-hidden bg-surface shadow-modal ${SIZE_CLASSES[size]} ${
+            className={`relative flex w-full flex-col overflow-hidden bg-surface shadow-modal outline-none ${SIZE_CLASSES[size]} ${
               placement === 'sheet' ? SHEET_PANEL : CENTER_PANEL
             }`}
           >
