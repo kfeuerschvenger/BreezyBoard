@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IconGripVertical, IconPlus, IconTrash } from '@tabler/icons-react';
 import { Icon, ProgressBar } from '@/shared/ui';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -63,7 +63,7 @@ const SortableChecklistItem: React.FC<SortableChecklistItemProps> = ({ item, pos
       <div
         {...attributes}
         {...listeners}
-        aria-label="Reorder checklist item"
+        aria-label={`Reorder checklist item ${position}`}
         className={`${TARGET} focus-ring cursor-grab rounded text-ink-tertiary active:cursor-grabbing`}
       >
         <Icon as={IconGripVertical} size={14} aria-hidden="true" />
@@ -125,6 +125,9 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange, pending, 
   // field's own and never part of the list, so a list never holds a row that
   // has no text.
   const [ownDraft, setOwnDraft] = useState('');
+  const refocusAt = useRef<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const addRef = useRef<HTMLInputElement>(null);
   const draft = pending ?? ownDraft;
   const setDraft = onPendingChange ?? setOwnDraft;
 
@@ -151,8 +154,32 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange, pending, 
   };
 
   const handleDelete = (id: string) => {
+    // Remembered for the effect below: the row that held focus is about to go.
+    refocusAt.current = items.findIndex(item => item.id === id);
     onChange(items.filter(item => item.id !== id));
   };
+
+  // A removed row takes focus with it, and the dialog around the list would be
+  // left with focus on the page body. Once the removal has been drawn and the
+  // event that caused it has finished, focus goes to the row that took its
+  // place, else the one before it, else the field at the foot. It is looked at
+  // a task later, not at once: leaving an emptied field for another control
+  // removes the row while the browser is still moving focus to that control,
+  // and focus is then somewhere real by the time this runs. Only a focus left
+  // on the body is moved.
+  useEffect(() => {
+    const at = refocusAt.current;
+    if (at === null) return;
+    refocusAt.current = null;
+
+    window.setTimeout(() => {
+      const list = listRef.current;
+      if (!list || (document.activeElement && document.activeElement !== document.body)) return;
+
+      const rows = list.querySelectorAll<HTMLInputElement>('input[type="text"]');
+      (rows[at] ?? rows[rows.length - 1] ?? addRef.current)?.focus();
+    }, 0);
+  }, [items]);
 
   const handleReorder = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -201,7 +228,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange, pending, 
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleReorder}>
         <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-1">
+          <div ref={listRef} className="space-y-1">
             {items.map((item, index) => (
               <SortableChecklistItem
                 key={item.id}
@@ -220,6 +247,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ items, onChange, pending, 
           <Icon as={IconPlus} size={16} aria-hidden="true" />
         </span>
         <input
+          ref={addRef}
           type="text"
           value={draft}
           onChange={event => setDraft(event.target.value)}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Checklist, type ChecklistItemData } from './Checklist';
 
@@ -179,6 +179,68 @@ describe('Checklist', () => {
     renderChecklist();
 
     expect(screen.getAllByRole('checkbox', { name: 'Completed' })).toHaveLength(ITEMS.length);
-    expect(screen.getAllByRole('button', { name: 'Reorder checklist item' })).toHaveLength(ITEMS.length);
+    expect(screen.getByRole('button', { name: 'Reorder checklist item 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reorder checklist item 2' })).toBeInTheDocument();
+  });
+});
+
+describe('Checklist, focus after a row is removed', () => {
+  const Stateful = ({ initial = ITEMS }: { initial?: ChecklistItemData[] }) => {
+    const [items, setItems] = useState(initial);
+    return <Checklist items={items} onChange={setItems} />;
+  };
+
+  const field = (n: number) => screen.getByRole('textbox', { name: `Checklist item ${n}` });
+
+  it('moves to the row that took the place of an emptied one', async () => {
+    const user = userEvent.setup();
+    render(<Stateful />);
+
+    await user.clear(field(1));
+    await user.tab();
+
+    await waitFor(() => expect(screen.getByDisplayValue('Check the indexes')).toHaveFocus());
+  });
+
+  it('moves to the row before it when the last row was emptied', async () => {
+    const user = userEvent.setup();
+    render(<Stateful />);
+
+    await user.clear(field(2));
+    await user.tab();
+
+    await waitFor(() => expect(screen.getByDisplayValue('Write the migration')).toHaveFocus());
+  });
+
+  it('moves to the field at the foot when the only row was emptied', async () => {
+    const user = userEvent.setup();
+    render(<Stateful initial={[ITEMS[0]]} />);
+
+    await user.clear(field(1));
+    await user.tab();
+
+    await waitFor(() => expect(addField()).toHaveFocus());
+  });
+
+  it('moves to the row that follows when the delete control of a row is used', async () => {
+    const user = userEvent.setup();
+    render(<Stateful />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Delete checklist item' })[0]);
+
+    await waitFor(() => expect(screen.getByDisplayValue('Check the indexes')).toHaveFocus());
+  });
+
+  // Leaving the emptied field for another control removes the row while the
+  // browser is still moving focus, and that control has to keep it.
+  it('does not take focus back from the control the person went to', async () => {
+    const user = userEvent.setup();
+    render(<Stateful />);
+
+    await user.clear(field(1));
+    await user.click(addField());
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(addField()).toHaveFocus();
   });
 });
