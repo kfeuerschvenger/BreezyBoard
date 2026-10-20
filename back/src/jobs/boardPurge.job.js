@@ -4,13 +4,27 @@ import { purgeExpiredTasks } from '../services/task.service.js';
 import logger from '../utils/logger.js';
 
 // Tasks go first so that a failure on boards does not leave the task backlog
-// waiting, and the count the job reports is both kinds of removal together.
+// waiting. Each purge has its own try and its own log, so a failure in one
+// never skips the other, and the count the job reports is both kinds of
+// removal together, counting zero for the one that failed.
 const purgeWithConfiguredWindow = async () => {
-  const tasks = await purgeExpiredTasks({ retentionMs: env.BOARD_RETENTION_MS });
-  const boards = await purgeExpiredBoards({
-    retentionMs: env.BOARD_RETENTION_MS,
-    onError: (error, boardId) => logger.error({ err: error, boardId }, 'Failed to purge a deleted board'),
-  });
+  let tasks = 0;
+  let boards = 0;
+
+  try {
+    tasks = await purgeExpiredTasks({ retentionMs: env.BOARD_RETENTION_MS });
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to purge deleted tasks');
+  }
+
+  try {
+    boards = await purgeExpiredBoards({
+      retentionMs: env.BOARD_RETENTION_MS,
+      onError: (error, boardId) => logger.error({ err: error, boardId }, 'Failed to purge a deleted board'),
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to purge deleted boards');
+  }
 
   return tasks + boards;
 };
