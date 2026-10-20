@@ -295,6 +295,46 @@ describe('task soft delete and restore', () => {
       expect(await purgeExpiredTasks({ retentionMs: RETENTION_MS, now })).toBe(1);
     });
 
+    test('gives the task a position of its own when a live card took its key while it was deleted', async () => {
+      const status = columns[0]._id.toString();
+      // A move to the end of the column mints the key the deleted card still holds.
+      const moved = await asUser('patch', `/tasks/${third._id}/move`, owner).send({
+        status,
+        afterId: first._id,
+        beforeId: null,
+      });
+      expect(moved.body.data.order).toBe(second.order);
+
+      const res = await asUser('post', `/tasks/${second._id}/restore`, owner);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.order).not.toBe(second.order);
+      const stored = await Task.find({ boardId: board._id, deletedAt: null }).select('order');
+      expect(new Set(stored.map(task => task.order)).size).toBe(stored.length);
+      expect(await listedTitles(owner)).toEqual(['First', 'Second', 'Third']);
+
+      // A drop between the two cards that used to share a key still has room.
+      const drop = await asUser('patch', `/tasks/${first._id}/move`, owner).send({
+        status,
+        afterId: second._id,
+        beforeId: third._id,
+      });
+      expect(drop.status).toBe(200);
+      expect(await listedTitles(owner)).toEqual(['Second', 'First', 'Third']);
+    });
+
+    test('keeps the key of a restored task that no live card shares', async () => {
+      await asUser('patch', `/tasks/${third._id}/move`, owner).send({
+        status: columns[0]._id.toString(),
+        afterId: null,
+        beforeId: first._id,
+      });
+
+      const res = await asUser('post', `/tasks/${second._id}/restore`, owner);
+
+      expect(res.body.data.order).toBe(second.order);
+    });
+
     test('answers 404 while the board itself is deleted, and a restored board keeps the task deleted', async () => {
       await asUser('delete', `/boards/${board._id}`, owner);
 
