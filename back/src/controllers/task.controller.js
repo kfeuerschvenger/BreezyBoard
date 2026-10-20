@@ -50,7 +50,7 @@ export const restoreTask = async (req, res, next) => {
   }
 };
 
-export const moveTask =async (req, res, next) => {
+export const moveTask = async (req, res, next) => {
   try {
     const { status, afterId, beforeId } = req.body;
     const task = await taskService.moveTask(req.params.id, status, { afterId, beforeId });
