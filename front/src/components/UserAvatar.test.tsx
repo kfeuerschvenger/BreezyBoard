@@ -3,27 +3,19 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import UserAvatar from './UserAvatar';
-import { AuthService } from '@/services';
 import type { User } from '@/models';
 
-// Characterization, written against the component as it stands before
-// section 12.5 turns it into users/UserMenu.
-vi.mock('@/services', () => ({
-  AuthService: { logout: vi.fn() },
-}));
-
 // The person comes from the auth context, which is what lets a change made on
-// the profile page reach this control.
-const auth = vi.hoisted(() => ({ user: null as unknown }));
-vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: auth.user }) }));
+// the profile page reach this control, and so does signing out: the context
+// is what also empties the query cache.
+const auth = vi.hoisted(() => ({ user: null as unknown, logout: vi.fn() }));
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: auth.user, logout: auth.logout }) }));
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return { ...actual, useNavigate: () => navigate };
 });
-
-const mockedAuthService = vi.mocked(AuthService);
 
 const ADA: User = {
   _id: 'user-ada',
@@ -45,7 +37,7 @@ const trigger = () => screen.getByRole('button', { expanded: false });
 beforeEach(() => {
   navigate.mockReset();
   auth.user = ADA;
-  mockedAuthService.logout.mockReset().mockResolvedValue(undefined);
+  auth.logout.mockReset().mockResolvedValue(undefined);
 });
 
 describe('UserAvatar when there is nobody signed in', () => {
@@ -198,7 +190,7 @@ describe('UserAvatar actions', () => {
     await user.click(trigger());
     await user.click(screen.getByRole('menuitem', { name: /Log out/ }));
 
-    await waitFor(() => expect(mockedAuthService.logout).toHaveBeenCalled());
+    await waitFor(() => expect(auth.logout).toHaveBeenCalled());
     expect(navigate).toHaveBeenCalledWith('/login');
   });
 
@@ -206,7 +198,7 @@ describe('UserAvatar actions', () => {
   // to be let out, so a failed logout still has to land on the login page.
   it('goes to the login page even when signing out fails', async () => {
     const user = userEvent.setup();
-    mockedAuthService.logout.mockRejectedValue(new Error('offline'));
+    auth.logout.mockRejectedValue(new Error('offline'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     renderMenu();
 

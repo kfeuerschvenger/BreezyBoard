@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { AuthService } from '@/services';
 import { useAuth } from '@/hooks/useAuth';
 import { UserMenu } from '@/features/users';
 
@@ -13,11 +12,13 @@ import { UserMenu } from '@/features/users';
  */
 const UserAvatar: React.FC = () => {
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, logout: endSession } = useAuth();
 
+  // Through the auth context and not the service: the context also empties the
+  // query cache, which the service has no way to reach.
   const logout = async () => {
     try {
-      await AuthService.logout();
+      await endSession();
     } catch (error) {
       // Being unable to reach the server is the one moment somebody most
       // needs to be let out, so the navigation below happens either way.
