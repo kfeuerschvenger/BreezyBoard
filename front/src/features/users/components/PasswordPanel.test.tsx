@@ -156,6 +156,21 @@ describe('PasswordPanel', () => {
     expect(screen.queryByText(/We could not change your password/)).not.toBeInTheDocument();
   });
 
+  // The field to fix takes focus, as it does for the checks made before the
+  // request: leaving it on the submit button hides the error from a keyboard
+  // or screen reader user until they go looking for it.
+  it('moves focus to the current password field when the server says it is wrong', async () => {
+    const user = userEvent.setup();
+    mockedAuth.changePassword.mockRejectedValue(refusal(400, 'WRONG_CURRENT_PASSWORD'));
+    renderPanel();
+
+    await fill(user, ['WrongPassword1', 'NewPassword456', 'NewPassword456']);
+    await user.click(submit());
+    await screen.findByText('That is not your current password');
+
+    expect(current()).toHaveFocus();
+  });
+
   it('says so in a banner, and stays signed in, when the server refuses for any other reason', async () => {
     const user = userEvent.setup();
     mockedAuth.changePassword.mockRejectedValue(refusal(500, 'INTERNAL'));
