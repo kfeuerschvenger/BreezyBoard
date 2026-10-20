@@ -17,6 +17,19 @@ const open = (props: Partial<React.ComponentProps<typeof Modal>> = {}) =>
     </Modal>
   );
 
+describe('Modal focus', () => {
+  // The trap falls back to the panel when nothing inside can take focus, and a
+  // div takes focus only with a tabindex. Without it the fallback does nothing
+  // and focus stays behind the scrim.
+  it('takes focus itself when nothing inside it can', () => {
+    open({ header: <div>Plain header</div> });
+
+    const panel = screen.getByRole('dialog');
+    expect(panel).toHaveAttribute('tabindex', '-1');
+    expect(panel).toHaveFocus();
+  });
+});
+
 describe('Modal surface', () => {
   it('draws the panel on white with the modal radius and the modal shadow', () => {
     open();
