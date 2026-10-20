@@ -170,6 +170,31 @@ describe('choosing a level', () => {
     expect(screen.queryByText('Your Breeze setting did not save. Try again.')).not.toBeInTheDocument();
   });
 
+  // Two requests in the air can land in either order, and whichever lands
+  // last is what the server keeps. Sent one after the other, the last choice
+  // is the last write.
+  it('sends a choice only once the one before it has answered, so the last choice is the one stored', async () => {
+    const user = userEvent.setup();
+    let answerFirst: (value: unknown) => void = () => {};
+    mockedUsers.update
+      .mockReturnValueOnce(new Promise(resolve => (answerFirst = resolve)))
+      .mockResolvedValueOnce({} as never);
+    renderProbe();
+
+    await user.click(screen.getByRole('button', { name: 'breezy' }));
+    await user.click(screen.getByRole('button', { name: 'calm' }));
+
+    expect(stored()).toBe('calm');
+    expect(mockedUsers.update).toHaveBeenCalledTimes(1);
+    expect(mockedUsers.update).toHaveBeenLastCalledWith('user-1', { breeze: 'breezy' });
+
+    answerFirst({});
+
+    await waitFor(() => expect(mockedUsers.update).toHaveBeenCalledTimes(2));
+    expect(mockedUsers.update).toHaveBeenLastCalledWith('user-1', { breeze: 'calm' });
+    expect(stored()).toBe('calm');
+  });
+
   it("keeps one person's choice from showing for another", async () => {
     const user = userEvent.setup();
     const view = renderProbe();
