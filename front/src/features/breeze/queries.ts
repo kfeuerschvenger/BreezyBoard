@@ -46,6 +46,12 @@ export function useBreezeSetting(userId: string | null, initial: unknown): UseBr
   });
 
   const mutation = useMutation({
+    // One scope per person, so the writes go out one after the other. Two
+    // requests in the air can be answered in either order and the server keeps
+    // whichever lands last, which would not be the last thing chosen. The
+    // optimistic write in `onMutate` still runs at once, so the control does
+    // not wait for the queue.
+    scope: { id: `breeze:${userId ?? ''}` },
     mutationFn: (level: BreezeLevel) => UserService.update(userId as string, { breeze: level }),
     onMutate: async level => {
       await queryClient.cancelQueries({ queryKey: key });
