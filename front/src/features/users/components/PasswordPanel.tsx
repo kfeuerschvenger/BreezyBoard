@@ -51,7 +51,7 @@ export const PasswordPanel: React.FC = () => {
     const outcome = await changePassword(currentPassword, newPassword);
 
     if (outcome === 'wrong-current') {
-      setError('currentPassword', { message: 'That is not your current password' });
+      setError('currentPassword', { message: 'That is not your current password' }, { shouldFocus: true });
     } else if (outcome === 'failed') {
       setFailed(true);
     }
