@@ -267,7 +267,9 @@ export const requireBoardRole =
  *
  * A soft-deleted task is a missing task, as a soft-deleted board is a missing
  * board. The restore route alone opts in with `includeDeleted`, and still
- * resolves the role on the board first.
+ * resolves the role on the board first. There a caller with no role is told
+ * 404, the answer a missing task gets, so the route confirms the existence of
+ * neither a deleted task nor a live one.
  *
  * @param {'member' | 'owner'} minimumRole
  * @param {{ includeDeleted?: boolean }} [options]
@@ -293,6 +295,10 @@ export const requireTaskBoardRole =
       const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
 
       if (!meetsMinimumRole(role, minimumRole)) {
+        if (includeDeleted) {
+          throw new ApiError(404, 'Task not found');
+        }
+
         throw new ApiError(403, 'Not authorized to access this task');
       }
 
