@@ -47,6 +47,8 @@ export const CardComposer: React.FC<CardComposerProps> = ({ columnId, columnTitl
   // effect on `open`, so the first render does not steal focus from the page.
   const moveFocus = useRef<'field' | 'trigger' | null>(null);
   const handledRequest = useRef(0);
+  // The text as it is now, for a save that finishes after more was typed.
+  const typed = useRef('');
 
   const draft = useDraft<string>(`composer:${columnId}`);
 
@@ -56,7 +58,9 @@ export const CardComposer: React.FC<CardComposerProps> = ({ columnId, columnTitl
       fieldRef.current?.focus();
       return;
     }
-    setText(draft.read() ?? '');
+    const stored = draft.read() ?? '';
+    typed.current = stored;
+    setText(stored);
     setError(null);
     moveFocus.current = 'field';
     setOpen(true);
@@ -88,6 +92,7 @@ export const CardComposer: React.FC<CardComposerProps> = ({ columnId, columnTitl
   }, [open]);
 
   const change = (value: string) => {
+    typed.current = value;
     setText(value);
     setError(null);
     if (value.trim()) draft.write(value);
@@ -102,8 +107,15 @@ export const CardComposer: React.FC<CardComposerProps> = ({ columnId, columnTitl
     setError(null);
     try {
       await onSubmit(title);
-      draft.clear();
-      setText('');
+      // The field stays editable while the card is being saved. Whatever was
+      // typed in the meantime is the start of the next card, and clearing the
+      // field and its draft now would take it away. `typed` is read here and
+      // not `text`, which is the value from when the submit began.
+      if (typed.current.trim() === title) {
+        draft.clear();
+        setText('');
+        typed.current = '';
+      }
       setAdded(previous => ({ title, id: (previous?.id ?? 0) + 1 }));
       fieldRef.current?.focus();
     } catch {
