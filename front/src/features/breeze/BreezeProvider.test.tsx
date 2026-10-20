@@ -175,9 +175,9 @@ describe('choosing a level', () => {
   // is the last write.
   it('sends a choice only once the one before it has answered, so the last choice is the one stored', async () => {
     const user = userEvent.setup();
-    let answerFirst: (value: unknown) => void = () => {};
+    let answerFirst: () => void = () => {};
     mockedUsers.update
-      .mockReturnValueOnce(new Promise(resolve => (answerFirst = resolve)))
+      .mockReturnValueOnce(new Promise<never>(resolve => (answerFirst = () => resolve({} as never))))
       .mockResolvedValueOnce({} as never);
     renderProbe();
 
@@ -188,7 +188,7 @@ describe('choosing a level', () => {
     expect(mockedUsers.update).toHaveBeenCalledTimes(1);
     expect(mockedUsers.update).toHaveBeenLastCalledWith('user-1', { breeze: 'breezy' });
 
-    answerFirst({});
+    answerFirst();
 
     await waitFor(() => expect(mockedUsers.update).toHaveBeenCalledTimes(2));
     expect(mockedUsers.update).toHaveBeenLastCalledWith('user-1', { breeze: 'calm' });
