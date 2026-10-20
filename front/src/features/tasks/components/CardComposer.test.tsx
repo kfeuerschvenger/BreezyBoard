@@ -89,6 +89,30 @@ describe('CardComposer adding a card', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
   });
 
+  // The field stays editable while the card is being saved, so a sentence
+  // begun then is the next card and must outlive the save that finishes under it.
+  it('keeps what was typed while the card was saving, and its draft', async () => {
+    let finish: () => void = () => {};
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          finish = resolve;
+        }),
+    );
+    renderComposer(onSubmit);
+    const field = await openIt();
+    await userEvent.type(field, 'First{Enter}');
+    await userEvent.type(field, ' and then');
+
+    finish();
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added First to Backlog.'));
+    expect(field).toHaveValue('First and then');
+    await waitFor(() =>
+      expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).toContain('First and then'),
+    );
+  });
+
   it('adds once however many times Enter is pressed while it is saving', async () => {
     let finish: () => void = () => {};
     const onSubmit = vi.fn(
