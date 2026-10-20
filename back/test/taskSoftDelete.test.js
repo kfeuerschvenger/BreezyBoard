@@ -6,6 +6,7 @@ import Board from '../src/models/Board.js';
 import Task from '../src/models/Task.js';
 import { purgeExpiredBoards } from '../src/services/board.service.js';
 import { deleteTask, purgeExpiredTasks, restoreTask } from '../src/services/task.service.js';
+import logger from '../src/utils/logger.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
 import { boardColumns, createTask } from './helpers/task.factory.js';
@@ -368,6 +369,23 @@ describe('task soft delete and restore', () => {
 
       expect(await purgeExpiredTasks({ retentionMs: RETENTION_MS })).toBe(0);
       expect(await Task.countDocuments({ _id: first._id })).toBe(1);
+    });
+
+    test('still purges the expired boards when the task purge fails, and logs the failure', async () => {
+      await Board.updateOne({ _id: board._id }, { deletedAt: new Date(Date.now() - RETENTION_MS - DAY_MS) });
+      const failure = new Error('task purge down');
+      vi.spyOn(Task, 'deleteMany').mockRejectedValueOnce(failure);
+      const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      const stop = startBoardPurgeJob({ intervalMs: 60 * 60 * 1000 });
+
+      try {
+        await vi.waitFor(async () => expect(await Board.countDocuments({ _id: board._id })).toBe(0));
+        expect(logged).toHaveBeenCalledWith({ err: failure }, 'Failed to purge deleted tasks');
+      } finally {
+        stop();
+        vi.restoreAllMocks();
+      }
     });
 
     test('runs from the purge job with the configured window', async () => {
