@@ -203,6 +203,48 @@ describe('the sidebar as a panel', () => {
     expect(pageColumn()).not.toHaveAttribute('inert');
   });
 
+  it.each([
+    ['a board', () => screen.getByRole('link', { name: 'Launch plan' })],
+    ['the logo', () => screen.getByRole('link', { name: 'breezyboard' })],
+    ['the board that is open', () => screen.getByRole('link', { name: 'Roadmap' })],
+  ])('moves focus to the main region when %s is chosen, not back to the menu button', async (_name, target) => {
+    const user = userEvent.setup();
+    renderShell('/board/board-1');
+    await openPanel(user);
+
+    await user.click(target());
+
+    await waitFor(() => expect(panel()).toHaveAttribute('inert'));
+    expect(document.getElementById('main')).toHaveFocus();
+    expect(menuButton()).not.toHaveFocus();
+  });
+
+  it('moves focus to the main region when the address changes some other way', async () => {
+    const user = userEvent.setup();
+    renderShell('/');
+    await openPanel(user);
+
+    await user.click(screen.getByRole('button', { name: 'Account menu for Ada Lovelace' }));
+    await user.click(screen.getByRole('menuitem', { name: /Profile/ }));
+
+    await waitFor(() => expect(panel()).toHaveAttribute('inert'));
+    expect(document.getElementById('main')).toHaveFocus();
+  });
+
+  it('gives focus back to the menu button when the panel is dismissed after an earlier destination', async () => {
+    const user = userEvent.setup();
+    renderShell('/board/board-1');
+    await openPanel(user);
+    await user.click(screen.getByRole('link', { name: 'Launch plan' }));
+    await waitFor(() => expect(panel()).toHaveAttribute('inert'));
+
+    await openPanel(user);
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(panel()).toHaveAttribute('inert'));
+    expect(menuButton()).toHaveFocus();
+  });
+
   // The address does not change, so only the link itself can say the panel is
   // done.
   it.each([
