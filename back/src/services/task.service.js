@@ -202,18 +202,43 @@ export const deleteTask = async id => {
  * The task's owner is not checked. The owner may have left the board since the
  * delete, and the task is restored as it was, with the owner it had.
  *
+ * A task comes back under its own key unless a live card in the same column
+ * holds that key by now: `keyBetweenNeighbours` ignores deleted tasks, and
+ * `generateKeyBetween` is deterministic, so a card dropped into the gap the
+ * deleted one left is minted the very same key. Two cards sharing a key make
+ * every later drop between them impossible, so the restored task is re-keyed
+ * to sit immediately above the card that took its place.
+ *
  * @param {string} id
  * @param {{ retentionMs?: number, now?: Date }} [options]
  * @returns {Promise<object>} the restored task
  */
 export const restoreTask = async (id, { retentionMs = env.BOARD_RETENTION_MS, now = new Date() } = {}) => {
   const cutoff = new Date(now.getTime() - retentionMs);
+  const filter = { _id: id, $or: [{ deletedAt: null }, { deletedAt: { $gt: cutoff } }] };
 
-  const task = await Task.findOneAndUpdate(
-    { _id: id, $or: [{ deletedAt: null }, { deletedAt: { $gt: cutoff } }] },
-    { deletedAt: null },
-    { new: true }
-  )
+  const candidate = await Task.findOne(filter).select('boardId status order deletedAt');
+
+  if (!candidate) {
+    throw new ApiError(404, 'Task not found');
+  }
+
+  const update = { deletedAt: null };
+
+  if (candidate.deletedAt) {
+    const { boardId, status, order } = candidate;
+    const live = { boardId, status, deletedAt: null, _id: { $ne: candidate._id } };
+
+    if (await Task.exists({ ...live, order })) {
+      const above = await Task.findOne({ ...live, order: { $lt: order } })
+        .sort({ order: -1 })
+        .select('order');
+
+      update.order = generateKeyBetween(above?.order ?? null, order);
+    }
+  }
+
+  const task = await Task.findOneAndUpdate(filter, update, { new: true })
     .populate('owner', 'firstName lastName avatar')
     .populate('color', 'name value');
 
