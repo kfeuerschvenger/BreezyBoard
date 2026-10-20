@@ -227,13 +227,23 @@ describe('task soft delete and restore', () => {
       expect((await Task.findById(second._id)).deletedAt).toBeNull();
     });
 
-    test('is refused for somebody with no role on the board, and the task stays deleted', async () => {
+    test('answers somebody with no role on the board as it answers an id that names no task, and the task stays deleted', async () => {
       const stranger = await registerUser();
 
       const res = await asUser('post', `/tasks/${second._id}/restore`, stranger);
+      const unknown = await asUser('post', '/tasks/64b64b64b64b64b64b64b64b/restore', stranger);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(unknown.body);
       expect((await Task.findById(second._id)).deletedAt).toBeInstanceOf(Date);
+    });
+
+    test('answers somebody with no role on the board 404 for a task that is not deleted either', async () => {
+      const stranger = await registerUser();
+
+      const res = await asUser('post', `/tasks/${first._id}/restore`, stranger);
+
+      expect(res.status).toBe(404);
     });
 
     test('answers the same way when the task is not deleted', async () => {
