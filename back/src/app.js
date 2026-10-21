@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/error.middleware.js';
 import httpLogger from './middleware/logging.middleware.js';
 import logger from './utils/logger.js';
 import { isDatabaseReachable } from './services/health.service.js';
+import { mountApiDocs } from './openapi/docs.js';
 import { apiRouters } from './routes/index.js';
 
 const app = express();
@@ -41,6 +42,10 @@ app.use(
 
 // Bounded so a single request cannot exhaust memory with an oversized body.
 app.use(express.json({ limit: '1mb' }));
+
+// Swagger UI over the OpenAPI document, in development only. Mounted before
+// the API routes so the deprecated unversioned alias below never sees it.
+await mountApiDocs(app);
 
 // API versioning without a flag day: /api/v1 and /api mount the exact same
 // routers, so a deploy can switch clients over to /api/v1 (see
