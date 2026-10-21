@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { auditPackage, decide, discoverPackages, exitCodeFor, formatTable, formatVulnerable, EXIT } from './audit-gate.mjs';
+import { auditPackage, decide, discoverPackages, exitCodeFor, formatTable, formatVulnerable, npmInvocation, EXIT } from './audit-gate.mjs';
 
 const GATE = join(dirname(fileURLToPath(import.meta.url)), 'audit-gate.mjs');
 
@@ -162,7 +162,62 @@ test('the packages are the directories with a package-lock.json, node_modules an
 });
 
 test('the repository root yields back, front and e2e', () => {
-  assert.deepEqual(discoverPackages(join(dirname(GATE), '..')), ['back', 'e2e', 'front']);
+  const found = discoverPackages(join(dirname(GATE), '..'));
+
+  for (const name of ['back', 'front', 'e2e']) assert.ok(found.includes(name), `${name} is audited`);
+  assert.deepEqual(found, [...found].sort());
+});
+
+test('npm is run through node and its entry script when one can be found, and plain npm otherwise', () => {
+  const entry = join('npm-home', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const only = (...present) => (path) => present.includes(path);
+  const base = { execPath: 'node-bin', separator: ';' };
+
+  const fromEnv = npmInvocation({ ...base, env: { npm_execpath: 'launcher/npm-cli.js', PATH: 'npm-home' }, exists: only('launcher/npm-cli.js', entry) });
+  assert.deepEqual(fromEnv, { command: 'node-bin', args: ['launcher/npm-cli.js'] });
+
+  const fromPath = npmInvocation({ ...base, env: { PATH: `elsewhere;npm-home` }, exists: only(entry) });
+  assert.deepEqual(fromPath, { command: 'node-bin', args: [entry] });
+
+  const windowsCase = npmInvocation({ ...base, env: { Path: 'npm-home' }, exists: only(entry) });
+  assert.deepEqual(windowsCase, { command: 'node-bin', args: [entry] });
+
+  const notJs = npmInvocation({ ...base, env: { npm_execpath: 'launcher/npm.cmd', PATH: '' }, exists: () => true });
+  assert.deepEqual(notJs, { command: 'npm', args: [] });
+
+  assert.deepEqual(npmInvocation({ ...base, env: {}, exists: () => false }), { command: 'npm', args: [] });
+});
+
+test('the invocation puts its arguments before audit and never asks for a shell', () => {
+  let seen;
+  auditPackage('anywhere', {
+    npm: { command: 'node-bin', args: ['npm-cli.js'] },
+    spawn: (command, args, options) => {
+      seen = { command, args, options };
+      return { status: 0, stdout: '' };
+    },
+  });
+
+  assert.equal(seen.command, 'node-bin');
+  assert.deepEqual(seen.args, ['npm-cli.js', 'audit', '--json']);
+  assert.notEqual(seen.options.shell, true);
+});
+
+test('a process that outlives the timeout is killed and reported as unreadable', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-gate-hang-'));
+  try {
+    const hang = join(dir, 'hang.js');
+    writeFileSync(hang, 'setTimeout(() => {}, 60000);');
+
+    const started = Date.now();
+    const result = auditPackage(dir, { timeoutMs: 500, npm: { command: process.execPath, args: [hang] } });
+
+    assert.equal(result.status, 'unreadable');
+    assert.match(result.reason, /did not finish/);
+    assert.ok(Date.now() - started < 15_000, 'the run was cut short');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a run that times out is unreadable, and the timeout reaches the spawned npm', () => {
@@ -235,7 +290,7 @@ test('process: a root that does not exist, or --root without a value, exits 2', 
 test('process: a package whose npm is missing exits 2, never 0', () => {
   const empty = mkdtempSync(join(tmpdir(), 'audit-gate-path-'));
   try {
-    const run = withTree({ tool: ['package-lock.json'] }, (root) => runGate(['--root', root], { PATH: empty, Path: empty }));
+    const run = withTree({ tool: ['package-lock.json'] }, (root) => runGate(['--root', root], { PATH: empty, Path: empty, npm_execpath: '' }));
 
     assert.equal(run.status, EXIT.UNREADABLE);
     assert.match(run.stdout, /UNREADABLE/);
