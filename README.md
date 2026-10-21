@@ -52,7 +52,7 @@ Prerequisite: Docker Desktop. Node 22 and npm 11.17.0 are needed only to run the
 3. Seed the reference data and the demo accounts: `docker compose exec back npm run seed:all`
 4. Open http://localhost:5173 and sign in as `admin@example.com` with the password `admin123`.
 
-The seed scripts delete data, so they refuse to run unless `NODE_ENV` is `development` or `test`. The demo accounts exist only in development.
+The seed scripts delete data, so they refuse to run unless `NODE_ENV` is `development` or `test`, and unless the database host in `MONGODB_URI` is `localhost`, `127.0.0.1`, `::1` or `mongo`, the compose service. A `mongodb+srv` string always counts as remote. To seed a remote database on purpose, run one script directly with the flag, for example `node seeds/users.seed.js --allow-remote`. The demo accounts exist only in development.
 
 | What | Where |
 |---|---|
@@ -166,7 +166,7 @@ Those values are for a local trial of the production stack, never for a real dep
 | `docker compose` cannot reach the engine | Docker Desktop is not running. Start it and wait for `docker info` to answer |
 | The API answers 429 on register or password recovery | A limiter is spent. `docker compose restart back` clears the in-memory counters |
 | A dependency change has no effect in the container | `package.json` is not bind mounted. Run `docker compose build back` and then `docker compose up -d` |
-| `npm run seed:all` refuses to run | `NODE_ENV` is not `development` or `test` in that container. The seeds delete data on purpose only there |
+| `npm run seed:all` refuses to run | `NODE_ENV` is not `development` or `test` in that container, or `MONGODB_URI` names a host that is not local. The seeds delete data on purpose only there |
 | Registering fails with a transaction error, or deleted boards are never purged | MongoDB is not a replica set. Use the compose file, or start `mongod` with `--replSet rs0` and run `rs.initiate()` once |
 | The production MongoDB cannot authenticate after a reset | `mongo-keyfile` was deleted without `mongo-data`. Delete both volumes, or neither |
 | `npm install` fails with `ESTRICTALLOWSCRIPTS` | A dependency has an install script that `allowScripts` does not cover. Read it, then approve or deny it |

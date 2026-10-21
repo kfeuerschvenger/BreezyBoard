@@ -40,7 +40,7 @@ Requisito previo: Docker Desktop. Node 22 y npm 11.17.0 hacen falta solo para ej
 3. Cargar los datos de referencia y las cuentas de demostración: `docker compose exec back npm run seed:all`
 4. Abrir http://localhost:5173 e iniciar sesión como `admin@example.com` con la contraseña `admin123`.
 
-Los scripts de carga eliminan datos, por lo que se niegan a ejecutarse salvo que `NODE_ENV` sea `development` o `test`. Las cuentas de demostración existen solo en desarrollo.
+Los scripts de carga eliminan datos, por lo que se niegan a ejecutarse salvo que `NODE_ENV` sea `development` o `test` y que el host de la base de datos en `MONGODB_URI` sea `localhost`, `127.0.0.1`, `::1` o `mongo`, el servicio de compose. Una cadena `mongodb+srv` siempre se considera remota. Para cargar una base de datos remota a propósito, ejecutar un script directamente con la opción, por ejemplo `node seeds/users.seed.js --allow-remote`. Las cuentas de demostración existen solo en desarrollo.
 
 | Qué | Dónde |
 |---|---|
@@ -158,7 +158,7 @@ Esos valores sirven para probar el stack de producción en local, nunca para un 
 | `docker compose` no alcanza el motor | Docker Desktop no está en ejecución. Iniciarlo y esperar a que `docker info` responda |
 | La API responde 429 al registrarse o al recuperar la contraseña | Se agotó un limitador. `docker compose restart back` borra los contadores en memoria |
 | Un cambio de dependencias no tiene efecto en el contenedor | `package.json` no está montado como bind mount. Ejecutar `docker compose build back` y luego `docker compose up -d` |
-| `npm run seed:all` se niega a ejecutarse | `NODE_ENV` no es `development` ni `test` en ese contenedor. Los scripts de carga eliminan datos a propósito solo allí |
+| `npm run seed:all` se niega a ejecutarse | `NODE_ENV` no es `development` ni `test` en ese contenedor, o `MONGODB_URI` nombra un host que no es local. Los scripts de carga eliminan datos a propósito solo allí |
 | El registro falla con un error de transacción, o los tableros eliminados nunca se purgan | MongoDB no es un conjunto de réplicas. Usar el archivo de compose, o iniciar `mongod` con `--replSet rs0` y ejecutar `rs.initiate()` una vez |
 | El MongoDB de producción no puede autenticarse después de un reinicio de volúmenes | Se eliminó `mongo-keyfile` sin eliminar `mongo-data`. Eliminar ambos volúmenes, o ninguno |
 | `npm install` falla con `ESTRICTALLOWSCRIPTS` | Una dependencia tiene un script de instalación que `allowScripts` no cubre. Leerlo y luego aprobarlo o denegarlo |
