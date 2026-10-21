@@ -5,8 +5,9 @@ import path from 'path';
 import env from './config/env.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import httpLogger from './middleware/logging.middleware.js';
+import { healthLimiter } from './middleware/rateLimit.middleware.js';
 import logger from './utils/logger.js';
-import { isDatabaseReachable } from './services/health.service.js';
+import { checkDatabaseHealth } from './services/health.service.js';
 import { mountApiDocs } from './openapi/docs.js';
 import { apiRouters } from './routes/index.js';
 
@@ -75,9 +76,9 @@ const mountApiRoutes = prefix => {
   // Healthy means the API can serve a request, and every route needs the
   // database, so a dead connection is a 503. The body is the same for every
   // way it can fail and names nothing about the deployment: this route is
-  // public.
-  app.get(`${prefix}/health`, async (req, res) => {
-    if (await isDatabaseReachable()) {
+  // public, so the answer is cached for a second and the route is limited.
+  app.get(`${prefix}/health`, healthLimiter, async (req, res) => {
+    if (await checkDatabaseHealth()) {
       res.json({ status: 'ok', message: 'Server is running' });
       return;
     }

@@ -107,3 +107,22 @@ export const passwordRecoveryLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: env.PASSWORD_RECOVERY_LIMIT_PER_15_MIN,
 });
+
+/**
+ * The public health route. It is cached for a second (see
+ * checkDatabaseHealth), so a flood costs the database nothing, and this limit
+ * bounds what is left: the request handling itself and the log line of each
+ * failed check.
+ *
+ * Lenient on purpose, because the legitimate callers are many and automated.
+ * The Docker healthcheck calls once every 30 seconds, and the end to end
+ * suite and the standing verification scripts call it a handful of times each
+ * from one address, so 120 a minute, two a second sustained, is far above
+ * anything they do. A limit tight enough to matter to them would turn a
+ * healthy stack into a failing health check.
+ */
+export const healthLimiter = rateLimit({
+  ...shared,
+  windowMs: 60 * 1000,
+  limit: 120,
+});
