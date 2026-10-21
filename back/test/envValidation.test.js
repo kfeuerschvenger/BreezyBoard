@@ -182,12 +182,50 @@ describe('CORS_ORIGINS', () => {
     expect((await loadEnv({})).CORS_ORIGINS).toEqual([]);
   });
 
-  test.each(['breezyboard.example', 'https://breezyboard.example/app', 'ftp://breezyboard.example', '*'])(
-    'refuses %s, which can never equal a request Origin header',
-    async value => {
-      await expect(loadEnv({ CORS_ORIGINS: value })).rejects.toThrow('CORS_ORIGINS must list origins');
-    }
-  );
+  test.each([
+    ['https://example.com:443', 'https://example.com'],
+    ['https://Example.com', 'https://example.com'],
+    ['http://localhost:80/', 'http://localhost'],
+    ['HTTPS://EXAMPLE.COM:8443', 'https://example.com:8443'],
+  ])('accepts %s and stores the origin the browser sends, %s', async (value, expected) => {
+    expect((await loadEnv({ CORS_ORIGINS: value })).CORS_ORIGINS).toEqual([expected]);
+  });
+
+  test.each([
+    ['breezyboard.example', 'is not a valid URL'],
+    ['*', 'is not a valid URL'],
+    ['ftp://breezyboard.example', 'does not use http or https'],
+    ['https://breezyboard.example/app', 'has a path'],
+    ['https://breezyboard.example?x=1', 'has a query string'],
+    ['https://breezyboard.example/#top', 'has a fragment'],
+    ['https://bb:hunter2@breezyboard.example', 'has credentials'],
+  ])('refuses %s, which can never equal a request Origin header, and says why', async (value, reason) => {
+    const failure = await loadEnv({ CORS_ORIGINS: value }).catch(error => error);
+
+    expect(failure.message).toContain('CORS_ORIGINS must list origins');
+    expect(failure.message).toContain(`an entry ${reason}`);
+    expect(failure.message).not.toContain('hunter2');
+  });
+});
+
+describe('SMTP_PASSWORD', () => {
+  test('a password of nothing but spaces is unset, like every other variable', async () => {
+    const env = await loadEnv({ SMTP_PASSWORD: '   ' });
+
+    expect(env.SMTP_PASSWORD).toBe('');
+  });
+
+  test('a password of spaces beside a user is refused as half of a pair', async () => {
+    await expect(loadEnv({ SMTP_USER: 'mailer', SMTP_PASSWORD: '   ' })).rejects.toThrow(
+      'SMTP_USER and SMTP_PASSWORD must be set together or not at all'
+    );
+  });
+
+  test('a real password keeps its spaces', async () => {
+    const env = await loadEnv({ SMTP_USER: 'mailer', SMTP_PASSWORD: ' pa ss ' });
+
+    expect(env.SMTP_PASSWORD).toBe(' pa ss ');
+  });
 });
 
 describe('numeric windows and limits', () => {

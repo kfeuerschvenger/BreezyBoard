@@ -136,10 +136,37 @@ const buildSchema = isProduction => {
       .transform(value => value === 'true')
   );
 
+  // The reason an entry is not an origin, or null when it is one. The message
+  // names the rule and never the entry: an entry may carry credentials.
+  const originFault = (entry, url) => {
+    if (!url) {
+      return 'is not a valid URL';
+    }
+
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return 'does not use http or https';
+    }
+
+    if (url.username || url.password) {
+      return 'has credentials';
+    }
+
+    if (entry.includes('#')) {
+      return 'has a fragment';
+    }
+
+    if (entry.includes('?')) {
+      return 'has a query string';
+    }
+
+    return url.pathname === '/' ? null : 'has a path';
+  };
+
   // Comma separated origins. Each entry has to be an origin, scheme and host
   // with an optional port and nothing else: the browser's Origin header never
   // carries a path, so an entry with one could not match and would block every
-  // request without saying why.
+  // request without saying why. An entry is stored as `URL.origin`, the form
+  // the browser sends, so `https://Example.com:443` matches `https://example.com`.
   const origins = z
     .string()
     .optional()
@@ -165,12 +192,12 @@ const buildSchema = isProduction => {
           url = null;
         }
 
-        const isOrigin = url && (url.protocol === 'http:' || url.protocol === 'https:') && entry.replace(/\/$/, '') === url.origin;
+        const fault = originFault(entry, url);
 
-        if (!isOrigin) {
+        if (fault) {
           ctx.addIssue({
             code: 'custom',
-            message: 'must list origins such as https://breezyboard.example, each with a scheme and without a path',
+            message: `must list origins such as https://breezyboard.example, each with a scheme and without a path: an entry ${fault}`,
           });
           return z.NEVER;
         }
@@ -345,7 +372,7 @@ const result = buildSchema(isProduction).safeParse({
   SMTP_SECURE: read('SMTP_SECURE'),
   SMTP_ALLOW_PLAINTEXT: read('SMTP_ALLOW_PLAINTEXT'),
   SMTP_USER: read('SMTP_USER'),
-  SMTP_PASSWORD: process.env.SMTP_PASSWORD,
+  SMTP_PASSWORD: read('SMTP_PASSWORD'),
   MAIL_FROM: read('MAIL_FROM'),
   PASSWORD_RESET_TTL_MS: read('PASSWORD_RESET_TTL_MS')?.trim(),
   PASSWORD_RESET_MAX_OUTSTANDING: read('PASSWORD_RESET_MAX_OUTSTANDING')?.trim(),
