@@ -43,3 +43,47 @@ export const isDatabaseReachable = async ({ timeoutMs = DEFAULT_PING_TIMEOUT_MS 
     clearTimeout(timer);
   }
 };
+
+/**
+ * How long an answer is reused. The route is public, so every request that
+ * reached it would otherwise cost the database a ping. One second is far below
+ * the 30 second interval of the Docker healthcheck, so a probe never sees a
+ * stale answer, and it bounds the pings to one per second however many
+ * requests arrive.
+ */
+const CACHE_TTL_MS = 1000;
+
+/** The newest check: its promise, and when it settled (null while it runs). */
+let latest = null;
+
+/**
+ * The same answer as isDatabaseReachable, at most one ping per second.
+ *
+ * Requests that arrive while a ping is running share it, and requests within
+ * the window after it settles reuse its result. A failure is cached as well as
+ * a success: a flood against a database that is down would otherwise start a
+ * new ping, each held open until its timeout, for every request.
+ *
+ * @param {{ ttlMs?: number, now?: () => number }} [options]
+ * @returns {Promise<boolean>}
+ */
+export const checkDatabaseHealth = ({ ttlMs = CACHE_TTL_MS, now = Date.now } = {}) => {
+  if (latest && (latest.settledAt === null || now() - latest.settledAt < ttlMs)) {
+    return latest.promise;
+  }
+
+  const check = { promise: null, settledAt: null };
+
+  check.promise = isDatabaseReachable().then(reachable => {
+    check.settledAt = now();
+    return reachable;
+  });
+  latest = check;
+
+  return check.promise;
+};
+
+/** Forgets the cached answer. For tests, which change the database state between requests. */
+export const resetHealthCache = () => {
+  latest = null;
+};

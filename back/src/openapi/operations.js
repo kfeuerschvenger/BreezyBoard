@@ -561,9 +561,9 @@ export const operations = [
     path: '/health',
     tag: 'Operations',
     summary: 'Is the API able to serve requests',
-    description: 'Public. Answers 200 only when the database connection is up and answers a ping within 2 seconds, and 503 otherwise, with a body that names nothing about the deployment. Also served at /api/health, which the production image\'s healthcheck calls.',
+    description: 'Public. Answers 200 only when the database connection is up and answers a ping within 2 seconds, and 503 otherwise, with a body that names nothing about the deployment. The answer is reused for one second, and a client is limited to 120 requests a minute. Also served at /api/health, which the production image\'s healthcheck calls.',
     public: true,
     success: { status: 200, model: 'HealthResponse', description: 'The API and its database are up.' },
-    errors: [503],
+    errors: [429, 503],
   },
 ];
