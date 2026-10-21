@@ -167,7 +167,7 @@ export const uploadAvatar = async (id, file, actor = null) => {
     try {
       // delete uploaded file if user doesn't exist
       fs.unlinkSync(file.path);
-    } catch (e) {
+    } catch {
       // swallow
     }
     throw new ApiError(404, 'User not found');

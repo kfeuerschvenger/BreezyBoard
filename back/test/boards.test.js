@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import app from '../src/app.js';
 import Board from '../src/models/Board.js';
 import ColorPalette from '../src/models/ColorPalette.js';
-import Task from '../src/models/Task.js';
 import Workspace from '../src/models/Workspace.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
