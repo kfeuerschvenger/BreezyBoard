@@ -1,3 +1,4 @@
+import './requireSeedEnvironment.js';
 import mongoose from 'mongoose';
 import env from '../src/config/env.js';
 import bcrypt from 'bcryptjs';
