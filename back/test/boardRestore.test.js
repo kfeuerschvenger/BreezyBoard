@@ -153,12 +153,41 @@ describe('board soft delete and restore', () => {
       expect((await Board.findById(board._id)).deletedAt).toBeInstanceOf(Date);
     });
 
-    test('is refused for somebody with no role on the board', async () => {
+    test('answers somebody with no role on the board as it answers an id that names no board, and the board stays deleted', async () => {
       const stranger = await registerUser();
 
       const res = await asUser('post', `/boards/${board._id}/restore`, stranger);
+      const unknown = await asUser('post', '/boards/64b64b64b64b64b64b64b64b/restore', stranger);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(unknown.body);
+      expect((await Board.findById(board._id)).deletedAt).toBeInstanceOf(Date);
+    });
+
+    test('answers somebody with no role on the board the same for a board that is not deleted either', async () => {
+      const stranger = await registerUser();
+      await asUser('post', `/boards/${board._id}/restore`, owner);
+
+      const res = await asUser('post', `/boards/${board._id}/restore`, stranger);
+      const unknown = await asUser('post', '/boards/64b64b64b64b64b64b64b64b/restore', stranger);
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(unknown.body);
+    });
+
+    test('answers a member of the workspace who is not on the board as it answers a stranger', async () => {
+      const outsider = await registerUser();
+      const unknown = await asUser('post', '/boards/64b64b64b64b64b64b64b64b/restore', outsider);
+      const workspaceMate = await registerUser();
+      const added = await asUser('patch', `/workspaces/${board.workspaceId}/members`, owner).send({
+        members: [{ user: idOf(workspaceMate) }],
+      });
+      expect(added.status).toBe(200);
+
+      const res = await asUser('post', `/boards/${board._id}/restore`, workspaceMate);
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(unknown.body);
     });
 
     test('answers the same way when the board is not deleted', async () => {

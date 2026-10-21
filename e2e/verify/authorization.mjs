@@ -136,6 +136,39 @@ check('the deleted task is a 404 to an outsider, who learns nothing about it', (
 check('outsider POST /tasks/:id/restore on a deleted task is a 404, like an unknown id', (await req('POST', `/tasks/${taskId}/restore`, stranger.token)).status, 404);
 check('a member of the board may restore the task', (await req('POST', `/tasks/${taskId}/restore`, attacker.token)).status, 200);
 
+// Same status is not enough: the body is what names the thing that is missing,
+// and a stranger must read the same one whether the id is real or not.
+log('\n--- restore answers somebody with no role exactly as it answers an id that does not exist ---');
+const UNKNOWN_ID = '64b64b64b64b64b64b64b64b';
+const sameAnswer = (label, a, b) =>
+  check(label, a.status === 404 && b.status === 404 && JSON.stringify(a.body) === JSON.stringify(b.body), true);
+
+await req('DELETE', `/tasks/${taskId}`, attacker.token);
+sameAnswer(
+  'outsider POST /tasks/:id/restore on a deleted task has the body of an unknown task id',
+  await req('POST', `/tasks/${taskId}/restore`, stranger.token),
+  await req('POST', `/tasks/${UNKNOWN_ID}/restore`, stranger.token)
+);
+check('the board owner deletes the board', (await req('DELETE', `/boards/${boardId}`, victim.token)).status, 200);
+sameAnswer(
+  'outsider POST /tasks/:id/restore with the task board deleted has the body of an unknown task id',
+  await req('POST', `/tasks/${taskId}/restore`, stranger.token),
+  await req('POST', `/tasks/${UNKNOWN_ID}/restore`, stranger.token)
+);
+sameAnswer(
+  'outsider POST /boards/:id/restore on a deleted board has the body of an unknown board id',
+  await req('POST', `/boards/${boardId}/restore`, stranger.token),
+  await req('POST', `/boards/${UNKNOWN_ID}/restore`, stranger.token)
+);
+check('a member who is not the owner is refused the board restore with a 403', (await req('POST', `/boards/${boardId}/restore`, attacker.token)).status, 403);
+check('the board owner restores the board', (await req('POST', `/boards/${boardId}/restore`, victim.token)).status, 200);
+sameAnswer(
+  'outsider POST /boards/:id/restore on a live board has the body of an unknown board id',
+  await req('POST', `/boards/${boardId}/restore`, stranger.token),
+  await req('POST', `/boards/${UNKNOWN_ID}/restore`, stranger.token)
+);
+check('a member of the board restores the task again', (await req('POST', `/tasks/${taskId}/restore`, attacker.token)).status, 200);
+
 const after = await req('GET', `/tasks/${taskId}`, victim.token);
 log(`\ntask title is now: ${JSON.stringify(after.body.data.title)}`);
 

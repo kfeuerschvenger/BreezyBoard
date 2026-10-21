@@ -27,7 +27,8 @@ router.put(
 );
 router.delete('/:id', validate({ params: idParamSchema }), requireBoardRole('owner'), BoardController.deleteBoard);
 // The one route that may see a soft-deleted board. The role is still resolved
-// first, so only an owner can reach it and a stranger gets the same 403.
+// first, so only an owner can reach it. Somebody with no role on the board gets
+// the 404 an unknown id gets; a member who is not an owner gets a 403.
 router.post(
   '/:id/restore',
   validate({ params: idParamSchema }),
