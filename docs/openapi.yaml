@@ -1075,7 +1075,7 @@ paths:
       tags:
         - Users
       summary: Search for people
-      description: At most 10 results, never including the caller. The query string is not validated by a schema.
+      description: At most 10 results, never including the caller.
       operationId: getUsersSearch
       security:
         - bearerAuth: []
@@ -1083,9 +1083,10 @@ paths:
         - name: q
           in: query
           required: false
-          description: Matched case insensitively as a literal substring of the first name, last name, email, role and department. Only the first 100 characters count.
+          description: Matched case insensitively as a literal substring of the first name, last name, email, role and department. At most 100 characters; omitted, everybody is a match.
           schema:
             type: string
+            maxLength: 100
         - name: excludeBoardId
           in: query
           required: false
@@ -1116,7 +1117,7 @@ paths:
       tags:
         - Users
       summary: List the members of a board
-      description: "The board id travels in the query string, which is not validated by a schema: a malformed id answers 400 from the database layer. Access: Board member."
+      description: "The board id travels in the query string. A missing or malformed id is a 400 before any board is looked up. Access: Board member."
       operationId: getUsersBoardMembers
       security:
         - bearerAuth: []

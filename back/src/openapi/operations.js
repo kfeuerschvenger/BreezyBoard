@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { objectIdSchema, paginationQuerySchema } from '../validation/common.validation.js';
+import { paginationQuerySchema } from '../validation/common.validation.js';
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -23,7 +23,12 @@ import {
   updateChecklistItemSchema,
   updateTaskSchema,
 } from '../validation/task.validation.js';
-import { idParamSchema as userIdParam, updateUserSchema } from '../validation/user.validation.js';
+import {
+  boardMembersQuerySchema,
+  idParamSchema as userIdParam,
+  searchUsersQuerySchema,
+  updateUserSchema,
+} from '../validation/user.validation.js';
 import {
   addWorkspaceMembersSchema,
   createWorkspaceSchema,
@@ -107,20 +112,6 @@ export const responseModels = {
     message: z.literal('Server is running'),
   }),
 };
-
-/**
- * Query strings the routes read without a validation schema. They are
- * documented from what the handlers read, and listed in the findings as
- * unvalidated.
- */
-const searchUsersQuery = z.object({
-  q: z.string().optional().describe('Matched case insensitively as a literal substring of the first name, last name, email, role and department. Only the first 100 characters count.'),
-  excludeBoardId: objectIdSchema.optional().describe('Leaves out the creator and the members of this board, so a picker never offers somebody already on it.'),
-});
-
-const boardMembersQuery = z.object({
-  boardId: objectIdSchema.describe('The board whose members are listed. The caller needs the member role on it.'),
-});
 
 /**
  * One entry per Express route. `access` is prose for the reader, `errors`
@@ -470,8 +461,8 @@ export const operations = [
     path: '/users/search',
     tag: 'Users',
     summary: 'Search for people',
-    description: 'At most 10 results, never including the caller. The query string is not validated by a schema.',
-    request: { query: searchUsersQuery },
+    description: 'At most 10 results, never including the caller.',
+    request: { query: searchUsersQuerySchema },
     success: { status: 200, model: 'UserListResponse', description: 'Matching people.' },
     errors: [],
   },
@@ -480,9 +471,9 @@ export const operations = [
     path: '/users/board-members',
     tag: 'Users',
     summary: 'List the members of a board',
-    description: 'The board id travels in the query string, which is not validated by a schema: a malformed id answers 400 from the database layer.',
+    description: 'The board id travels in the query string. A missing or malformed id is a 400 before any board is looked up.',
     access: 'Board member.',
-    request: { query: boardMembersQuery },
+    request: { query: boardMembersQuerySchema },
     success: { status: 200, model: 'UserListResponse', description: 'The members of the board.' },
     errors: [400, 403, 404],
   },

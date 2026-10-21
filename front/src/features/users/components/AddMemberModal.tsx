@@ -7,6 +7,9 @@ import { useMemberSearch } from '../hooks/useMemberSearch';
 import { MemberSearchResults } from './MemberSearchResults';
 import { SelectedMembers } from './SelectedMembers';
 
+/** The longest term the API matches; it answers a longer one with a 400. */
+const MAX_SEARCH_TERM_LENGTH = 100;
+
 export interface AddMemberModalProps {
   open: boolean;
   onClose: () => void;
@@ -103,6 +106,8 @@ export const AddMemberModal: React.FC<AddMemberModalProps> = ({
               type="text"
               placeholder="Search team members..."
               value={search.term}
+              // The server refuses a longer term, so the field never lets one be typed.
+              maxLength={MAX_SEARCH_TERM_LENGTH}
               onChange={event => search.setTerm(event.target.value)}
               className={`${FIELD_CLASSES} ${FIELD_BORDER} h-12 rounded-field pl-11 pr-4`}
               aria-label="Search team members"
