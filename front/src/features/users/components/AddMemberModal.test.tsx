@@ -85,6 +85,12 @@ describe('AddMemberModal searching', () => {
     await waitFor(() => expect(screen.getByLabelText('Search team members')).toHaveFocus());
   });
 
+  it('stops the search field at the 100 characters the API accepts', async () => {
+    renderModal();
+
+    expect(await screen.findByLabelText('Search team members')).toHaveAttribute('maxlength', '100');
+  });
+
   it('lists what the search returns', async () => {
     renderModal();
 

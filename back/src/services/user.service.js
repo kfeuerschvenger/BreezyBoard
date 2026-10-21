@@ -7,8 +7,7 @@ import ApiError from '../utils/apiError.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
-
-const MAX_SEARCH_TERM_LENGTH = 100;
+import { MAX_SEARCH_TERM_LENGTH } from '../validation/user.validation.js';
 
 /** Escapes every regex metacharacter so a search term is matched literally. */
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
