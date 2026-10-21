@@ -1,7 +1,14 @@
 ### Base layer with dependencies installed
 FROM node:22-alpine AS base
 WORKDIR /app
-COPY package.json package-lock.json ./
+# node:22 ships npm 10, which ignores allowScripts and strict-allow-scripts.
+# The install script policy is enforced from npm 11, so the same version as
+# .github/actions/setup-node-npm and the local setup is installed before
+# npm ci. Raise all three together.
+RUN npm install --global npm@11.17.0
+# .npmrc carries strict-allow-scripts=true, and package.json the allowScripts
+# list it is checked against.
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 ### Development runtime, source is bind mounted by compose
