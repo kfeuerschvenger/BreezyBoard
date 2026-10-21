@@ -30,9 +30,9 @@ jobs:
       - uses: ./.github/actions/setup-node-npm
         with:
           working-directory: back
-      # The backend has no linter yet, so there is no lint step. Add it here
-      # when one exists.
-      #
+      - name: Lint
+        working-directory: back
+        run: npm run lint
       # The tests start their own MongoDB replica set in memory
       # (test/globalSetup.js), so no database service is needed.
       - name: Test
