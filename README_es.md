@@ -69,7 +69,7 @@ cd back
 npm run openapi
 ```
 
-`npm run openapi:check` falla cuando el documento versionado está desactualizado, y el CI lo ejecuta.
+`npm run openapi:check` falla cuando el documento versionado está desactualizado, y el CI lo ejecuta. El documento incluye la `version` de `back/package.json` como `info.version`, por lo que subir la versión hace fallar la verificación hasta que se ejecute `npm run openapi` y se confirme el resultado.
 
 ## Modelo de datos
 

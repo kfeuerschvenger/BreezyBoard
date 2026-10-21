@@ -47,7 +47,7 @@ flowchart TD
 | `services` | The business rules: ordering keys, soft delete and restore, sessions, password reset, mail |
 | `models` | The Mongoose schemas: `User`, `Workspace`, `Board`, `Task`, `ColorPalette`, `BoardTemplate` and the shared column schema |
 | `jobs` | `boardPurge.job.js`, the timer that removes deleted boards and tasks past retention |
-| `constants`, `utils`, `migrations` | Error codes and board hues, the logger, `ApiError` and `responseHandler`, and the board hue migration behind `npm run migrate:board-hues` |
+| `constants`, `utils`, `migrations` | Error codes and board hues, the logger, `ApiError` and `responseHandler`, and `migrations/boardHues.js`, the board hue migration. The migration is run by `npm run migrate:board-hues`, which executes the script `seeds/migrate_board_hues.js`: the script connects to the database and calls `migrateBoardHues` from `src/migrations`, and the migration itself holds all of the logic |
 | `openapi` | The OpenAPI document built from the Zod schemas, and the development only Swagger UI mount |
 
 Every failure leaves through `error.middleware.js` as `{ success: false, message, code, errors? }`. An `ApiError` carries its status and a machine readable `code` (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TOKEN_REVOKED`, `SESSION_EXPIRED`, `RATE_LIMITED`, `INVALID_RESET_TOKEN`, `WRONG_CURRENT_PASSWORD`, `CONFLICT`, `INTERNAL`). A Mongoose `CastError` or `ValidationError` becomes a 400, and anything else a 500 that names nothing.
