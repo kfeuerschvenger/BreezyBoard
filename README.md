@@ -140,7 +140,7 @@ Playwright and `e2e/verify` need the whole stack and stay local gates. The deplo
 
 ## Dependencies and install scripts
 
-`node scripts/audit-gate.mjs` runs `npm audit` in `back`, `front` and `e2e`, development dependencies included. It fails on any moderate, high or critical advisory and on five or more low ones, and an audit that cannot be read is a failure, never a pass.
+`node scripts/audit-gate.mjs` runs `npm audit` in every directory one level below the root that has a `package-lock.json` (`back`, `front` and `e2e`), development dependencies included. It fails on any moderate, high or critical advisory and on five or more low ones, and prints the vulnerable packages with their severity. An audit that cannot be read is a failure, never a pass: a registry error, an `npm audit` that does not finish in two minutes, output that is not a report, and a repository with no package at all all exit 2.
 
 npm 11.17.0 blocks a dependency's install script unless `allowScripts` in that package's `package.json` lists it, and `strict-allow-scripts=true` in each `.npmrc` turns an unlisted script into an install error. The approved scripts are `mongodb-memory-server` in `back`, and `esbuild` and `@tailwindcss/oxide` in `front`. `fsevents` and `@scarf/scarf` are denied. The Dockerfiles and the CI install npm 11.17.0 first, because the npm bundled with Node 22 ignores the policy. A new dependency with an install script fails the install until someone decides.
 
