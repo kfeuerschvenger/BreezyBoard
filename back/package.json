@@ -11,6 +11,8 @@
     "seed:all": "npm run seed:templates && npm run seed:users",
     "migrate:board-hues": "node seeds/migrate_board_hues.js",
     "lint": "eslint .",
+    "openapi": "node scripts/openapi.mjs",
+    "openapi:check": "node scripts/openapi.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest watch"
   },
