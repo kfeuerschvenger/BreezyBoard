@@ -6,6 +6,7 @@ import env from './config/env.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import httpLogger from './middleware/logging.middleware.js';
 import logger from './utils/logger.js';
+import { isDatabaseReachable } from './services/health.service.js';
 import authRoutes from './routes/auth.routes.js';
 import boardRoutes from './routes/board.routes.js';
 import colorRoutes from './routes/color.routes.js';
@@ -78,8 +79,18 @@ const mountApiRoutes = prefix => {
   app.use(`${prefix}/users`, userRoutes);
   app.use(`${prefix}/workspaces`, workspaceRoutes);
 
-  app.get(`${prefix}/health`, (_req, res) => {
-    res.json({ status: 'ok', message: 'Server is running' });
+  // Healthy means the API can serve a request, and every route needs the
+  // database, so a dead connection is a 503. The body is the same for every
+  // way it can fail and names nothing about the deployment: this route is
+  // public.
+  app.get(`${prefix}/health`, async (req, res) => {
+    if (await isDatabaseReachable()) {
+      res.json({ status: 'ok', message: 'Server is running' });
+      return;
+    }
+
+    req.log?.warn('Health check failed: the database is not reachable');
+    res.status(503).json({ status: 'unavailable', message: 'Service unavailable' });
   });
 };
 
