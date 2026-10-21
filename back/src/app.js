@@ -7,14 +7,7 @@ import { errorHandler } from './middleware/error.middleware.js';
 import httpLogger from './middleware/logging.middleware.js';
 import logger from './utils/logger.js';
 import { isDatabaseReachable } from './services/health.service.js';
-import authRoutes from './routes/auth.routes.js';
-import boardRoutes from './routes/board.routes.js';
-import colorRoutes from './routes/color.routes.js';
-import dashboardRoutes from './routes/dashboard.routes.js';
-import taskRoutes from './routes/task.routes.js';
-import templateRoutes from './routes/template.routes.js';
-import userRoutes from './routes/user.routes.js';
-import workspaceRoutes from './routes/workspace.routes.js';
+import { apiRouters } from './routes/index.js';
 
 const app = express();
 
@@ -70,14 +63,9 @@ app.use((req, _res, next) => {
 });
 
 const mountApiRoutes = prefix => {
-  app.use(`${prefix}/auth`, authRoutes);
-  app.use(`${prefix}/boards`, boardRoutes);
-  app.use(`${prefix}/colors`, colorRoutes);
-  app.use(`${prefix}/dashboard`, dashboardRoutes);
-  app.use(`${prefix}/tasks`, taskRoutes);
-  app.use(`${prefix}/templates`, templateRoutes);
-  app.use(`${prefix}/users`, userRoutes);
-  app.use(`${prefix}/workspaces`, workspaceRoutes);
+  for (const [mountPath, router] of Object.entries(apiRouters)) {
+    app.use(`${prefix}${mountPath}`, router);
+  }
 
   // Healthy means the API can serve a request, and every route needs the
   // database, so a dead connection is a 503. The body is the same for every
