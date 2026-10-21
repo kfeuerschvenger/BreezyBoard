@@ -11,6 +11,10 @@ permissions:
   contents: read
 
 concurrency:
+  # Deploys to this environment run one at a time and a running deploy is never
+  # cancelled. GitHub keeps one pending run behind it and replaces an older
+  # pending run with a newer one, so only the newest queued deploy runs, which
+  # is the right outcome for a deploy: it ships the latest commit.
   group: deploy-test
   cancel-in-progress: false
 

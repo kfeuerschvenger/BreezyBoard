@@ -15,7 +15,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A pull request shares one group per ref, so a newer push supersedes the
+  # run in progress. A push gets a group of its own per commit: with a shared
+  # group GitHub keeps one running and one pending run and drops the older
+  # pending one, which would leave the middle of three quick pushes without a
+  # result.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   # Only a superseded pull request run is cancelled. A push to develop, test
   # or main always runs to the end, so the branch history keeps a result for
   # every commit.
@@ -26,22 +31,30 @@ jobs:
     name: back
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Where mongodb-memory-server keeps its mongod binary, read by its
+      # postinstall during npm ci and again by the tests. It sits outside
+      # node_modules because npm ci deletes node_modules before it installs.
+      # The runner context is not available in a job level env, so the path is
+      # the fixed home directory of the ubuntu runner.
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongoms
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-node-npm
-        with:
-          working-directory: back
-      # The in-memory MongoDB binary is downloaded on the first test run. npm ci
-      # deletes node_modules, so the cache is restored after the install. The
-      # key follows the lockfile because the binary version is tied to the
+      # Restored before the install: the postinstall of mongodb-memory-server
+      # downloads the binary during npm ci, which the composite action runs, so
+      # a cache restored after it would find the download already done. The key
+      # follows the lockfile because the binary version is tied to the
       # mongodb-memory-server release it pins.
       - name: Cache the MongoDB binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: back/node_modules/.cache/mongodb-memory-server
+          path: /home/runner/.cache/mongoms
           key: mongoms-${{ runner.os }}-${{ hashFiles('back/package-lock.json') }}
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: back
       - name: Lint
         working-directory: back
         run: npm run lint
