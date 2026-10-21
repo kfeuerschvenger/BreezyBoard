@@ -13,6 +13,22 @@ const LOCAL_HOSTS = ['localhost', '127.0.0.1', '::1', 'mongo'];
 /** The flag that lets a seed run against a database that is not local. */
 export const ALLOW_REMOTE_FLAG = '--allow-remote';
 
+// What a host name or an address looks like. Anything else came from a
+// connection string that could not be read, and may hold a piece of a password.
+const HOST_NAME = /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/;
+const IPV6_ADDRESS = /^[0-9a-f:.]*:[0-9a-f:.]*$/;
+const UNPARSEABLE_HOST = 'an unparseable host';
+
+const isHostLike = host => HOST_NAME.test(host) || IPV6_ADDRESS.test(host);
+
+/** The host names of one authority string, credentials cut at its last `@`. */
+const hostsOfAuthority = authority =>
+  authority
+    .slice(authority.lastIndexOf('@') + 1)
+    .split(',')
+    .map(host => (host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.replace(/:\d*$/, '')))
+    .map(host => host.toLowerCase());
+
 /**
  * The host names of a MongoDB connection string, without its credentials, its
  * ports or its options. A replica set lists several, separated by commas.
@@ -21,17 +37,35 @@ export const ALLOW_REMOTE_FLAG = '--allow-remote';
  * password may hold characters a URL parser rejects. Everything before the
  * last `@` of the authority is the credentials and is dropped unread.
  *
+ * The authority ends at the first `/`, `?` or `#`, unless the password holds
+ * one of them unescaped. Then the text up to that character holds no `@`
+ * although one follows, and the string has two readings: the credentials end at
+ * the last `@` of the whole string, or that `@` belongs to an option and the
+ * authority really is the short text. When only one reading yields host names
+ * it is the right one, because the other is the start of a password. When both
+ * do, both are reported, so that an `@` inside an option can never make a
+ * remote host look local. A host that is not host-like is never echoed, it is
+ * reported as an unparseable host.
+ *
  * @param {string} uri
  * @returns {string[]}
  */
 const hostsOf = uri => {
-  const authority = uri.replace(/^[a-z+]+:\/\//i, '').split(/[/?#]/)[0];
-  const hosts = authority.slice(authority.lastIndexOf('@') + 1);
+  const rest = uri.replace(/^[a-z+]+:\/\//i, '');
+  const authority = rest.split(/[/?#]/)[0];
+  const direct = hostsOfAuthority(authority);
 
-  return hosts
-    .split(',')
-    .map(host => (host.startsWith('[') ? host.slice(1, host.indexOf(']')) : host.replace(/:\d*$/, '')))
-    .map(host => host.toLowerCase());
+  const ambiguous = !authority.includes('@') && rest.includes('@');
+  const candidates = [direct];
+
+  if (ambiguous) {
+    candidates.push(hostsOfAuthority(rest.slice(rest.lastIndexOf('@') + 1).split(/[/?#]/)[0]));
+  }
+
+  const readable = candidates.filter(hosts => hosts.every(isHostLike));
+  const chosen = readable.length > 0 ? readable.flat() : [UNPARSEABLE_HOST];
+
+  return [...new Set(chosen)];
 };
 
 /**

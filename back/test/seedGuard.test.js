@@ -80,6 +80,38 @@ describe('seedRefusal and the database host', () => {
     expect(refusal).toContain('--allow-remote');
   });
 
+  test.each([
+    ['a slash', 'mongodb://sentinel-user:sent/inel@db.example.com:27017/boards-db'],
+    ['a question mark', 'mongodb://sentinel-user:sent?inel@db.example.com:27017/boards-db'],
+    ['a hash', 'mongodb://sentinel-user:sent#inel@db.example.com:27017/boards-db'],
+    ['an at sign', 'mongodb://sentinel-user:sent@inel@db.example.com:27017/boards-db'],
+    ['all of them', 'mongodb://sentinel-user:s/e?n#t@i@nel@db.example.com:27017/boards-db'],
+  ])('a password with %s names the real host and no piece of the password', (_name, uri) => {
+    const refusal = allowed('development')(uri);
+
+    expect(refusal).toContain('(host db.example.com)');
+    expect(refusal).not.toContain('sentinel');
+    expect(refusal).not.toContain('inel');
+  });
+
+  test('an unescaped character that leaves no host at all reports an unparseable host, never a fragment', () => {
+    const refusal = allowed('development')('mongodb://sentinel-user:sent/inel');
+
+    expect(refusal).toContain('an unparseable host');
+    expect(refusal).not.toContain('sentinel');
+    expect(refusal).not.toContain('inel');
+  });
+
+  test('an at sign in an option cannot make a remote host look local', () => {
+    const refusal = allowed('development')('mongodb://db.example.com/boards-db?appName=app@localhost');
+
+    expect(refusal).toContain('db.example.com');
+  });
+
+  test('a password with a slash in front of a local host is still allowed', () => {
+    expect(allowed('development')('mongodb://user:pa/ss@localhost:27017/boards-db')).toBeNull();
+  });
+
   test('never prints the credentials of the connection string', () => {
     const refusal = allowed('development')('mongodb://sentinel-user:sentinel-pass@db.example.com:27017/boards-db');
 
