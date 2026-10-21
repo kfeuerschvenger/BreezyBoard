@@ -185,6 +185,16 @@ test('npm is run through node and its entry script when one can be found, and pl
   const notJs = npmInvocation({ ...base, env: { npm_execpath: 'launcher/npm.cmd', PATH: '' }, exists: () => true });
   assert.deepEqual(notJs, { command: 'npm', args: [] });
 
+  for (const other of ['pnpm.cjs', 'yarn.js', 'npm-cli.js.bak', 'not-npm-cli.js']) {
+    const fromOther = npmInvocation({ ...base, env: { npm_execpath: join('launcher', other), PATH: 'npm-home' }, exists: () => true });
+    assert.deepEqual(fromOther, { command: 'node-bin', args: [entry] }, `${other} is not npm's entry and falls through to the PATH lookup`);
+  }
+
+  for (const own of ['npm-cli.js', 'npm-cli.cjs', 'npm-cli.mjs']) {
+    const fromOwn = npmInvocation({ ...base, env: { npm_execpath: join('launcher', own), PATH: '' }, exists: () => true });
+    assert.deepEqual(fromOwn, { command: 'node-bin', args: [join('launcher', own)] });
+  }
+
   assert.deepEqual(npmInvocation({ ...base, env: {}, exists: () => false }), { command: 'npm', args: [] });
 });
 
