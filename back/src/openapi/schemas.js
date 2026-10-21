@@ -130,15 +130,6 @@ export const TaskSchema = z.looseObject({
   ...timestamps,
 });
 
-/**
- * A task as the checklist routes answer: the document as saved, with `color`
- * and `owner` left as ids where every other task response populates them.
- */
-export const TaskWithIdsSchema = TaskSchema.extend({
-  color: objectIdSchema,
-  owner: objectIdSchema.optional(),
-});
-
 export const WorkspaceSchema = z.looseObject({
   _id: objectIdSchema,
   name: z.string(),

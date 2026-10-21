@@ -886,7 +886,7 @@ paths:
               $ref: "#/components/schemas/UpdateChecklistItemRequest"
       responses:
         "200":
-          description: The task with the item changed. Its color and owner are ids, not populated.
+          description: The task with the item changed.
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
@@ -895,7 +895,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TaskWithIdsResponse"
+                $ref: "#/components/schemas/TaskResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -929,7 +929,7 @@ paths:
             pattern: ^[0-9a-fA-F]{24}$
       responses:
         "200":
-          description: The task without the item. Its color and owner are ids, not populated.
+          description: The task without the item.
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
@@ -938,7 +938,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TaskWithIdsResponse"
+                $ref: "#/components/schemas/TaskResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -2227,66 +2227,6 @@ components:
         - createdAt
         - updatedAt
       additionalProperties: {}
-    TaskWithIds:
-      type: object
-      properties:
-        _id:
-          type: string
-          pattern: ^[0-9a-fA-F]{24}$
-        title:
-          type: string
-        description:
-          type: string
-        status:
-          type: string
-          pattern: ^[0-9a-fA-F]{24}$
-          description: The id of one of the board columns.
-        priority:
-          type: string
-          enum:
-            - low
-            - medium
-            - high
-        color:
-          type: string
-          pattern: ^[0-9a-fA-F]{24}$
-        owner:
-          type: string
-          pattern: ^[0-9a-fA-F]{24}$
-        boardId:
-          type: string
-          pattern: ^[0-9a-fA-F]{24}$
-        order:
-          type: string
-          description: A fractional index, base 62. Tasks of a column sort ascending on it; the server mints it and a client never sends one.
-        checklist:
-          type: array
-          items:
-            $ref: "#/components/schemas/ChecklistItem"
-        deletedAt:
-          anyOf:
-            - type: string
-              format: date-time
-            - type: "null"
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-      required:
-        - _id
-        - title
-        - status
-        - priority
-        - color
-        - boardId
-        - order
-        - checklist
-        - deletedAt
-        - createdAt
-        - updatedAt
-      additionalProperties: {}
     Workspace:
       type: object
       properties:
@@ -2650,18 +2590,6 @@ components:
         - success
         - data
         - pagination
-      additionalProperties: {}
-    TaskWithIdsResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          const: true
-        data:
-          $ref: "#/components/schemas/TaskWithIds"
-      required:
-        - success
-        - data
       additionalProperties: {}
     TaskDeletedResponse:
       type: object

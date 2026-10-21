@@ -340,6 +340,17 @@ export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
   return { tasks, pagination };
 };
 
+/**
+ * A saved task with `owner` and `color` populated, the shape every task
+ * response has. A document read for a write holds bare ids, so a write that
+ * answers with it has to populate before it does.
+ */
+const populateTaskRefs = task =>
+  task.populate([
+    { path: 'owner', select: 'firstName lastName avatar' },
+    { path: 'color', select: 'name value' },
+  ]);
+
 export const updateChecklistItem = async (taskId, itemId, updateData) => {
   const task = await Task.findOne({ _id: taskId, deletedAt: null });
   if (!task) {
@@ -358,7 +369,7 @@ export const updateChecklistItem = async (taskId, itemId, updateData) => {
   };
 
   await task.save();
-  return task;
+  return populateTaskRefs(task);
 };
 
 export const deleteChecklistItem = async (taskId, itemId) => {
@@ -369,5 +380,5 @@ export const deleteChecklistItem = async (taskId, itemId) => {
 
   task.checklist = task.checklist.filter(item => item._id.toString() !== itemId);
   await task.save();
-  return task;
+  return populateTaskRefs(task);
 };

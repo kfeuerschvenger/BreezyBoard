@@ -219,7 +219,7 @@ describe('the response schemas match what the API really answers', () => {
         .body
     );
     expectShape(
-      'TaskWithIdsResponse',
+      'TaskResponse',
       (
         await request(app)
           .patch(`/api/v1/tasks/${task._id}/checklist/${task.checklist[0]._id}`)
@@ -228,7 +228,7 @@ describe('the response schemas match what the API really answers', () => {
       ).body
     );
     expectShape(
-      'TaskWithIdsResponse',
+      'TaskResponse',
       (await request(app).delete(`/api/v1/tasks/${task._id}/checklist/${task.checklist[0]._id}`).set(auth())).body
     );
     expectShape('TaskDeletedResponse', (await request(app).delete(`/api/v1/tasks/${task._id}`).set(auth())).body);

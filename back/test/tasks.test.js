@@ -31,6 +31,28 @@ describe('tasks', () => {
     expect(res.body.data.boardId).toBe(board._id);
   });
 
+  test('the checklist routes answer the task with its color and owner populated', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id, {
+      owner: owner.user._id,
+      checklist: [{ text: 'One' }, { text: 'Two' }],
+    });
+    const [first, second] = task.checklist;
+
+    const patched = await request(app)
+      .patch(`/api/tasks/${task._id}/checklist/${first._id}`)
+      .set('Authorization', `Bearer ${owner.token}`)
+      .send({ completed: true });
+    const deleted = await request(app)
+      .delete(`/api/tasks/${task._id}/checklist/${second._id}`)
+      .set('Authorization', `Bearer ${owner.token}`);
+
+    for (const res of [patched, deleted]) {
+      expect(res.status).toBe(200);
+      expect(res.body.data.color).toMatchObject({ _id: colors.taskColor._id.toString(), name: 'Coral' });
+      expect(res.body.data.owner).toMatchObject({ _id: owner.user._id, firstName: expect.any(String) });
+    }
+  });
+
   // A card typed into a column composer is a title and its author, nothing
   // else. The description is optional everywhere, so none is stored and none
   // is invented.
