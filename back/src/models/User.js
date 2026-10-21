@@ -9,6 +9,24 @@ const capitalize = str => {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 };
 
+/**
+ * How a person leaves the API: names and place capitalized (they are stored
+ * lowercase), no password, no version, no token counter, no reset links. It is
+ * the `toJSON` transform, exported because a `.lean()` read returns plain
+ * objects that never reach `toJSON`, and has to be put through the same
+ * function to read the same.
+ */
+export const presentUser = ret => {
+  ret.firstName = capitalize(ret.firstName);
+  ret.lastName = capitalize(ret.lastName);
+  ret.location = capitalize(ret.location);
+  delete ret.password;
+  delete ret.__v;
+  delete ret.tokenVersion;
+  delete ret.passwordResets;
+  return ret;
+};
+
 const userSchema = new mongoose.Schema(
   {
     firstName: {
@@ -92,16 +110,7 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: (_doc, ret) => {
-        ret.firstName = capitalize(ret.firstName);
-        ret.lastName = capitalize(ret.lastName);
-        ret.location = capitalize(ret.location);
-        delete ret.password;
-        delete ret.__v;
-        delete ret.tokenVersion;
-        delete ret.passwordResets;
-        return ret;
-      },
+      transform: (_doc, ret) => presentUser(ret),
     },
   }
 );

@@ -1,6 +1,8 @@
 import request from 'supertest';
 import { describe, expect, test } from 'vitest';
 import app from '../src/app.js';
+import { createBoard } from './helpers/board.factory.js';
+import { seedColorsAndTemplates } from './helpers/seed.js';
 import { registerUser } from './helpers/user.factory.js';
 
 const asUser = (method, path, token) => request(app)[method](`/api/v1${path}`).set('Authorization', `Bearer ${token}`);
@@ -42,6 +44,21 @@ describe('a person is presented the same way by every route that returns one', (
     expect(res.status).toBe(200);
     const match = res.body.data.find(person => person._id === found.user._id);
     expect(match).toMatchObject({ firstName: 'Grace', lastName: 'Hopper' });
+  });
+
+  test('the board list presents its creator exactly as the single board read does', async () => {
+    const colors = await seedColorsAndTemplates();
+    const { token } = await registerUser({ firstName: 'ada', lastName: 'lovelace' });
+    const board = await createBoard(token, colors.boardColor._id.toString());
+
+    const list = await asUser('get', '/boards', token);
+    const single = await asUser('get', `/boards/${board._id}`, token);
+
+    expect(list.status).toBe(200);
+    expect(single.status).toBe(200);
+    const listed = list.body.data.find(item => item._id === board._id);
+    expect(listed.createdBy).toMatchObject({ firstName: 'Ada', lastName: 'Lovelace' });
+    expect(listed.createdBy).toEqual(single.body.data.createdBy);
   });
 
   test('never carries the password, the token counter or the reset links', async () => {
