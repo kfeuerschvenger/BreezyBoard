@@ -7,7 +7,10 @@ import ColorPalette from '../src/models/ColorPalette.js';
 import User from '../src/models/User.js';
 import { seedRefusal } from '../seeds/seedGuard.js';
 
-const backDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The driver mongoose connects with, which is the parser the guard relies on.
+const { MongoClient } = mongoose.mongo;
+
+const backDir =path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Runs a seed script as a real process, the way `npm run seed:*` does, against the test database. */
 const runSeed = (script, nodeEnv, { mongoUri, args = [] } = {}) => {
@@ -84,32 +87,74 @@ describe('seedRefusal and the database host', () => {
     ['a slash', 'mongodb://sentinel-user:sent/inel@db.example.com:27017/boards-db'],
     ['a question mark', 'mongodb://sentinel-user:sent?inel@db.example.com:27017/boards-db'],
     ['a hash', 'mongodb://sentinel-user:sent#inel@db.example.com:27017/boards-db'],
-    ['an at sign', 'mongodb://sentinel-user:sent@inel@db.example.com:27017/boards-db'],
     ['all of them', 'mongodb://sentinel-user:s/e?n#t@i@nel@db.example.com:27017/boards-db'],
-  ])('a password with %s names the real host and no piece of the password', (_name, uri) => {
+    ['a slash in front of a local host', 'mongodb://sentinel-user:pa/ss@localhost:27017/boards-db'],
+    ['no host at all', 'mongodb://sentinel-user:sent/inel'],
+    ['an at sign in an option', 'mongodb://db.example.com/boards-db?appName=app@localhost'],
+  ])('a string the driver refuses (%s) is refused as unparseable and echoes nothing of it', (_name, uri) => {
     const refusal = allowed('development')(uri);
 
-    expect(refusal).toContain('(host db.example.com)');
+    expect(refusal).toContain('(host an unparseable connection string)');
     expect(refusal).not.toContain('sentinel');
     expect(refusal).not.toContain('inel');
+    expect(refusal).not.toContain('example.com');
   });
 
-  test('an unescaped character that leaves no host at all reports an unparseable host, never a fragment', () => {
-    const refusal = allowed('development')('mongodb://sentinel-user:sent/inel');
+  test('credentials that hold an at sign cannot make the remote host look local', () => {
+    const uri = 'mongodb://u:p@evil.com@localhost/db';
 
-    expect(refusal).toContain('an unparseable host');
-    expect(refusal).not.toContain('sentinel');
-    expect(refusal).not.toContain('inel');
+    expect(new MongoClient(uri).options.hosts.map(address => address.host)).toEqual(['evil.com']);
+    expect(allowed('development')(uri)).toContain('(host evil.com)');
   });
 
-  test('an at sign in an option cannot make a remote host look local', () => {
-    const refusal = allowed('development')('mongodb://db.example.com/boards-db?appName=app@localhost');
+  // The guard must accept exactly when every host the driver reports is local,
+  // so the expectation is computed from the driver and not written by hand.
+  describe('agrees with the driver on every host', () => {
+    const LOCAL = ['localhost', '127.0.0.1', '::1', 'mongo'];
 
-    expect(refusal).toContain('db.example.com');
-  });
+    const driverHosts = uri => {
+      try {
+        const { hosts, srvHost } = new MongoClient(uri).options;
 
-  test('a password with a slash in front of a local host is still allowed', () => {
-    expect(allowed('development')('mongodb://user:pa/ss@localhost:27017/boards-db')).toBeNull();
+        return srvHost ? [srvHost] : hosts.map(address => (address.socketPath ? null : address.host));
+      } catch {
+        return undefined;
+      }
+    };
+
+    const tricky = [
+      'mongodb://u:p@evil.com@localhost/db',
+      'mongodb://u:p@localhost@evil.com/db',
+      'mongodb://u%40localhost:p@evil.com/db',
+      'mongodb://u:p/x@localhost/db',
+      'mongodb://u:p?x@localhost/db',
+      'mongodb://u:p#x@localhost/db',
+      'mongodb://localhost/db?appName=a@evil.com',
+      'mongodb://evil.com/db?appName=a@localhost',
+      'mongodb://[::1]:27017/db',
+      'mongodb://[2001:db8::1]:27017/db',
+      'mongodb://[::1]:27017,[2001:db8::1]:27017/db',
+      'mongodb://localhost,evil.com/db',
+      'mongodb://evil.com,localhost/db',
+      'mongodb://localhost:27017,mongo:27017,127.0.0.1:27017/db',
+      'mongodb://%2Ftmp%2Fmongodb-27017.sock/db',
+      'mongodb://%2Ftmp%2Fmongodb-27017.sock,evil.com/db',
+      'mongodb://LOCALHOST/db',
+      'mongodb://MONGO:27017/db',
+      'mongodb://127.0.0.1.evil.com/db',
+      'mongodb+srv://localhost/db',
+      'mongodb+srv://u:p@evil.com@localhost/db',
+      'mongodb://',
+      'not a connection string',
+    ];
+
+    test.each(tricky)('%s', uri => {
+      const hosts = driverHosts(uri);
+      const everyHostIsLocal = hosts !== undefined && !(hosts.length === 0) && hosts.every(host => host === null || LOCAL.includes(host));
+      const srv = /^mongodb\+srv:/.test(uri);
+
+      expect(allowed('development')(uri) === null).toBe(everyHostIsLocal && !srv);
+    });
   });
 
   test('never prints the credentials of the connection string', () => {
