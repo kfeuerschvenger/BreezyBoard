@@ -17,6 +17,9 @@ const logFailure = (req, statusCode, err) => {
   }
 };
 
+// Express identifies an error handler by its four parameters, so the unused
+// fourth one cannot be dropped.
+// eslint-disable-next-line no-unused-vars
 export const errorHandler = (err, req, res, _next) => {
   if (err instanceof ApiError) {
     logFailure(req, err.statusCode, err);

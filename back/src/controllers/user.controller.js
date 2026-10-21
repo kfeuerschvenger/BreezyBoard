@@ -22,7 +22,7 @@ const toPublicUser = (userDoc, req) => {
       const host = req.get('host');
       const protocol = req.protocol;
       user.avatar = `${protocol}://${host}${user.avatar}`;
-    } catch (e) {
+    } catch {
       // fallback: keep stored avatar
     }
   }

@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 import { beforeEach, describe, expect, test } from 'vitest';
 import app from '../src/app.js';
-import BoardTemplate from '../src/models/BoardTemplate.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
 import { boardColumns, createTask } from './helpers/task.factory.js';
