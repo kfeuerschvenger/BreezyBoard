@@ -27,7 +27,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const LOW_LIMIT = 5;
@@ -153,20 +153,46 @@ export function formatTable(rows) {
 }
 
 /**
+ * The command that runs npm without a shell. On Windows npm is a .cmd file,
+ * which only a shell can start, and the timeout of a spawn through a shell
+ * kills the shell and leaves npm running. So where npm's own entry script can
+ * be found, node runs it directly and the timeout reaches the process that is
+ * doing the work. The entry is the one `npm_execpath` names when the gate was
+ * started by npm, or else `node_modules/npm/bin/npm-cli.js` inside a PATH
+ * directory, which is where both the Node installer and `npm install --global
+ * npm` put it. Anywhere it is not found the plain `npm` is the fallback, which
+ * a POSIX system starts without a shell and Windows fails to start, and a
+ * failure to start is unreadable, never a pass.
+ *
+ * @param {{ env?: NodeJS.ProcessEnv, execPath?: string, exists?: (path: string) => boolean, separator?: string }} [options]
+ * @returns {{ command: string, args: string[] }}
+ */
+export function npmInvocation({ env = process.env, execPath = process.execPath, exists = existsSync, separator = delimiter } = {}) {
+  const fromNpm = env.npm_execpath;
+  if (fromNpm && /\.[cm]?js$/i.test(fromNpm) && exists(fromNpm)) return { command: execPath, args: [fromNpm] };
+
+  const searchPath = env.PATH ?? env.Path ?? '';
+  for (const directory of searchPath.split(separator).filter(Boolean)) {
+    const entry = join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+    if (exists(entry)) return { command: execPath, args: [entry] };
+  }
+  return { command: 'npm', args: [] };
+}
+
+/**
  * Audits one package. A run that does not finish inside the timeout is
  * unreadable, like any other run that produced no report: a registry that
  * hangs must not hang the gate with it.
  *
  * @param {string} directory
- * @param {{ spawn?: typeof spawnSync, timeoutMs?: number }} [options]
+ * @param {{ spawn?: typeof spawnSync, timeoutMs?: number, npm?: { command: string, args: string[] } }} [options]
  */
-export function auditPackage(directory, { spawn = spawnSync, timeoutMs = AUDIT_TIMEOUT_MS } = {}) {
+export function auditPackage(directory, { spawn = spawnSync, timeoutMs = AUDIT_TIMEOUT_MS, npm = npmInvocation() } = {}) {
   // npm exits non-zero whenever it finds advisories, so the exit status is not
-  // read: the report decides. `shell` is needed on Windows, where npm is a .cmd.
-  const run = spawn('npm', ['audit', '--json'], {
+  // read: the report decides.
+  const run = spawn(npm.command, [...npm.args, 'audit', '--json'], {
     cwd: directory,
     encoding: 'utf8',
-    shell: process.platform === 'win32',
     maxBuffer: 64 * 1024 * 1024,
     timeout: timeoutMs,
   });
