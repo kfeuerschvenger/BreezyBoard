@@ -1233,7 +1233,7 @@ paths:
       tags:
         - Users
       summary: Upload a profile picture
-      description: "A multipart form with one file field named avatar: png, jpeg, webp or gif, up to 6 MB. The bytes are checked against the declared type and a mismatch is rejected. Access: The person themself."
+      description: "A multipart form with one file field named avatar: png, jpeg, webp or gif, up to 6 MB. The bytes are checked against the declared type and a mismatch is rejected. A refused upload is a 400 and never a 500: INVALID_FILE_TYPE for a declared type that is not an image, FILE_TOO_LARGE for a file over the limit, VALIDATION_ERROR for a content mismatch. Access: The person themself."
       operationId: postUsersByIdAvatar
       security:
         - bearerAuth: []
@@ -1456,7 +1456,7 @@ components:
         type: string
   responses:
     BadRequest:
-      description: "The request was refused before any work was done: a malformed id, a field that fails its schema (`errors` lists each as `{ field, message }`), or a rule the service enforces. Specific codes: VALIDATION_ERROR, INVALID_RESET_TOKEN, WRONG_CURRENT_PASSWORD."
+      description: "The request was refused before any work was done: a malformed id, a field that fails its schema (`errors` lists each as `{ field, message }`), or a rule the service enforces. Specific codes: VALIDATION_ERROR, INVALID_RESET_TOKEN, WRONG_CURRENT_PASSWORD, INVALID_FILE_TYPE, FILE_TOO_LARGE."
       headers:
         X-Request-Id:
           $ref: "#/components/headers/XRequestId"
@@ -2383,6 +2383,8 @@ components:
             - RATE_LIMITED
             - INVALID_RESET_TOKEN
             - WRONG_CURRENT_PASSWORD
+            - INVALID_FILE_TYPE
+            - FILE_TOO_LARGE
             - CONFLICT
             - INTERNAL
         errors:

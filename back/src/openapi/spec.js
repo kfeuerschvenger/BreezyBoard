@@ -282,7 +282,7 @@ export const buildOpenApiSpec = () => {
       },
       responses: {
         BadRequest: errorResponse(
-          'The request was refused before any work was done: a malformed id, a field that fails its schema (`errors` lists each as `{ field, message }`), or a rule the service enforces. Specific codes: VALIDATION_ERROR, INVALID_RESET_TOKEN, WRONG_CURRENT_PASSWORD.',
+          'The request was refused before any work was done: a malformed id, a field that fails its schema (`errors` lists each as `{ field, message }`), or a rule the service enforces. Specific codes: VALIDATION_ERROR, INVALID_RESET_TOKEN, WRONG_CURRENT_PASSWORD, INVALID_FILE_TYPE, FILE_TOO_LARGE.',
           {
             success: false,
             message: 'Validation error',

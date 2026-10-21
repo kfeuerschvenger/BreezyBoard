@@ -514,7 +514,7 @@ export const operations = [
     path: '/users/{id}/avatar',
     tag: 'Users',
     summary: 'Upload a profile picture',
-    description: 'A multipart form with one file field named avatar: png, jpeg, webp or gif, up to 6 MB. The bytes are checked against the declared type and a mismatch is rejected.',
+    description: 'A multipart form with one file field named avatar: png, jpeg, webp or gif, up to 6 MB. The bytes are checked against the declared type and a mismatch is rejected. A refused upload is a 400 and never a 500: INVALID_FILE_TYPE for a declared type that is not an image, FILE_TOO_LARGE for a file over the limit, VALIDATION_ERROR for a content mismatch.',
     access: 'The person themself.',
     request: { params: userIdParam },
     bodyKind: 'multipart',

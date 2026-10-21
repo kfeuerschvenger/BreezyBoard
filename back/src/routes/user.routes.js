@@ -1,7 +1,7 @@
 import express from 'express';
 import * as UserController from '../controllers/user.controller.js';
 import { authenticate, requireBoardRole } from '../middleware/auth.middleware.js';
-import upload from '../middleware/upload.middleware.js';
+import { uploadAvatarImage } from '../middleware/upload.middleware.js';
 import { verifyUploadedImage } from '../middleware/verifyImage.middleware.js';
 import { validate } from '../middleware/validate.middleware.js';
 import { idParamSchema, updateUserSchema } from '../validation/user.validation.js';
@@ -19,7 +19,7 @@ router.put('/:id', validate({ params: idParamSchema, body: updateUserSchema }), 
 router.post(
   '/:id/avatar',
   validate({ params: idParamSchema }),
-  upload.single('avatar'),
+  uploadAvatarImage,
   verifyUploadedImage,
   UserController.uploadAvatar
 );

@@ -5,7 +5,25 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/hooks/useAuth';
 import type { User as UserModel } from '@/models';
+import { apiErrorCodeOf } from '@/shared/lib/httpStatus';
 import { useUpdateUser, useUploadAvatar, useUser } from '../queries';
+
+/**
+ * What to tell the person about a refused avatar upload. The two refusals the
+ * server answers with a 400 cannot be fixed by trying the same file again, so
+ * "try again" would send the person round in a circle; anything else keeps the
+ * generic wording.
+ */
+const avatarFailureMessage = (error: unknown): string => {
+  switch (apiErrorCodeOf(error)) {
+    case 'FILE_TOO_LARGE':
+      return 'That image is too large. Choose one under 6 MB.';
+    case 'INVALID_FILE_TYPE':
+      return 'That file is not an image. Choose a PNG, JPEG, WebP or GIF.';
+    default:
+      return 'Avatar upload failed. Please try again.';
+  }
+};
 
 /**
  * The editable profile. `createdAt` rides along for display only and is never
@@ -158,7 +176,7 @@ export function useProfile(userId: string | null): UseProfileResult {
       setValue('avatar', avatarUrl, { shouldDirty: false, shouldValidate: true });
     } catch (err) {
       console.error('Avatar upload failed:', err);
-      setWriteError('Avatar upload failed. Please try again.');
+      setWriteError(avatarFailureMessage(err));
     }
   };
 

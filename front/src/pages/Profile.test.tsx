@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { AxiosError } from 'axios';
+import type { AxiosResponse } from 'axios';
 import { MemoryRouter } from 'react-router-dom';
 import { axe } from 'vitest-axe';
 import { renderWithQuery } from '@/test/renderWithQuery';
@@ -438,6 +440,24 @@ describe('Profile avatar', () => {
     await user.upload(screen.getByLabelText('Change avatar'), new File(['bytes'], 'ada.png', { type: 'image/png' }));
 
     expect(await screen.findByText('Avatar upload failed. Please try again.')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['FILE_TOO_LARGE', 'That image is too large. Choose one under 6 MB.'],
+    ['INVALID_FILE_TYPE', 'That file is not an image. Choose a PNG, JPEG, WebP or GIF.'],
+  ])('names the reason when the server refuses with %s', async (code, message) => {
+    const user = userEvent.setup();
+    const response = { status: 400, statusText: 'Bad Request', headers: {}, config: {}, data: { code } };
+    mockedUserService.uploadAvatar.mockRejectedValue(
+      new AxiosError('refused', 'ERR_BAD_REQUEST', undefined, undefined, response as AxiosResponse)
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderProfile();
+    await waitFor(() => expect(firstNameInput()).toHaveValue('Ada'));
+
+    await user.upload(screen.getByLabelText('Change avatar'), new File(['bytes'], 'ada.png', { type: 'image/png' }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
   });
 });
 
