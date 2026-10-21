@@ -77,6 +77,18 @@ describe('api.service response interceptor', () => {
     expect(markSessionRenewedMock).not.toHaveBeenCalled();
   });
 
+  it('keeps the stored session on a 429, which is a rate limit and not an ended session', async () => {
+    window.localStorage.setItem('token', 'old-token');
+    const error = {
+      response: { status: 429, headers: {} },
+      config: { _retry: false },
+    } as unknown as Parameters<typeof handleResponseError>[0];
+
+    await expect(handleResponseError(error)).rejects.toBe(error);
+
+    expect(window.localStorage.getItem('token')).toBe('old-token');
+  });
+
   it('still clears auth and redirects on a 401, independent of the renewal logic', async () => {
     window.localStorage.setItem('token', 'old-token');
     const error = {

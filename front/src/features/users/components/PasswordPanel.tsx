@@ -33,7 +33,7 @@ type PasswordFormValues = z.infer<typeof passwordFormSchema>;
  */
 export const PasswordPanel: React.FC = () => {
   const { changePassword } = useChangePassword();
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<'rate-limited' | 'failed' | null>(null);
 
   const {
     register,
@@ -47,13 +47,13 @@ export const PasswordPanel: React.FC = () => {
   });
 
   const onSubmit = handleSubmit(async ({ currentPassword, newPassword }) => {
-    setFailed(false);
+    setFailed(null);
     const outcome = await changePassword(currentPassword, newPassword);
 
     if (outcome === 'wrong-current') {
       setError('currentPassword', { message: 'That is not your current password' }, { shouldFocus: true });
-    } else if (outcome === 'failed') {
-      setFailed(true);
+    } else if (outcome) {
+      setFailed(outcome);
     }
   });
 
@@ -62,7 +62,7 @@ export const PasswordPanel: React.FC = () => {
       title="Password"
       description="Changing it signs you out everywhere, this device included. You sign in again with the new one."
     >
-      <form className="flex flex-col gap-4.5" onSubmit={onSubmit} onChange={() => setFailed(false)} noValidate>
+      <form className="flex flex-col gap-4.5" onSubmit={onSubmit} onChange={() => setFailed(null)} noValidate>
         <Field label="Current password" error={errors.currentPassword?.message}>
           {props => (
             <PasswordInput
@@ -98,7 +98,9 @@ export const PasswordPanel: React.FC = () => {
 
         {failed && (
           <p role="alert" className="rounded-control bg-danger-bg px-3.5 py-2.5 text-sm font-medium text-danger-strong">
-            We could not change your password. Please try again.
+            {failed === 'rate-limited'
+              ? 'Too many attempts. Please wait a few minutes before trying again.'
+              : 'We could not change your password. Please try again.'}
           </p>
         )}
 
