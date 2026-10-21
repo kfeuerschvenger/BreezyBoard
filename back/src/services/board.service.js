@@ -5,7 +5,7 @@ import Board from '../models/Board.js';
 import BoardTemplate from '../models/BoardTemplate.js';
 import ColorPalette from '../models/ColorPalette.js';
 import Task from '../models/Task.js';
-import User from '../models/User.js';
+import User, { presentUser } from '../models/User.js';
 import Workspace from '../models/Workspace.js';
 import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middleware.js';
 import { ensureWorkspaceMembership } from './workspace.service.js';
@@ -489,6 +489,10 @@ export const getUserBoards = async (userId, { limit, offset } = {}) => {
 
     return {
       ...board,
+      // A lean read skips the model's `toJSON`, which is where a person's name
+      // is capitalized and their `id` added, so the creator goes through the
+      // same function here to read as it does on the single board.
+      createdBy: board.createdBy && presentUser({ ...board.createdBy, id: board.createdBy._id.toString() }),
       // The same resolver the single board read uses, so the list and the
       // read agree on who administers what, a workspace admin included. It
       // compares `createdBy` as an id and the list populates it into an
