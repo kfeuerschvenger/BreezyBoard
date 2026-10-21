@@ -81,7 +81,7 @@ cd back
 npm run openapi
 ```
 
-`npm run openapi:check` fails when the committed document is out of date, and CI runs it.
+`npm run openapi:check` fails when the committed document is out of date, and CI runs it. The document embeds the `version` of `back/package.json` as `info.version`, so bumping the version fails the check until `npm run openapi` is run and the result is committed.
 
 ## Data model
 

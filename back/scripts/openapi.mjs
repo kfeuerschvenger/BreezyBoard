@@ -35,7 +35,7 @@ if (checkOnly) {
   console.error(
     committed === null
       ? 'docs/openapi.yaml does not exist. Run "npm run openapi" in back/ and commit the result.'
-      : 'docs/openapi.yaml is out of date with the route schemas. Run "npm run openapi" in back/ and commit the result.'
+      : 'docs/openapi.yaml is out of date with the route schemas or with the version in back/package.json, which the document embeds as info.version, so a version bump alone fails this check. Run "npm run openapi" in back/ and commit the result.'
   );
   process.exit(1);
 }
