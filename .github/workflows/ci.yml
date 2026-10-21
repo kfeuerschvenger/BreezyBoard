@@ -16,11 +16,12 @@ permissions:
 
 concurrency:
   # A pull request shares one group per ref, so a newer push supersedes the
-  # run in progress. A push gets a group of its own per commit: with a shared
-  # group GitHub keeps one running and one pending run and drops the older
-  # pending one, which would leave the middle of three quick pushes without a
-  # result.
-  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # run in progress. A push gets a group of its own per ref and commit: with a
+  # shared group GitHub keeps one running and one pending run and drops the
+  # older pending one, which would leave the middle of three quick pushes
+  # without a result. The ref is part of the key because the same commit
+  # promoted from test to main would otherwise share a group with itself.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.ref, github.sha) }}
   # Only a superseded pull request run is cancelled. A push to develop, test
   # or main always runs to the end, so the branch history keeps a result for
   # every commit.
@@ -150,6 +151,13 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
+      # The same npm as the other jobs, so the gate audits with the npm the
+      # project is developed with and not the npm 10 bundled with Node 22. The
+      # composite action is not reused because it also runs npm ci in a
+      # package, which an audit from the lockfiles does not need. Raise it
+      # together with .github/actions/setup-node-npm.
+      - name: Install npm 11.17.0
+        run: npm install --global npm@11.17.0
       # Fails on any moderate, high or critical advisory and on five or more
       # low ones, in back, front and e2e, development dependencies included.
       # An audit that cannot reach the registry fails as well. It runs from
