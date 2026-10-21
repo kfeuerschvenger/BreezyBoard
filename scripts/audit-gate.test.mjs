@@ -1,6 +1,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, exitCodeFor, formatTable, EXIT } from './audit-gate.mjs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { auditPackage, decide, discoverPackages, exitCodeFor, formatTable, formatVulnerable, EXIT } from './audit-gate.mjs';
+
+const GATE = join(dirname(fileURLToPath(import.meta.url)), 'audit-gate.mjs');
+
+/** Runs the gate as a process, the way CI does. */
+const runGate = (args, env = {}) =>
+  spawnSync(process.execPath, [GATE, ...args], { encoding: 'utf8', env: { ...process.env, ...env }, timeout: 60_000 });
+
+/** A directory tree of the given package names, each with the given files, removed afterwards. */
+const withTree = (layout, run) => {
+  const root = mkdtempSync(join(tmpdir(), 'audit-gate-'));
+  try {
+    for (const [name, files] of Object.entries(layout)) {
+      mkdirSync(join(root, name), { recursive: true });
+      for (const file of files) writeFileSync(join(root, name, file), '{}');
+    }
+    return run(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
 
 const report = (overrides = {}) =>
   JSON.stringify({
@@ -84,4 +109,137 @@ test('the table names every package and its result', () => {
   assert.match(table, /back\s+0\s+0\s+0\s+0\s+pass/);
   assert.match(table, /front.*FAIL: 2 moderate/);
   assert.match(table, /e2e\s+-.*UNREADABLE/);
+});
+
+const withAdvisories = (counts, vulnerabilities) => {
+  const parsed = JSON.parse(report(counts));
+  parsed.vulnerabilities = vulnerabilities;
+  return JSON.stringify(parsed);
+};
+
+test('a failing report names its vulnerable packages with their severity, the worst first', () => {
+  const result = decide(
+    withAdvisories(
+      { moderate: 1, high: 1, total: 2 },
+      { lodash: { severity: 'moderate' }, minimist: { severity: 'high' }, quiet: { severity: 'info' } }
+    )
+  );
+
+  assert.deepEqual(result.vulnerable, [
+    { name: 'minimist', severity: 'high' },
+    { name: 'lodash', severity: 'moderate' },
+  ]);
+
+  const text = formatVulnerable([{ name: 'back', result }]);
+  assert.match(text, /Vulnerable packages in back/);
+  assert.match(text, /high\s+minimist/);
+  assert.match(text, /moderate\s+lodash/);
+  assert.doesNotMatch(text, /quiet/);
+});
+
+test('a passing package prints no vulnerable list, and a report without one still fails', () => {
+  assert.equal(formatVulnerable([{ name: 'back', result: decide(report()) }]), '');
+
+  const result = decide(report({ high: 1, total: 1 }));
+  assert.equal(result.status, 'fail');
+  assert.deepEqual(result.vulnerable, []);
+});
+
+test('the packages are the directories with a package-lock.json, node_modules and the rest excluded', () => {
+  const found = withTree(
+    {
+      front: ['package-lock.json'],
+      back: ['package-lock.json', 'package.json'],
+      tools: ['package-lock.json'],
+      docs: ['README.md'],
+      node_modules: ['package-lock.json'],
+      'back/nested': ['package-lock.json'],
+    },
+    discoverPackages
+  );
+
+  assert.deepEqual(found, ['back', 'front', 'tools']);
+});
+
+test('the repository root yields back, front and e2e', () => {
+  assert.deepEqual(discoverPackages(join(dirname(GATE), '..')), ['back', 'e2e', 'front']);
+});
+
+test('a run that times out is unreadable, and the timeout reaches the spawned npm', () => {
+  let seen;
+  const timedOut = auditPackage('anywhere', {
+    timeoutMs: 5000,
+    spawn: (_command, _args, options) => {
+      seen = options;
+      return { error: Object.assign(new Error('spawnSync npm ETIMEDOUT'), { code: 'ETIMEDOUT' }), stdout: '' };
+    },
+  });
+
+  assert.equal(timedOut.status, 'unreadable');
+  assert.match(timedOut.reason, /did not finish within 5 seconds/);
+  assert.equal(seen.timeout, 5000);
+});
+
+test('npm that cannot start, or prints no report, is unreadable', () => {
+  const missing = auditPackage('anywhere', {
+    spawn: () => ({ error: Object.assign(new Error('spawnSync npm ENOENT'), { code: 'ENOENT' }), stdout: null }),
+  });
+  assert.equal(missing.status, 'unreadable');
+  assert.match(missing.reason, /could not run npm/);
+
+  assert.equal(auditPackage('anywhere', { spawn: () => ({ status: 1, stdout: '' }) }).status, 'unreadable');
+  assert.equal(auditPackage('anywhere', { spawn: () => ({ status: 0, stdout: null }) }).status, 'unreadable');
+  assert.equal(auditPackage('anywhere', { spawn: () => ({ status: 0, stdout: 'not json' }) }).status, 'unreadable');
+});
+
+test('process: an --input that cannot be read exits 2', () => {
+  const run = runGate(['--input', join(tmpdir(), 'audit-gate-does-not-exist.json')]);
+
+  assert.equal(run.status, EXIT.UNREADABLE);
+  assert.match(run.stderr, /cannot read/);
+});
+
+test('process: --input without a file exits 2', () => {
+  assert.equal(runGate(['--input']).status, EXIT.UNREADABLE);
+});
+
+test('process: --input with a report that is not one exits 2, and a failing one exits 1 with its packages', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-gate-'));
+  try {
+    const garbage = join(dir, 'garbage.json');
+    writeFileSync(garbage, 'npm ERR! offline');
+    assert.equal(runGate(['--input', garbage]).status, EXIT.UNREADABLE);
+
+    const failing = join(dir, 'failing.json');
+    writeFileSync(failing, withAdvisories({ high: 1, total: 1 }, { minimist: { severity: 'high' } }));
+    const run = runGate(['--input', failing]);
+    assert.equal(run.status, EXIT.FAILED);
+    assert.match(run.stdout, /high\s+minimist/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('process: a root with no package exits 2 instead of passing on nothing', () => {
+  const run = withTree({ docs: ['README.md'], node_modules: ['package-lock.json'] }, (root) => runGate(['--root', root]));
+
+  assert.equal(run.status, EXIT.UNREADABLE);
+  assert.match(run.stderr, /no package with a package-lock\.json/);
+});
+
+test('process: a root that does not exist, or --root without a value, exits 2', () => {
+  assert.equal(runGate(['--root', join(tmpdir(), 'audit-gate-does-not-exist')]).status, EXIT.UNREADABLE);
+  assert.equal(runGate(['--root']).status, EXIT.UNREADABLE);
+});
+
+test('process: a package whose npm is missing exits 2, never 0', () => {
+  const empty = mkdtempSync(join(tmpdir(), 'audit-gate-path-'));
+  try {
+    const run = withTree({ tool: ['package-lock.json'] }, (root) => runGate(['--root', root], { PATH: empty, Path: empty }));
+
+    assert.equal(run.status, EXIT.UNREADABLE);
+    assert.match(run.stdout, /UNREADABLE/);
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
 });
