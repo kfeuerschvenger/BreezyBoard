@@ -221,7 +221,9 @@ const resolveRequestedBoardId = req => req.params.boardId || req.params.id || re
  * A soft-deleted board is a missing board, for everybody, which is what
  * keeps every route behind this middleware from serving it. The restore
  * route alone opts in with `includeDeleted`, and still resolves the role
- * first, so a stranger learns nothing about a deleted board either.
+ * first. There a caller with no role is told 404, the answer a missing board
+ * gets, so the route confirms the existence of neither a deleted board nor a
+ * live one.
  *
  * @param {'member' | 'owner'} minimumRole
  * @param {{ includeDeleted?: boolean }} [options]
@@ -241,7 +243,12 @@ export const requireBoardRole =
       const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
 
       if (!meetsMinimumRole(role, minimumRole)) {
-        throw new ApiError(403, 'Not authorized to access this board');
+        // The restore route confirms the existence of no board to somebody who
+        // has no role on it, the answer an unknown id gets. A caller who does
+        // have a role but not a high enough one already knows the board.
+        throw includeDeleted && !role
+          ? new ApiError(404, 'Board not found')
+          : new ApiError(403, 'Not authorized to access this board');
       }
 
       req.board = board;
@@ -269,7 +276,9 @@ export const requireBoardRole =
  * board. The restore route alone opts in with `includeDeleted`, and still
  * resolves the role on the board first. There a caller with no role is told
  * 404, the answer a missing task gets, so the route confirms the existence of
- * neither a deleted task nor a live one.
+ * neither a deleted task nor a live one. That holds when the task's board is
+ * deleted or gone too: the role is resolved before the board's state is
+ * looked at, so the board's own 404 is reserved for somebody who has a role.
  *
  * @param {'member' | 'owner'} minimumRole
  * @param {{ includeDeleted?: boolean }} [options]
@@ -287,12 +296,19 @@ export const requireTaskBoardRole =
       }
 
       const board = await Board.findById(task.boardId);
+      const role = board ? resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id)) : null;
+
+      // The role comes before the board's own state so that a caller with none
+      // is told the same thing whether the board is live, deleted or gone: the
+      // task is not found. Only somebody who has a role on a deleted board is
+      // told it is the board that is missing.
+      if (includeDeleted && !role) {
+        throw new ApiError(404, 'Task not found');
+      }
 
       if (!board || board.deletedAt) {
         throw new ApiError(404, 'Board not found');
       }
-
-      const role = resolveBoardRole(board, req.user.id, await loadWorkspaceRole(board, req.user.id));
 
       if (!meetsMinimumRole(role, minimumRole)) {
         if (includeDeleted) {

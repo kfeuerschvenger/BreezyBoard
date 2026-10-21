@@ -238,6 +238,39 @@ describe('task soft delete and restore', () => {
       expect((await Task.findById(second._id)).deletedAt).toBeInstanceOf(Date);
     });
 
+    // The board is deleted, or gone, so the answer cannot come from the role on
+    // it; whatever it names must not tell a stranger the task id is real.
+    test('answers somebody with no role the same body as an unknown id when the task\'s board is deleted', async () => {
+      const stranger = await registerUser();
+      await asUser('delete', `/boards/${board._id}`, owner);
+
+      const res = await asUser('post', `/tasks/${second._id}/restore`, stranger);
+      const unknown = await asUser('post', '/tasks/64b64b64b64b64b64b64b64b/restore', stranger);
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(unknown.body);
+    });
+
+    test('answers somebody with no role the same body as an unknown id when the task\'s board no longer exists', async () => {
+      const stranger = await registerUser();
+      await Board.deleteOne({ _id: board._id });
+
+      const res = await asUser('post', `/tasks/${second._id}/restore`, stranger);
+      const unknown = await asUser('post', '/tasks/64b64b64b64b64b64b64b64b/restore', stranger);
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(unknown.body);
+    });
+
+    test('still tells a member of a deleted board that it is the board that is missing', async () => {
+      await asUser('delete', `/boards/${board._id}`, owner);
+
+      const res = await asUser('post', `/tasks/${second._id}/restore`, owner);
+
+      expect(res.status).toBe(404);
+      expect(res.body.message).toBe('Board not found');
+    });
+
     test('answers somebody with no role on the board 404 for a task that is not deleted either', async () => {
       const stranger = await registerUser();
 
