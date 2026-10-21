@@ -34,7 +34,6 @@ import {
   ColorSchema,
   DashboardStatsSchema,
   TaskSchema,
-  TaskWithIdsSchema,
   TemplateSchema,
   UserSchema,
   WorkspaceSchema,
@@ -96,7 +95,6 @@ export const responseModels = {
   ),
   TaskResponse: envelope(TaskSchema),
   TaskListResponse: envelope(z.array(TaskSchema), { paginated: true }),
-  TaskWithIdsResponse: envelope(TaskWithIdsSchema),
   TaskDeletedResponse: envelope(z.looseObject({ message: z.literal('Task deleted successfully') })),
   WorkspaceResponse: envelope(WorkspaceSchema),
   WorkspaceListResponse: envelope(z.array(WorkspaceSchema)),
@@ -412,7 +410,7 @@ export const operations = [
     access: 'Member of the task\'s board.',
     request: { params: checklistParamsSchema },
     body: 'UpdateChecklistItemRequest',
-    success: { status: 200, model: 'TaskWithIdsResponse', description: 'The task with the item changed. Its color and owner are ids, not populated.' },
+    success: { status: 200, model: 'TaskResponse', description: 'The task with the item changed.' },
     errors: [403, 404],
   },
   {
@@ -422,7 +420,7 @@ export const operations = [
     summary: 'Remove a checklist item',
     access: 'Member of the task\'s board.',
     request: { params: checklistParamsSchema },
-    success: { status: 200, model: 'TaskWithIdsResponse', description: 'The task without the item. Its color and owner are ids, not populated.' },
+    success: { status: 200, model: 'TaskResponse', description: 'The task without the item.' },
     errors: [403, 404],
   },
 
