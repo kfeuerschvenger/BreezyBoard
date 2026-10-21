@@ -14,7 +14,7 @@ import { globalIgnores } from 'eslint/config';
 export default [
   globalIgnores(['node_modules', 'uploads', 'coverage']),
   {
-    files: ['**/*.js'],
+    files: ['**/*.{js,mjs}'],
     ...js.configs.recommended,
     languageOptions: {
       ecmaVersion: 2022,
