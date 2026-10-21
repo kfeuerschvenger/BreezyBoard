@@ -18,6 +18,11 @@ export const ErrorCode = Object.freeze({
   // 400 and never a 401: a client treats every 401 as an ended session and
   // signs the person out, and a mistyped password is not that.
   WRONG_CURRENT_PASSWORD: 'WRONG_CURRENT_PASSWORD',
+  // An upload rejected before it is stored: a declared type that is not an
+  // image, or a file over the size limit. Both are the caller's mistake, so a
+  // 400, and a client can word each one differently.
+  INVALID_FILE_TYPE: 'INVALID_FILE_TYPE',
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   CONFLICT: 'CONFLICT',
   INTERNAL: 'INTERNAL',
 });

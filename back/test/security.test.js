@@ -362,6 +362,39 @@ describe('avatar upload content verification', () => {
     expect(res.status).toBe(400);
   });
 
+  test('answers 400 with its own code for a declared type that is not an image', async () => {
+    const res = await request(app)
+      .post(`/api/users/${user.user._id}/avatar`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .attach('avatar', Buffer.from('plain text'), { filename: 'notes.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'INVALID_FILE_TYPE',
+      message: 'Invalid file type. Only image files are allowed.',
+    });
+  });
+
+  test('answers 400 with its own code for a file over 6 MB', async () => {
+    const oversized = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(6 * 1024 * 1024 + 1),
+    ]);
+
+    const res = await request(app)
+      .post(`/api/users/${user.user._id}/avatar`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .attach('avatar', oversized, { filename: 'big.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'FILE_TOO_LARGE',
+      message: 'That file is too large. The limit is 6 MB.',
+    });
+  });
+
   test('accepts a file whose bytes really are a PNG', async () => {
     const png = Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
