@@ -148,10 +148,10 @@ npm 11.17.0 blocks a dependency's install script unless `allowScripts` in that p
 
 `docker-compose.prod.yml` builds the production images: the frontend is built into nginx, which serves it and proxies `/api` and `/uploads` to the backend on a single origin. The stack serves plain HTTP on `HTTP_PORT` (8080 by default), so TLS has to be terminated in front of it.
 
-The compose file refuses to start without `MONGO_USER`, `MONGO_PASSWORD`, `JWT_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `SMTP_HOST` and `MAIL_FROM`, and the backend refuses to start in production without a secret, an origin allowlist and a mail relay. The first start generates the MongoDB keyfile into its own volume.
+The compose file refuses to start without `MONGO_USER`, `MONGO_PASSWORD`, `JWT_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `SMTP_HOST` and `MAIL_FROM`, and the backend refuses to start in production without a database connection string, a secret of at least 32 characters, an origin allowlist and a mail relay, and for any variable with a malformed value. The first start generates the MongoDB keyfile into its own volume.
 
 ```
-MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-only \
+MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-trial-secret-not-for-real-use-0123456789 \
   CORS_ORIGINS=http://localhost:8080 FRONTEND_URL=http://localhost:8080 \
   SMTP_HOST=localhost MAIL_FROM='BreezyBoard <no-reply@example.test>' HTTP_PORT=8080 \
   docker compose -f docker-compose.prod.yml up -d --build

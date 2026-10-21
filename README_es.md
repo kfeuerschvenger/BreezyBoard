@@ -140,10 +140,10 @@ npm 11.17.0 bloquea el script de instalación de una dependencia salvo que `allo
 
 `docker-compose.prod.yml` construye las imágenes de producción: el frontend se compila dentro de nginx, que lo sirve y hace de proxy de `/api` y `/uploads` hacia el backend, en un solo origen. El stack sirve HTTP plano en `HTTP_PORT` (8080 por defecto), por lo que TLS debe terminarse delante de él.
 
-El archivo de compose se niega a iniciar sin `MONGO_USER`, `MONGO_PASSWORD`, `JWT_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `SMTP_HOST` y `MAIL_FROM`, y el backend se niega a iniciar en producción sin un secreto, una lista de orígenes permitidos y un relay de correo. El primer inicio genera el keyfile de MongoDB en su propio volumen.
+El archivo de compose se niega a iniciar sin `MONGO_USER`, `MONGO_PASSWORD`, `JWT_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `SMTP_HOST` y `MAIL_FROM`, y el backend se niega a iniciar en producción sin una cadena de conexión a la base de datos, un secreto de al menos 32 caracteres, una lista de orígenes permitidos y un relay de correo, y ante cualquier variable con un valor mal formado. El primer inicio genera el keyfile de MongoDB en su propio volumen.
 
 ```bash
-MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-only \
+MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-trial-secret-not-for-real-use-0123456789 \
   CORS_ORIGINS=http://localhost:8080 FRONTEND_URL=http://localhost:8080 \
   SMTP_HOST=localhost MAIL_FROM='BreezyBoard <no-reply@example.test>' HTTP_PORT=8080 \
   docker compose -f docker-compose.prod.yml up -d --build

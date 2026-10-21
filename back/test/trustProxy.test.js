@@ -76,6 +76,7 @@ describe('TRUST_PROXY_HOPS', () => {
     const env = await loadEnv({
       NODE_ENV: 'production',
       TRUST_PROXY_HOPS: '',
+      JWT_SECRET: 'a-production-secret-of-32-characters',
       CORS_ORIGINS: 'https://breezyboard.example',
       FRONTEND_URL: 'https://breezyboard.example',
       SMTP_HOST: 'smtp.example.com',

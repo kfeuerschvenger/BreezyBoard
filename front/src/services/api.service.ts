@@ -1,10 +1,11 @@
 import axios from 'axios';
 import type { AxiosError, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { frontendEnv } from '../config/env';
 import { clearAuth, redirectToLogin } from '../utils/auth.helper';
 import { markSessionRenewed } from '../features/session/sessionActivity';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: frontendEnv.apiUrl,
   headers: {
     'Content-Type': 'application/json',
   },

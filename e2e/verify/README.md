@@ -98,7 +98,7 @@ It also measures contrast, with `contrast.mjs`, after every scan. A hand picked 
 **`csp.mjs`** runs against the production stack rather than development, because the Content-Security-Policy is served by nginx and does not exist in the Vite dev server. It loads the real application and asserts zero policy violations, zero console errors and zero failed requests. It also asserts that the page makes no request to another origin, that the policy names no font host, and that the Bricolage Grotesque and Instrument Sans files load from the application origin with status 200. It also opens the profile, uploads a picture and asserts that the picture is drawn from the application origin, which needs the policy to allow it and nginx to pass the page's own host and port through to the API. Bring that stack up first:
 
 ```bash
-MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-only \
+MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-trial-secret-not-for-real-use-0123456789 \
   CORS_ORIGINS=http://localhost:8080 FRONTEND_URL=http://localhost:8080 \
   SMTP_HOST=localhost MAIL_FROM='BreezyBoard <no-reply@example.test>' HTTP_PORT=8080 \
   docker compose -f docker-compose.prod.yml up -d --build

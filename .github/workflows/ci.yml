@@ -95,7 +95,8 @@ jobs:
       # reach no running container: the images are built and thrown away.
       MONGO_USER: ci
       MONGO_PASSWORD: ci-not-a-secret
-      JWT_SECRET: ci-not-a-secret
+      # At least 32 characters, the length the backend demands of a production secret.
+      JWT_SECRET: ci-throwaway-secret-not-for-real-use-0000
       CORS_ORIGINS: http://localhost
       FRONTEND_URL: http://localhost
       SMTP_HOST: localhost
