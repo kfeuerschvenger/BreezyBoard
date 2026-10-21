@@ -1,0 +1,128 @@
+name: CI
+
+# Runs on every pull request into develop, test and main and on every push to
+# them. The job names below are what branch protection requires, so renaming
+# one detaches it from the rule: back, front, e2e, docker, audit.
+#
+# Playwright and e2e/verify need the whole stack running and stay local gates.
+on:
+  pull_request:
+    branches: [develop, test, main]
+  push:
+    branches: [develop, test, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  back:
+    name: back
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: back
+      # The backend has no linter yet, so there is no lint step. Add it here
+      # when one exists.
+      #
+      # The tests start their own MongoDB replica set in memory
+      # (test/globalSetup.js), so no database service is needed.
+      - name: Test
+        working-directory: back
+        run: npm test
+
+  front:
+    name: front
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: front
+      - name: Lint
+        working-directory: front
+        run: npx eslint src/
+      # tsc -b is the type check, and vite build the production bundle.
+      # tsc --noEmit checks nothing here because the root tsconfig only has
+      # project references.
+      - name: Build
+        working-directory: front
+        run: npm run build
+      # One file at a time: with files in parallel a loaded runner trips the
+      # default waitFor timeouts in the suite.
+      - name: Test
+        working-directory: front
+        run: npx vitest run --no-file-parallelism
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: e2e
+      - name: Typecheck
+        working-directory: e2e
+        run: npm run typecheck
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Throwaway values so that docker-compose.prod.yml can be parsed. They
+      # reach no running container: the images are built and thrown away.
+      MONGO_USER: ci
+      MONGO_PASSWORD: ci-not-a-secret
+      JWT_SECRET: ci-not-a-secret
+      CORS_ORIGINS: http://localhost
+      FRONTEND_URL: http://localhost
+      SMTP_HOST: localhost
+      MAIL_FROM: ci@localhost
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # The production images exactly as docker-compose.prod.yml builds them.
+      - name: Build the production images
+        run: docker compose -f docker-compose.prod.yml build
+      # The development stages, which docker-compose.yml builds.
+      - name: Build the backend development image
+        run: docker build --target dev --tag breezyboard-back-dev back
+      - name: Build the frontend development image
+        run: docker build --target dev --tag breezyboard-front-dev front
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+      # Fails on any moderate, high or critical advisory and on five or more
+      # low ones, in back, front and e2e, development dependencies included.
+      # An audit that cannot reach the registry fails as well. It runs from
+      # the lockfiles, so no install is needed.
+      - name: Unit tests of the gate
+        run: node --test scripts/audit-gate.test.mjs
+      - name: Audit gate
+        run: node scripts/audit-gate.mjs

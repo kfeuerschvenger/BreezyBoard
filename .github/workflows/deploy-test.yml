@@ -1,0 +1,24 @@
+name: Deploy test
+
+# Placeholder. Deployment is built in the separate environments project
+# (docs/REVIVAL-PLAN.md, "Test and production environments"), which fills in
+# the job below. Until then a merge into test deploys nothing.
+on:
+  push:
+    branches: [test]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Deployment is not built yet
+        run: echo "Deployment to the test environment belongs to the separate environments project. Nothing is deployed."
