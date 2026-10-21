@@ -44,9 +44,12 @@
     "globals": "^16.5.0",
     "mongodb-memory-server": "^11.2.0",
     "supertest": "^7.2.2",
-    "vitest": "^5.0.0"
+    "swagger-ui-express": "^5.0.1",
+    "vitest": "^5.0.0",
+    "yaml": "^2.9.1"
   },
   "allowScripts": {
+    "@scarf/scarf@1.4.0": false,
     "fsevents@2.3.3": false,
     "mongodb-memory-server@11.2.0": true
   }
