@@ -53,5 +53,10 @@
     "vite": "^7.0.4",
     "vitest": "^5.0.0",
     "vitest-axe": "^0.1.0"
+  },
+  "allowScripts": {
+    "@tailwindcss/oxide@4.1.11": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": false
   }
 }
