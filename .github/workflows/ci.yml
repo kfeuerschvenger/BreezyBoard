@@ -16,7 +16,10 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a superseded pull request run is cancelled. A push to develop, test
+  # or main always runs to the end, so the branch history keeps a result for
+  # every commit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   back:
@@ -30,6 +33,15 @@ jobs:
       - uses: ./.github/actions/setup-node-npm
         with:
           working-directory: back
+      # The in-memory MongoDB binary is downloaded on the first test run. npm ci
+      # deletes node_modules, so the cache is restored after the install. The
+      # key follows the lockfile because the binary version is tied to the
+      # mongodb-memory-server release it pins.
+      - name: Cache the MongoDB binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: back/node_modules/.cache/mongodb-memory-server
+          key: mongoms-${{ runner.os }}-${{ hashFiles('back/package-lock.json') }}
       - name: Lint
         working-directory: back
         run: npm run lint
