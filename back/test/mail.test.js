@@ -14,7 +14,7 @@ const loadEnv = async overrides => {
   vi.resetModules();
   vi.unstubAllEnvs();
   vi.stubEnv('NODE_ENV', 'production');
-  vi.stubEnv('JWT_SECRET', 'a-secret-for-this-test');
+  vi.stubEnv('JWT_SECRET', 'a-secret-for-this-test-of-32-characters');
   vi.stubEnv('CORS_ORIGINS', 'https://breezyboard.example');
   vi.stubEnv('FRONTEND_URL', 'https://breezyboard.example');
   vi.stubEnv('SMTP_HOST', 'smtp.example.com');

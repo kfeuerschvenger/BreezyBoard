@@ -77,7 +77,7 @@ describe('Swagger UI is development only', () => {
   test('a freshly started application answers 404 at /api/docs in production, and says nothing about the route', async () => {
     const production = await loadFreshApp({
       NODE_ENV: 'production',
-      JWT_SECRET: 'a-production-secret',
+      JWT_SECRET: 'a-production-secret-of-32-characters',
       CORS_ORIGINS: 'https://breezyboard.example',
       FRONTEND_URL: 'https://breezyboard.example',
       SMTP_HOST: 'smtp.example.com',
