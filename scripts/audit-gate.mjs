@@ -27,12 +27,16 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { delimiter, dirname, join, resolve } from 'node:path';
+import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const LOW_LIMIT = 5;
 export const AUDIT_TIMEOUT_MS = 120_000;
 const SEVERITIES = ['info', 'low', 'moderate', 'high', 'critical'];
+
+// The entry script of npm itself. pnpm and yarn also set npm_execpath to a
+// script, and their `audit` is not npm's.
+const NPM_ENTRY = /^npm-cli\.[cm]?js$/;
 
 /**
  * The packages under a root: its direct subdirectories that have a
@@ -158,18 +162,22 @@ export function formatTable(rows) {
  * kills the shell and leaves npm running. So where npm's own entry script can
  * be found, node runs it directly and the timeout reaches the process that is
  * doing the work. The entry is the one `npm_execpath` names when the gate was
- * started by npm, or else `node_modules/npm/bin/npm-cli.js` inside a PATH
- * directory, which is where both the Node installer and `npm install --global
- * npm` put it. Anywhere it is not found the plain `npm` is the fallback, which
- * a POSIX system starts without a shell and Windows fails to start, and a
- * failure to start is unreadable, never a pass.
+ * started by npm, which is recognised by the name `npm-cli.js` (or `.cjs`,
+ * `.mjs`) so that the script of pnpm or yarn is never taken for npm's, or else
+ * `node_modules/npm/bin/npm-cli.js` inside a PATH directory. That lookup only
+ * matches on Windows, where the Node installer and `npm install --global npm`
+ * put npm under a PATH directory; on POSIX npm lives under `lib/node_modules`
+ * beside `bin`, which is not a PATH directory. There the gate falls back to the
+ * plain `npm`, a shebang script that runs directly with no shell, so the
+ * timeout reaches npm all the same. On Windows the plain `npm` fails to start,
+ * and a failure to start is unreadable, never a pass.
  *
  * @param {{ env?: NodeJS.ProcessEnv, execPath?: string, exists?: (path: string) => boolean, separator?: string }} [options]
  * @returns {{ command: string, args: string[] }}
  */
 export function npmInvocation({ env = process.env, execPath = process.execPath, exists = existsSync, separator = delimiter } = {}) {
   const fromNpm = env.npm_execpath;
-  if (fromNpm && /\.[cm]?js$/i.test(fromNpm) && exists(fromNpm)) return { command: execPath, args: [fromNpm] };
+  if (fromNpm && NPM_ENTRY.test(basename(fromNpm)) && exists(fromNpm)) return { command: execPath, args: [fromNpm] };
 
   const searchPath = env.PATH ?? env.Path ?? '';
   for (const directory of searchPath.split(separator).filter(Boolean)) {
