@@ -199,6 +199,9 @@ describe('CORS_ORIGINS', () => {
     ['https://breezyboard.example?x=1', 'has a query string'],
     ['https://breezyboard.example/#top', 'has a fragment'],
     ['https://bb:hunter2@breezyboard.example', 'has credentials'],
+    ['https://@breezyboard.example', 'has credentials'],
+    ['https://:@breezyboard.example', 'has credentials'],
+    ['https://bb@breezyboard.example', 'has credentials'],
   ])('refuses %s, which can never equal a request Origin header, and says why', async (value, reason) => {
     const failure = await loadEnv({ CORS_ORIGINS: value }).catch(error => error);
 

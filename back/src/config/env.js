@@ -147,7 +147,10 @@ const buildSchema = isProduction => {
       return 'does not use http or https';
     }
 
-    if (url.username || url.password) {
+    // The parsed username and password are empty for `https://@host` and
+    // `https://:@host`, which would drop the `@` and accept the entry, so the
+    // authority text itself is read for it.
+    if (url.username || url.password || /^[^:/?#]+:\/\/[^/?#]*@/.test(entry)) {
       return 'has credentials';
     }
 
