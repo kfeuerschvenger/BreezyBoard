@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import env from '../config/env.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 
@@ -17,10 +17,11 @@ import { ErrorCode } from '../constants/errorCodes.js';
  */
 export const rateLimitTesting = { enabled: false };
 
-// Every limiter below is keyed on req.ip, the client's IP address as the
-// trusted proxies report it (see TRUST_PROXY_HOPS in config/env.js). A budget
-// is therefore per client address, never per account or per email address, and
-// clients behind one shared address (an office, a mobile carrier) share it.
+// Every limiter below except changePasswordLimiter is keyed on req.ip, the
+// client's IP address as the trusted proxies report it (see TRUST_PROXY_HOPS in
+// config/env.js). A budget is therefore per client address, never per account or
+// per email address, and clients behind one shared address (an office, a mobile
+// carrier) share it.
 const shared = {
   standardHeaders: true,
   legacyHeaders: false,
@@ -40,6 +41,28 @@ export const authLimiter = rateLimit({
   // Count only failures, so a person legitimately using the app is never
   // locked out by their own successful logins.
   skipSuccessfulRequests: true,
+});
+
+/**
+ * A password change, which asks for the current password and so lets whoever
+ * holds a session token guess it.
+ *
+ * Same window, limit and failures-only counting as authLimiter, with two
+ * differences that follow from the route being authenticated. It has its own
+ * budget, so failed sign ins do not block a person changing their password and
+ * the reverse. And it is keyed on the account, not the client address: the
+ * guesser holds one token for one account, rotating addresses must not reset
+ * the count, and one account spending the budget must not lock out another
+ * account behind the same office or carrier address. It has to run after
+ * `authenticate`, which is what sets `req.user`, and after the body schema, so
+ * that a request refused before any password was compared spends nothing.
+ */
+export const changePasswordLimiter = rateLimit({
+  ...shared,
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  keyGenerator: req => (req.user ? `user:${req.user.id}` : ipKeyGenerator(req.ip)),
 });
 
 /**

@@ -185,6 +185,26 @@ describe('PasswordPanel', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  // A 429 is the limiter on failed attempts, not an ended session: the person
+  // is still signed in and is told to wait, in the words the forgot password
+  // dialog uses, with no field marked wrong.
+  it('tells a rate limited person to wait, keeps the session and marks no field', async () => {
+    const user = userEvent.setup();
+    mockedAuth.changePassword.mockRejectedValue(refusal(429, 'RATE_LIMITED'));
+    renderPanel();
+
+    await fill(user, ['OldPassword123', 'NewPassword456', 'NewPassword456']);
+    await user.click(submit());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Too many attempts. Please wait a few minutes before trying again.'
+    );
+    expect(screen.queryByText(/We could not change your password/)).not.toBeInTheDocument();
+    expect(current()).not.toBeInvalid();
+    expect(auth.clearSession).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('clears the banner on the next keystroke', async () => {
     const user = userEvent.setup();
     mockedAuth.changePassword.mockRejectedValue(refusal(500, 'INTERNAL'));

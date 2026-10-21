@@ -1,10 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AuthService } from '@/services';
-import { apiErrorCodeOf } from '@/shared/lib/httpStatus';
+import { apiErrorCodeOf, httpStatusOf } from '@/shared/lib/httpStatus';
 
-/** What happened to a password change, for the form to say. A success has already left the page. */
-export type ChangePasswordOutcome = 'wrong-current' | 'failed';
+/**
+ * What happened to a password change, for the form to say. A success has
+ * already left the page. `rate-limited` is the server's cap on failed
+ * attempts: the session is intact and the person has to wait.
+ */
+export type ChangePasswordOutcome = 'wrong-current' | 'rate-limited' | 'failed';
 
 export interface UseChangePasswordResult {
   /** Resolves with why it did not change. Resolves with nothing once it has, because the page is gone by then. */
@@ -28,7 +32,11 @@ export function useChangePassword(): UseChangePasswordResult {
     try {
       await AuthService.changePassword(currentPassword, newPassword);
     } catch (error) {
-      return apiErrorCodeOf(error) === 'WRONG_CURRENT_PASSWORD' ? 'wrong-current' : 'failed';
+      if (apiErrorCodeOf(error) === 'WRONG_CURRENT_PASSWORD') {
+        return 'wrong-current';
+      }
+
+      return httpStatusOf(error) === 429 ? 'rate-limited' : 'failed';
     }
 
     // The reason matters: dropping the session sends a page behind the sign in
