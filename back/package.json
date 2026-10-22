@@ -4,11 +4,17 @@
   "type": "module",
   "main": "app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "seed:templates": "node seeds/templates_and_colors.js",
     "seed:users": "node seeds/users.seed.js",
-    "seed:all": "npm run seed:templates && npm run seed:users"
+    "seed:all": "npm run seed:templates && npm run seed:users",
+    "migrate:board-hues": "node seeds/migrate_board_hues.js",
+    "lint": "eslint .",
+    "openapi": "node scripts/openapi.mjs",
+    "openapi:check": "node scripts/openapi.mjs --check",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
   },
   "keywords": [],
   "author": {
@@ -23,11 +29,30 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.7.0",
+    "fractional-indexing": "^4.0.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.17.0",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "nodemailer": "^10.0.16",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "zod": "^4.6.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
+    "mongodb-memory-server": "^11.2.0",
+    "supertest": "^7.2.2",
+    "swagger-ui-express": "^5.0.1",
+    "vitest": "^5.0.0",
+    "yaml": "^2.9.1"
+  },
+  "allowScripts": {
+    "@scarf/scarf@1.4.0": false,
+    "fsevents@2.3.3": false,
+    "mongodb-memory-server@11.2.0": true
   }
 }

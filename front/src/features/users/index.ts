@@ -1,0 +1,32 @@
+// The public surface of the users feature. Another feature reaches this one
+// through this file and never into its internals, which is what the
+// dependency direction rule in the lint config enforces.
+export { AddMemberModal } from './components/AddMemberModal';
+export type { AddMemberModalProps } from './components/AddMemberModal';
+export { AvatarUploader } from './components/AvatarUploader';
+export type { AvatarUploaderProps } from './components/AvatarUploader';
+export { MemberSearchResults } from './components/MemberSearchResults';
+export type { MemberSearchResultsProps } from './components/MemberSearchResults';
+export { SelectedMembers } from './components/SelectedMembers';
+export type { SelectedMembersProps } from './components/SelectedMembers';
+export { BreezePreferences } from './components/BreezePreferences';
+export { PasswordPanel } from './components/PasswordPanel';
+export { ProfileActions } from './components/ProfileActions';
+export type { ProfileActionsProps } from './components/ProfileActions';
+export { SignOutCard } from './components/SignOutCard';
+export type { SignOutCardProps } from './components/SignOutCard';
+export { ProfileForm } from './components/ProfileForm';
+export type { ProfileFormProps } from './components/ProfileForm';
+export { ProfileSummary } from './components/ProfileSummary';
+export type { ProfileSummaryProps } from './components/ProfileSummary';
+export { UserMenu } from './components/UserMenu';
+export type { UserMenuProps } from './components/UserMenu';
+export { UserPicker } from './components/UserPicker';
+export type { UserPickerProps } from './components/UserPicker';
+export { useMemberSearch } from './hooks/useMemberSearch';
+export type { UseMemberSearchResult } from './hooks/useMemberSearch';
+export { useChangePassword } from './hooks/useChangePassword';
+export type { ChangePasswordOutcome, UseChangePasswordResult } from './hooks/useChangePassword';
+export { useProfile } from './hooks/useProfile';
+export type { ProfileFormValues, UseProfileResult } from './hooks/useProfile';
+export { userKeys, useUser, useBoardMembers, useUpdateUser, useUploadAvatar } from './queries';

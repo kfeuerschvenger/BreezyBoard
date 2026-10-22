@@ -1,0 +1,113 @@
+name: breezyboard-prod
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?set MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?set MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-boards-db}
+    # A single node replica set, for the same reason as in development: the
+    # board delete cascade runs in a transaction, and transactions do not
+    # exist on a standalone instance. Production adds one requirement
+    # development does not have. Once authentication is on, a replica set also
+    # demands internal authentication between its members, and that is a
+    # keyfile even when the set has exactly one member. The keyfile is a
+    # shared secret, so it is generated on first start into its own named
+    # volume rather than committed to this repository. Deleting that volume
+    # without deleting mongo-data leaves a set that can no longer authenticate
+    # to itself.
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        if [ ! -s /etc/mongo-keyfile/keyfile ]; then
+          head -c 756 /dev/urandom | base64 > /etc/mongo-keyfile/keyfile
+        fi
+        chmod 400 /etc/mongo-keyfile/keyfile
+        chown mongodb:mongodb /etc/mongo-keyfile/keyfile
+        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /etc/mongo-keyfile/keyfile --bind_ip_all
+    volumes:
+      - mongo-data:/data/db
+      - mongo-keyfile:/etc/mongo-keyfile
+    # Initiates the set on first start and reports healthy only once the node
+    # is a writable primary. Unlike development this has to authenticate,
+    # because the keyfile turns authorization on for every connection.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - |
+          mongosh --quiet \
+            --username "$$MONGO_INITDB_ROOT_USERNAME" \
+            --password "$$MONGO_INITDB_ROOT_PASSWORD" \
+            --authenticationDatabase admin \
+            --eval "try { rs.status() } catch (error) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) } quit(db.hello().isWritablePrimary ? 0 : 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  back:
+    build:
+      context: ./back
+      target: prod
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/${MONGO_DB:-boards-db}?authSource=admin&replicaSet=rs0
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      NODE_ENV: production
+      SALT: 12
+      # Comma separated list of origins allowed to call the API from a browser.
+      # nginx proxies /api on the same origin as the site, so for this topology
+      # the value is simply the public origin of the site itself, for example
+      # https://breezyboard.example. The API refuses to start without it rather
+      # than falling back to allowing every origin, which is what it used to do.
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS to the public origin of the site}
+      # Reverse proxies in front of the API, counted from the API outward.
+      # The front container's nginx is the one, and it overwrites
+      # X-Forwarded-For with the address it sees. A load balancer or CDN placed
+      # before it would make that address the balancer's, so such a deployment
+      # has to teach nginx the real client address (the realip module) before
+      # this count is raised. Every rate limit is keyed on the address this
+      # count produces.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      # Password reset mail. The API refuses to start without a relay, a
+      # sender and the public origin: a reset link is an account takeover
+      # waiting for the wrong recipient, so the alternative of logging it
+      # when no relay is configured would put live tokens in the logs.
+      # SMTP_USER and SMTP_PASSWORD are optional but only together.
+      FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL to the public origin of the site}
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST to the mail relay}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM to the sender address, for example BreezyBoard <no-reply@breezyboard.example>}
+    volumes:
+      - uploads:/app/uploads
+
+  front:
+    build:
+      context: ./front
+      target: prod
+      args:
+        VITE_API_URL: /api/v1
+        VITE_USE_STRICT_MODE: "true"
+    restart: unless-stopped
+    depends_on:
+      - back
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+
+volumes:
+  mongo-data:
+  mongo-keyfile:
+  uploads:

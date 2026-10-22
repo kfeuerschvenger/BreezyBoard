@@ -1,0 +1,29 @@
+name: Set up Node and npm
+description: Node 22 with the npm cache, then the npm major that enforces the install script policy, then a clean install in one package.
+
+inputs:
+  working-directory:
+    description: The package to install, relative to the repository root.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    # The npm bundled with Node 22 is npm 10, which ignores allowScripts and
+    # strict-allow-scripts in package.json and .npmrc. The policy is enforced
+    # from npm 11, so the same version the project is developed with is
+    # installed here. Raise it together with the local npm.
+    - name: Install npm 11.17.0
+      shell: bash
+      run: npm install --global npm@11.17.0
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npm ci

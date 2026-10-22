@@ -41,21 +41,20 @@ export const deleteTask = async (req, res, next) => {
   }
 };
 
-export const moveTask = async (req, res, next) => {
+export const restoreTask = async (req, res, next) => {
   try {
-    const { status, order } = req.body;
-    const task = await taskService.moveTask(req.params.id, status, order);
+    const task = await taskService.restoreTask(req.params.id);
     responseHandler(res, 200, task);
   } catch (error) {
     next(error);
   }
 };
 
-export const updateOrders = async (req, res, next) => {
+export const moveTask = async (req, res, next) => {
   try {
-    const { updates } = req.body;
-    await taskService.updateOrders(updates);
-    responseHandler(res, 200, { message: 'Orders updated successfully' });
+    const { status, afterId, beforeId } = req.body;
+    const task = await taskService.moveTask(req.params.id, status, { afterId, beforeId });
+    responseHandler(res, 200, task);
   } catch (error) {
     next(error);
   }
@@ -63,8 +62,9 @@ export const updateOrders = async (req, res, next) => {
 
 export const getBoardTasks = async (req, res, next) => {
   try {
-    const tasks = await taskService.getTasksByBoard(req.params.boardId);
-    responseHandler(res, 200, tasks);
+    const { limit, offset } = req.query;
+    const { tasks, pagination } = await taskService.getTasksByBoard(req.params.boardId, { limit, offset });
+    responseHandler(res, 200, tasks, { pagination });
   } catch (error) {
     next(error);
   }

@@ -1,0 +1,16 @@
+
+# Local agent tooling
+.atl/
+.claude/
+
+# The compose files substitute ${NAME} from a .env here, and for production
+# that file holds the database password and the JWT secret.
+.env
+.env.*
+
+# A marker that has to exist at the project root and must never be committed.
+.no-telemetry
+
+# Private working documents, kept out of the repository.
+docs/private/
+/handoff.md
