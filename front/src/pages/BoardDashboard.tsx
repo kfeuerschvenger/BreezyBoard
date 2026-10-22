@@ -1,503 +1,196 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Users, Calendar, MoreHorizontal, Folder, Trash2 } from 'lucide-react';
-import * as Icons from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import CreateBoardModal from '../components/CreateBoardModal';
-import AddMemberModal from '../components/AddMemberModal';
-import { BoardService, DashboardService } from '@/services';
-import { resolveColorValue, resolveColorValueSync } from '@/utils/colorUtils';
-import type { Board, User } from '@/models';
-import PageHeader from '../components/PageHeader';
-import UserAvatar from '../components/UserAvatar';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { IconFolder, IconPlus } from '@tabler/icons-react';
+import {
+  BoardCard,
+  DeleteBoardDialog,
+  HomeHero,
+  NewBoardTile,
+  eyebrowFor,
+  greetingFor,
+  useAddMembersFlow,
+  useBoardDashboard,
+  useBoardMenu,
+} from '@/features/boards';
+import { AddMemberModal } from '@/features/users';
+import type { Board } from '@/models';
+import { AuthService } from '@/services';
+import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
+import { Button, EmptyState, LoadingScreen, Icon } from '@/shared/ui';
+import { ShellAction } from '@/app/layouts/shell/ShellAction';
+import { useShell } from '@/app/layouts/shell/shellContext';
 
-const safeFormatDate = (dateString?: string) => {
-  if (!dateString) return 'N/A';
+/**
+ * The first name to greet somebody by, read from the stored session. A
+ * session that cannot be read greets nobody by name rather than taking the
+ * page down.
+ */
+const firstNameOfSession = (): string | undefined => {
   try {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
+    return AuthService.getCurrentUser()?.firstName;
   } catch {
-    return 'Invalid date';
+    return undefined;
   }
 };
 
+/** The sentence under the greeting. It reads what the data holds today: boards, and nothing about due dates. */
+const lineFor = (boardCount: number): string =>
+  boardCount === 0
+    ? 'Clear skies: no boards yet. Start one and catch an idea.'
+    : "The wind's in your favor. Pick up where you left off.";
+
+/** The fragment that names the grid of boards: the target of the breadcrumb's "Boards" entry. */
+const BOARDS_HASH = '#boards';
+
+/**
+ * Takes the person to the grid of boards when the address names it.
+ *
+ * React Router changes the address on a hash link and leaves the scroll
+ * alone, so the page does it: the heading scrolls into view, smoothly unless
+ * the operating system asks for reduced motion, and takes focus without a
+ * second scroll, so the next Tab starts inside the grid and a screen reader
+ * starts reading at "Your boards". It runs again on every navigation to the
+ * fragment, `key` included, because the same address pressed twice is a new
+ * navigation that the hash alone would not show. `ready` holds it back until
+ * the grid is on screen.
+ */
+const useScrollToBoards = (ready: boolean) => {
+  const { hash, key } = useLocation();
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!ready || hash !== BOARDS_HASH || !heading.current) return;
+
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    heading.current.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    heading.current.focus({ preventScroll: true });
+  }, [ready, hash, key]);
+
+  return heading;
+};
+
 const BoardDashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [selectedBoardForMembers, setSelectedBoardForMembers] = useState<Board | null>(null);
+  const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
+  useDocumentTitle('Home | BreezyBoard');
 
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dashboard = useBoardDashboard();
+  const boardsHeading = useScrollToBoards(!dashboard.isLoading && !dashboard.error);
+  const addMembers = useAddMembersFlow();
+  const menu = useBoardMenu();
+  const shell = useShell();
+  const createBoard = () => shell?.openCreateBoard();
 
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const [stats, setStats] = useState({
-    totalBoards: 0,
-    totalMembers: 0,
-    totalTasks: 0,
-    avgProgress: 0,
-  });
-
-  // map boardId -> colorHex
-  const [boardColors, setBoardColors] = useState<Record<string, string>>({});
-
-  const loadData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Obtener datos en paralelo
-      const [boardsData, statsData] = await Promise.all([BoardService.getAll(), DashboardService.getStats()]);
-
-      setBoards(boardsData || []);
-      setStats(statsData);
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Failed to load data. Please try again later.');
-    } finally {
-      setIsLoading(false);
-    }
+  const openAddMember = (board: Board) => {
+    addMembers.open(board);
+    menu.close();
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Asked here rather than in the hook: whether to ask before deleting is a
+  // question about this screen, not about the write. The menu stays open
+  // behind the dialog, which is what lets the card say "Deleting..." while
+  // the request runs, and it closes once the board is gone: left open, it
+  // would reopen over the card if the board were restored.
+  const confirmDelete = async () => {
+    const board = boardToDelete;
+    setBoardToDelete(null);
+    if (!board) return;
 
-  // Pre-resolve colors for all boards when boards change
-  useEffect(() => {
-    let mounted = true;
-
-    if (!boards || boards.length === 0) {
-      setBoardColors({});
-      return;
-    }
-    (async () => {
-      try {
-        const entries = await Promise.all(
-          boards.map(async b => {
-            const id = b._id;
-            // quick sync value (may be actual hex)
-            const sync = resolveColorValueSync(b.color, '#64748B');
-            if (sync && sync !== '#64748B') {
-              return [id, sync] as [string, string];
-            }
-            // otherwise try async resolution (id or object)
-            try {
-              const hex = await resolveColorValue(b.color, '#64748B');
-              return [id, hex] as [string, string];
-            } catch {
-              return [id, '#64748B'] as [string, string];
-            }
-          })
-        );
-        if (!mounted) return;
-
-        const map: Record<string, string> = {};
-        entries.forEach(([id, hex]) => {
-          if (id) map[id] = hex;
-        });
-        setBoardColors(prev => ({ ...prev, ...map }));
-      } catch {
-        // console.warn('Failed to preload board colors');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [boards]);
-
-  // Actualizar datos después de operaciones
-  const refreshData = async () => {
-    const [boardsData, statsData] = await Promise.all([BoardService.getAll(), DashboardService.getStats()]);
-    setBoards(boardsData || []);
-    setStats(statsData);
+    await dashboard.deleteBoard(board);
+    menu.close();
   };
 
-  // close menu on Escape
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenuId(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  if (dashboard.isLoading) return <LoadingScreen label="Loading boards..." showLabel fill="parent" />;
 
-  // close menu on outside click
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const tgt = e.target as HTMLElement | null;
-      if (!tgt) return;
-      if (tgt.closest('[data-board-menu]') || tgt.closest('[data-board-menu-btn]')) return;
-      setOpenMenuId(null);
-    };
-    window.addEventListener('click', onClick);
-    return () => window.removeEventListener('click', onClick);
-  }, []);
-
-  const handleBoardClick = (boardId: string) => navigate(`/board/${boardId}`);
-
-  const handleCreateBoard = async (
-    newBoard: Omit<Board, 'id' | 'taskCount' | 'memberCount' | 'lastUpdated' | 'progress'>
-  ) => {
-    try {
-      await BoardService.create(newBoard);
-      await refreshData();
-      setShowCreateModal(false);
-    } catch (err) {
-      console.error('Error creating board:', err);
-      setError('Failed to create board. Please try again.');
-    }
-  };
-
-  const handleToggleMenu = (e: React.MouseEvent, boardId: string) => {
-    e.stopPropagation();
-    setOpenMenuId(prev => (prev === boardId ? null : boardId));
-  };
-
-  const handleDeleteBoard = async (e: React.MouseEvent, boardId: string) => {
-    e.stopPropagation();
-    const ok = window.confirm('Are you sure you want to delete this board? This action cannot be undone.');
-    if (!ok) return;
-    try {
-      await BoardService.delete(boardId);
-      await refreshData();
-    } catch (err) {
-      console.error('Error deleting board:', err);
-      setError('Failed to delete board. Please try again.');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const handleOpenAddMember = (boardId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const board = boards.find(b => b._id === boardId) ?? null;
-    setSelectedBoardForMembers(board);
-    setShowAddMemberModal(true);
-    setOpenMenuId(null);
-  };
-
-  const handleAddMembers = async (members: User[]) => {
-    if (!selectedBoardForMembers) return;
-
-    const boardId = selectedBoardForMembers._id;
-    const memberIds = members.map(m => m._id);
-
-    try {
-      await BoardService.addMembers(boardId, memberIds);
-      await refreshData();
-    } catch (error) {
-      console.error('Error adding members:', error);
-      setError('Failed to add members. Please try again.');
-    } finally {
-      setShowAddMemberModal(false);
-      setSelectedBoardForMembers(null);
-    }
-  };
-
-  const calculateProgress = (board: Board) => {
-    try {
-      if (typeof board.progress === 'number') return board.progress;
-      if (typeof board.progress === 'object' && Object.keys(board.progress).length === 0) return 0;
-      return 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  if (isLoading) {
+  if (dashboard.error) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4" />
-          <p className="text-gray-600">Loading boards...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-4">{error}</div>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-          >
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="max-w-md text-center">
+          <div role="alert" className="mb-4 rounded-control bg-danger-bg p-4 text-danger-strong">
+            {dashboard.error}
+          </div>
+          <Button type="button" onClick={() => window.location.reload()}>
             Reload Page
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
+
+  const now = new Date();
+  const { boards } = dashboard;
+  const firstBoard = boards[0];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <PageHeader title="My Boards" subtitle="Manage and organize your project boards">
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
-        >
-          <Plus size={20} />
-          Create Board
-        </button>
-        <UserAvatar />
-      </PageHeader>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Folder className="text-blue-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalBoards}</p>
-                <p className="text-sm text-gray-600">Total Boards</p>
-              </div>
-            </div>
-          </motion.div>
+    <div className="mx-auto flex w-full max-w-310 animate-bb-view flex-col gap-7.5 pb-8">
+      <ShellAction>
+        <Button type="button" size="sm" onClick={createBoard} leftIcon={<Icon as={IconPlus} size={18} />}>
+          New board
+        </Button>
+      </ShellAction>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Users className="text-green-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalMembers}</p>
-                <p className="text-sm text-gray-600">Team Members</p>
-              </div>
-            </div>
-          </motion.div>
+      <HomeHero
+        eyebrow={eyebrowFor(now)}
+        greeting={greetingFor(now, firstNameOfSession())}
+        line={lineFor(boards.length)}
+        stats={dashboard.stats}
+        firstBoard={firstBoard ? { _id: firstBoard._id, title: firstBoard.title || 'Untitled Board' } : undefined}
+      />
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
+      <section id="boards" aria-labelledby="home-boards-heading">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2
+            id="home-boards-heading"
+            ref={boardsHeading}
+            tabIndex={-1}
+            className="font-heading text-2xl font-[650] tracking-[-0.02em] text-ink outline-none"
           >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Calendar className="text-orange-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalTasks}</p>
-                <p className="text-sm text-gray-600">Total Tasks</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center">
-                  <div className="w-2 h-2 bg-white rounded-full" />
-                </div>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.avgProgress}%</p>
-                <p className="text-sm text-gray-600">Avg Progress</p>
-              </div>
-            </div>
-          </motion.div>
+            Your boards
+          </h2>
+          <span className="font-mono text-xs text-ink-tertiary">
+            {boards.length} {boards.length === 1 ? 'board' : 'boards'}
+          </span>
         </div>
 
-        {/* Boards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {boards.map((board, index) => {
-            const id = (board as any)._id ?? (board as any).id ?? `temp-${Date.now()}-${index}`;
-            const templateObj = (board as any).template;
-            const iconName = (templateObj && (templateObj.iconName ?? templateObj.icon)) || null;
-            const IconFromTemplate = (iconName && (Icons as any)[iconName]) || Icons.Folder;
-            const colorHex = boardColors[id] ?? resolveColorValueSync((board as any).color, '#64748B');
-
-            const safeBoard = {
-              id,
-              title: board.title || 'Untitled Board',
-              description: board.description || 'No description',
-              color: colorHex,
-              progress: calculateProgress(board),
-              taskCount: typeof board.taskCount === 'number' ? board.taskCount : 0,
-              memberCount: typeof board.memberCount === 'number' ? board.memberCount : 0,
-              lastUpdated: board.lastUpdated || board.updatedAt || new Date().toISOString(),
-            };
-
-            const isMenuOpen = openMenuId === id;
-            const isDeleting = deletingId === id;
-
-            return (
-              <motion.div
-                key={safeBoard.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.08 }}
-                onClick={() => handleBoardClick(safeBoard.id)}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer group overflow-visible relative"
-                aria-label={`Board: ${safeBoard.title}`}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') handleBoardClick(safeBoard.id);
-                }}
-              >
-                {/* Header */}
-                <div className="p-6 border-b border-gray-100">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      {/* Icon colored with the board color */}
-                      <div className="flex items-center justify-center p-1 rounded" onClick={e => e.stopPropagation()}>
-                        <IconFromTemplate size={22} style={{ color: safeBoard.color }} aria-hidden="true" />
-                      </div>
-                      <h3 className="font-semibold text-gray-900 font-heading group-hover:text-blue-600 transition-colors">
-                        {safeBoard.title}
-                      </h3>
-                    </div>
-
-                    {/* Options + Add member */}
-                    <div className="flex items-center gap-2">
-                      <div className="relative">
-                        <button
-                          data-board-menu-btn
-                          onClick={e => handleToggleMenu(e, id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                          aria-label="Board options"
-                        >
-                          <MoreHorizontal size={16} className="text-gray-400" />
-                        </button>
-
-                        {isMenuOpen && (
-                          <div
-                            data-board-menu
-                            onClick={e => e.stopPropagation()}
-                            className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
-                          >
-                            <button
-                              onClick={e => handleOpenAddMember(id, e)}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 cursor-pointer"
-                            >
-                              <Users size={14} />
-                              Add Member
-                            </button>
-
-                            <button
-                              onClick={e => handleDeleteBoard(e, id)}
-                              disabled={isDeleting}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
-                            >
-                              <Trash2 size={14} className="text-red-600" />
-                              <span className="text-red-600">{isDeleting ? 'Deleting...' : 'Delete'}</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-600 font-body mb-4 min-h-[3rem]">{safeBoard.description}</p>
-
-                  {/* Progress */}
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-gray-500">Progress</span>
-                      <span className="text-xs text-gray-700 font-medium">{safeBoard.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all duration-300"
-                        style={{
-                          backgroundColor: safeBoard.color,
-                          width: `${Math.min(100, Math.max(0, safeBoard.progress))}%`,
-                        }}
-                        aria-valuenow={safeBoard.progress}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        role="progressbar"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stats */}
-                <div className="p-6">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <div className="w-3 h-3 bg-gray-300 rounded" aria-hidden="true" />
-                        <span>{safeBoard.taskCount} tasks</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-gray-600">
-                        <Users size={12} aria-hidden="true" />
-                        <span>{safeBoard.memberCount}</span>
-                      </div>
-                    </div>
-                    <div className="text-gray-500">
-                      <span>Updated {safeFormatDate(safeBoard.lastUpdated)}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* Empty */}
-        {boards.length === 0 && !isLoading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Folder className="text-gray-400" size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No boards yet</h3>
-            <p className="text-gray-600 mb-6">Create your first board to get started with project management</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-lg hover:shadow-xl"
-            >
-              Create Your First Board
-            </button>
-          </motion.div>
+        {boards.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+            {boards.map((board, index) => (
+              // `_id` is required on the model and the API always sends it. A
+              // key built from `Date.now()` would be different on every render
+              // and defeat reconciliation for the whole grid.
+              <BoardCard
+                key={board._id}
+                board={board}
+                delay={index * 0.06}
+                menuOpen={menu.isOpen(board._id)}
+                isDeleting={dashboard.isDeleting(board._id)}
+                onToggleMenu={() => menu.toggle(board._id)}
+                onAddMember={() => openAddMember(board)}
+                onDelete={() => setBoardToDelete(board)}
+              />
+            ))}
+            <NewBoardTile onClick={createBoard} delay={boards.length * 0.06} />
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Icon as={IconFolder} size={24} />}
+            title="No boards yet"
+            description="Create your first board to get started with project management"
+            action={
+              <Button type="button" onClick={createBoard}>
+                Create Your First Board
+              </Button>
+            }
+          />
         )}
-      </motion.div>
+      </section>
 
-      {/* Modals */}
-      <CreateBoardModal
-        open={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreateBoard={handleCreateBoard}
+      <DeleteBoardDialog
+        board={boardToDelete}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setBoardToDelete(null)}
       />
 
-      <AddMemberModal
-        open={showAddMemberModal}
-        onClose={() => {
-          setShowAddMemberModal(false);
-          setSelectedBoardForMembers(null);
-        }}
-        onAddMembers={handleAddMembers}
-        boardTitle={selectedBoardForMembers?.title ?? ''}
-        boardId={selectedBoardForMembers?._id ?? ''}
-      />
+      <AddMemberModal {...addMembers.dialogProps} />
     </div>
   );
 };
