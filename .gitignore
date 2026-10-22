@@ -9,3 +9,7 @@
 
 # A marker that has to exist at the project root and must never be committed.
 .no-telemetry
+
+# Private working documents, kept out of the repository.
+docs/private/
+/handoff.md
