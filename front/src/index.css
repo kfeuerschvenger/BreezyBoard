@@ -1,2 +1,547 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/*
+ * Self-hosted typefaces. The variable builds carry the weight axis (and the
+ * optical size axis for the display face) in one file per script, and each
+ * face is split by `unicode-range`, so a browser only downloads the scripts
+ * the page actually draws. `font-display: swap` is set by the packages: text
+ * paints at once in the fallback stack and swaps when the file arrives.
+ */
+@import '@fontsource-variable/bricolage-grotesque/opsz.css';
+@import '@fontsource-variable/instrument-sans/index.css';
+@import '@fontsource/dm-mono/400.css';
+@import '@fontsource/dm-mono/500.css';
 @import 'tailwindcss';
+
+/*
+ * The design token layer: typefaces, colours, radii, shadows and motion,
+ * declared once.
+ *
+ * This block is the only place a visual value is declared. Under Tailwind 4
+ * there is no config file and no implicit theme: a utility whose token is not
+ * declared here does not exist, and an unknown class is a silent no-op rather
+ * than an error. `static` makes every variable below part of the generated
+ * stylesheet whether or not a class uses it yet, so a script or a stylesheet
+ * can read any of them from `:root`.
+ *
+ * Tokens are named for the role they play, never for the value they hold. A
+ * dark theme is then a second set of values for these same names, and no
+ * feature has to change.
+ *
+ * Tailwind's own `--radius-*`, `--shadow-*` and `--color-*` scales are left
+ * alone: redefining them would restyle every component that uses `rounded-lg`
+ * or `shadow-sm` before that component has been migrated.
+ */
+@theme static {
+  /* Typefaces. Heading is the display face, body is the reading face, mono is
+     for small labels, counts and key hints. */
+  --font-heading: 'Bricolage Grotesque Variable', 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Ground, surfaces and text. The tertiary step is the lightest grey that
+     keeps 4.5:1 on white, on the ground and on every note tint, which is why
+     it is darker than the reference design's value: placeholders, eyebrow
+     labels and timestamps are small text. */
+  --color-ground: #f3f6f9;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f7f9fb;
+  --color-ink: #0f1b2d;
+  --color-ink-hover: oklch(0.3 0.08 248);
+  --color-ink-body: #2e3b4e;
+  --color-ink-secondary: #4b586b;
+  --color-ink-tertiary: #5e6b7e;
+  --color-link: oklch(0.45 0.12 232);
+  --color-selection: oklch(0.89 0.065 232);
+  --color-scrim: rgb(15 27 45 / 0.32);
+
+  /* Glass surfaces drawn over the ground gradient. */
+  --color-glass: rgb(255 255 255 / 0.62);
+  --color-glass-strong: rgb(255 255 255 / 0.82);
+  --color-glass-border: rgb(255 255 255 / 0.85);
+  /* A board column is lighter than the sidebar so the cards on it read as the
+     nearer layer, and the empty board banner sits between the two. */
+  --color-glass-column: rgb(255 255 255 / 0.5);
+  --color-glass-banner: rgb(255 255 255 / 0.72);
+
+  /* Borders and dividers, one navy at rising opacity. */
+  --color-line-05: rgb(15 27 45 / 0.05);
+  --color-line-06: rgb(15 27 45 / 0.06);
+  --color-line-07: rgb(15 27 45 / 0.07);
+  --color-line-08: rgb(15 27 45 / 0.08);
+  --color-line-10: rgb(15 27 45 / 0.1);
+  --color-line-12: rgb(15 27 45 / 0.12);
+  --color-line-14: rgb(15 27 45 / 0.14);
+  --color-line-22: rgb(15 27 45 / 0.22);
+
+  /* The boundary of a control that is not drawn with a fill of its own: an
+     input, the unchecked track of a switch, the frame of a segmented control.
+     WCAG 1.4.11 asks 3:1 against what the control sits on, and the reference
+     design's 0.12 alpha navy measures 1.28:1. At 0.5 it measures 3.34:1 on
+     white and 3.26:1 on the ground. */
+  --color-line-control: rgb(15 27 45 / 0.5);
+
+  /* The six hues. Every coloured thing in the interface is one of these, in
+     three steps: a tint for backgrounds, a deep for text on that tint, and a
+     mid for dots, bars and avatar fills. The hue angle is its own variable so
+     a gradient or a note background can be built from the same number. */
+  --hue-sky: 232;
+  --hue-teal: 192;
+  --hue-green: 150;
+  --hue-sand: 82;
+  --hue-coral: 38;
+  --hue-lavender: 300;
+
+  --color-sky-tint: oklch(0.93 0.045 var(--hue-sky));
+  --color-sky-deep: oklch(0.42 0.11 var(--hue-sky));
+  --color-sky-mid: oklch(0.72 0.12 var(--hue-sky));
+  --color-teal-tint: oklch(0.93 0.045 var(--hue-teal));
+  --color-teal-deep: oklch(0.42 0.11 var(--hue-teal));
+  --color-teal-mid: oklch(0.72 0.12 var(--hue-teal));
+  --color-green-tint: oklch(0.93 0.045 var(--hue-green));
+  --color-green-deep: oklch(0.42 0.11 var(--hue-green));
+  --color-green-mid: oklch(0.72 0.12 var(--hue-green));
+  --color-sand-tint: oklch(0.93 0.045 var(--hue-sand));
+  --color-sand-deep: oklch(0.42 0.11 var(--hue-sand));
+  --color-sand-mid: oklch(0.72 0.12 var(--hue-sand));
+  --color-coral-tint: oklch(0.93 0.045 var(--hue-coral));
+  --color-coral-deep: oklch(0.42 0.11 var(--hue-coral));
+  --color-coral-mid: oklch(0.72 0.12 var(--hue-coral));
+  --color-lavender-tint: oklch(0.93 0.045 var(--hue-lavender));
+  --color-lavender-deep: oklch(0.42 0.11 var(--hue-lavender));
+  --color-lavender-mid: oklch(0.72 0.12 var(--hue-lavender));
+
+  /* The edge step: the outline of a hue swatch and the fill of a progress
+     bar. The mid step measures 2.35 to 2.59:1 on white, which is not enough
+     for a shape that has to be seen on its own. At lightness 0.6 the edge
+     measures 3.46:1 or better on the ground and 3.75:1 or better on white,
+     for every hue. */
+  --color-sky-edge: oklch(0.6 0.1 var(--hue-sky));
+  --color-teal-edge: oklch(0.6 0.1 var(--hue-teal));
+  --color-green-edge: oklch(0.6 0.1 var(--hue-green));
+  --color-sand-edge: oklch(0.6 0.1 var(--hue-sand));
+  --color-coral-edge: oklch(0.6 0.1 var(--hue-coral));
+  --color-lavender-edge: oklch(0.6 0.1 var(--hue-lavender));
+
+  /* The accent drawn on the ink surface of a toast. */
+  --color-on-ink-accent: oklch(0.82 0.1 192);
+
+  /* Interactive blue: the accent for active icons, the focus border and the
+     toggle track, and the softer step for a field being typed into. */
+  --color-accent: oklch(0.55 0.13 232);
+  --color-accent-strong: oklch(0.62 0.13 232);
+  --color-accent-soft: oklch(0.7 0.12 232);
+  --color-focus: oklch(0.55 0.13 232);
+  --color-focus-halo: oklch(0.74 0.13 232 / 0.22);
+
+  /* Status roles. Each has an icon or fill step, a text step that holds
+     contrast on its own background, and the background. */
+  --color-success: oklch(0.6 0.13 150);
+  --color-success-strong: oklch(0.5 0.11 150);
+  --color-success-bg: oklch(0.955 0.035 150);
+  --color-warning: oklch(0.55 0.12 82);
+  --color-warning-strong: oklch(0.42 0.11 82);
+  --color-warning-bg: oklch(0.955 0.035 82);
+  --color-danger: oklch(0.48 0.13 38);
+  --color-danger-strong: oklch(0.42 0.11 38);
+  --color-danger-bg: oklch(0.955 0.035 38);
+
+  /* Radii by role, not by size. */
+  --radius-dot: 4px;
+  --radius-check: 6px;
+  --radius-chip: 8px;
+  --radius-button-small: 10px;
+  --radius-control: 12px;
+  --radius-field: 14px;
+  --radius-card: 16px;
+  --radius-float: 18px;
+  --radius-note: 20px;
+  --radius-tile: 22px;
+  --radius-panel: 24px;
+  --radius-modal: 26px;
+  --radius-hero: 28px;
+  --radius-stage: 30px;
+  --radius-pill: 99px;
+
+  /* Shadows: long, soft, with a large negative spread, in the navy of the
+     text so every surface looks lit from the same place. */
+  --shadow-nav-active: 0 6px 16px -10px rgb(15 27 45 / 0.35);
+  --shadow-card: 0 1px 0 rgb(15 27 45 / 0.04), 0 8px 20px -16px rgb(15 27 45 / 0.35);
+  --shadow-card-hover: 0 18px 30px -18px rgb(15 27 45 / 0.45);
+  --shadow-card-landing: 0 26px 40px -18px rgb(15 27 45 / 0.45);
+  --shadow-column: 0 16px 40px -32px rgb(15 27 45 / 0.4);
+  --shadow-sidebar: 0 20px 50px -30px rgb(15 27 45 / 0.35);
+  --shadow-tile: 0 14px 34px -24px rgb(15 27 45 / 0.4);
+  --shadow-tile-hover: 0 26px 44px -24px rgb(15 27 45 / 0.45);
+  --shadow-modal: 0 40px 80px -30px rgb(15 27 45 / 0.55);
+  --shadow-button: 0 12px 24px -14px rgb(15 27 45 / 0.7);
+  --shadow-button-submit: 0 14px 30px -14px rgb(15 27 45 / 0.6);
+  --shadow-button-hover: 0 20px 36px -14px rgb(15 27 45 / 0.6);
+  --shadow-toast: 0 20px 40px -18px rgb(15 27 45 / 0.7);
+  --shadow-knob: 0 2px 6px rgb(15 27 45 / 0.25);
+  --shadow-segment: 0 2px 8px -3px rgb(15 27 45 / 0.3);
+  --shadow-note: 0 18px 34px -20px rgb(15 27 45 / 0.4);
+  --shadow-hero: 0 30px 60px -36px oklch(0.4 0.12 240 / 0.8);
+  --shadow-focus: 0 0 0 4px oklch(0.74 0.13 232 / 0.22);
+  --shadow-swatch-ring: 0 0 0 2px #fff, 0 0 0 4px #0f1b2d;
+
+  /* Easings. Standard is a fast start that settles, for anything entering
+     or moving. Exit accelerates away, for anything leaving. Spring
+     overshoots slightly, for small confirmations. */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-spring: cubic-bezier(0.3, 1.4, 0.5, 1);
+
+  /* Durations. */
+  --duration-fast: 0.2s;
+  --duration-base: 0.25s;
+  --duration-moderate: 0.35s;
+  --duration-enter: 0.45s;
+  --duration-away: 0.46s;
+  --duration-land: 0.55s;
+
+  /* The loading mark. The reference's logo gradient ends at lightness 0.74,
+     where a white glyph is 2.2:1; this one stops at 0.6 and keeps the same two
+     hues, so white holds 3.65:1 or better along the whole tile. */
+  --gradient-mark: linear-gradient(135deg, oklch(0.5 0.14 248), oklch(0.6 0.12 205));
+
+  /* The logo tile of the sidebar is the reference design's own gradient and
+     keeps it: white on its light end measures about 2.2:1. The decision is the
+     product owner's. A logo is exempt from WCAG 1.4.3 and 1.4.11 as a logotype,
+     and the control it sits in carries its name as text beside it. */
+  --gradient-logo: linear-gradient(135deg, oklch(0.55 0.14 248), oklch(0.74 0.12 192));
+  --shadow-logo: 0 8px 18px -8px oklch(0.55 0.14 232 / 0.8);
+
+  /* The ground of the application shell: three soft radial lights laid over
+     the ground colour, a sky blue at the top left, a mint at the top right and
+     a sand at the bottom right. */
+  --gradient-ground:
+    radial-gradient(1200px 620px at 8% -12%, oklch(0.92 0.05 232) 0%, transparent 60%),
+    radial-gradient(900px 620px at 100% -5%, oklch(0.95 0.04 192), transparent 60%),
+    radial-gradient(1000px 700px at 85% 112%, oklch(0.955 0.045 82), transparent 60%);
+
+  /* Whole animations, each a keyframe set below with its timing and easing.
+     `animate-bb-up` and the rest are the only way a component names one, so
+     the timing lives here and never in a class string. Every one of them is
+     collapsed by the reduced motion rule at the end of this file. */
+  --animate-bb-up: bbUp 0.35s var(--ease-standard) both;
+  --animate-bb-view: bbView 0.45s var(--ease-standard) both;
+  /* The board page's entrance. It does not fill forwards: a transform that an
+     animation still holds, even one that ends at none, makes the element the
+     containing block of its fixed descendants, and the drag overlay is one, so
+     it would be placed by the page and not by the viewport. */
+  --animate-bb-view-once: bbView 0.45s var(--ease-standard) backwards;
+  --animate-bb-fade: bbFade 0.2s both;
+  --animate-bb-in: bbIn 0.5s var(--ease-standard) both;
+  --animate-bb-land: bbLand 0.55s var(--ease-standard);
+  --animate-bb-away: bbAway 0.46s var(--ease-exit) forwards;
+  --animate-bb-pop: bbPop 0.35s both;
+  --animate-bb-gap: bbGap 0.18s both;
+  --animate-bb-composer: bbUp 0.22s var(--ease-standard) both;
+  --animate-bb-hero: bbUp 0.45s var(--ease-standard) 0.1s both;
+  --animate-bb-spin: bbSpin 0.8s linear infinite;
+  --animate-bb-shake: bbShake 0.45s;
+  --animate-bb-sway: bbSway 4s ease-in-out infinite;
+  --animate-bb-sway-slow: bbSway 3s ease-in-out infinite;
+  --animate-bb-toast: bbToast 0.45s var(--ease-standard) both;
+  /* The two floating cards on the auth screen drift on different periods and
+     out of phase, so they never move together. */
+  --animate-bb-float-a: bbFloat 6s ease-in-out infinite alternate;
+  --animate-bb-float-b: bbFloat 7s ease-in-out -2s infinite alternate;
+
+  /* The brand panel of the auth screen: a teal light at the top right and a
+     coral one at the bottom left over a navy that lifts towards a steel blue. */
+  --gradient-brand-panel:
+    radial-gradient(800px 520px at 88% 12%, oklch(0.72 0.11 192 / 0.55), transparent 60%),
+    radial-gradient(700px 520px at 0% 105%, oklch(0.74 0.13 38 / 0.4), transparent 60%),
+    linear-gradient(165deg, #0f1b2d 0%, oklch(0.34 0.09 248) 52%, oklch(0.5 0.11 222) 100%);
+
+  /* The banner of the home page: a sand light at the top right over a navy that
+     lifts to a steel and a teal blue. The reference's three stops end at
+     lightness 0.74, where white text is 2.2:1; these end at 0.54, where it is
+     above 5:1, so the whole banner can carry white text at any width. */
+  --gradient-hero:
+    radial-gradient(500px 300px at 92% 0%, oklch(0.86 0.1 82 / 0.4), transparent 70%),
+    linear-gradient(118deg, oklch(0.34 0.1 250) 0%, oklch(0.46 0.11 228) 55%, oklch(0.54 0.1 205) 100%);
+
+  /* The one word of the brand headline set in a warm gradient. */
+  --gradient-wind-word: linear-gradient(90deg, oklch(0.88 0.12 82), oklch(0.78 0.14 38));
+
+  /* The sticky note drawn on the auth screen. The notes module chooses its own
+     set of tints, so this one is named for the sand it is rather than for a note. */
+  --color-note-sand: oklch(0.955 0.035 82);
+
+  /* Postcard and floating card shadows are black, not navy: they sit on a dark
+     panel, where a navy shadow would not show. */
+  --shadow-postcard: 0 34px 60px -26px rgb(0 0 0 / 0.6);
+  --shadow-float: 0 30px 60px -24px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * Keyframes. The two the wind layer drives, `bbFlow` and `bbDrift`, are not in the table above
+ * because each streak and particle carries its own duration and delay.
+ */
+@keyframes bbFlow {
+  from {
+    stroke-dashoffset: 2000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bbDrift {
+  0% {
+    transform: translate(-4vw, 0) rotate(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(50vw, -40px) rotate(200deg);
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(104vw, 16px) rotate(420deg);
+    opacity: 0;
+  }
+}
+
+@keyframes bbIn {
+  from {
+    opacity: 0;
+    transform: translate(-34px, 8px) rotate(-5deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbLand {
+  0% {
+    transform: translateY(-12px) rotate(3deg) scale(1.03);
+    box-shadow: var(--shadow-card-landing);
+  }
+  55% {
+    transform: translateY(2px) rotate(-0.6deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes bbAway {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(180px, -60px) rotate(18deg) scale(0.85);
+    filter: blur(2px);
+  }
+}
+
+@keyframes bbView {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes bbShake {
+  20% {
+    transform: translateX(-9px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+  0%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes bbFloat {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes bbToast {
+  from {
+    opacity: 0;
+    transform: translateX(-70px) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bbGap {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: 58px;
+    opacity: 1;
+  }
+}
+
+@keyframes bbPop {
+  0% {
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes bbSway {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+  50% {
+    transform: translateX(3px) rotate(0.4deg);
+  }
+}
+
+/*
+ * The focus ring. One definition for every interactive primitive, drawn as an
+ * outline offset from the control so it never depends on the control's own
+ * border or fill. `focus-visible` rather than `focus`: a pointer press does
+ * not draw it, a keyboard arrival always does. The colour is the focus token,
+ * 4.6:1 on white and 4.25:1 on the ground. A control on an ink surface takes
+ * the white variant, and one clipped by an overflow takes the inset one.
+ */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
+@utility focus-ring-inset {
+  &:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
+  }
+}
+
+/* For a wrapper whose focusable child is visually hidden, such as a radio
+   inside a label drawn as a swatch or a segment. */
+@utility focus-ring-within {
+  &:has(:focus-visible) {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
+@utility focus-ring-on-ink {
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ground);
+  }
+
+  /*
+   * Body carries the reading face, the ink colour and the ground. Hundreds of
+   * elements name neither a family nor a colour, so without these they would
+   * render in the browser default.
+   */
+  body {
+    font-family: var(--font-body);
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Every heading is set in the display face, with or without a utility
+   * class, so a heading added later cannot fall back to the reading face by
+   * omission.
+   */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+
+  ::selection {
+    background-color: var(--color-selection);
+  }
+}
+
+/*
+ * Reduced motion. A person who asks the system for less motion gets every
+ * animation and transition collapsed to an instant and played once. The
+ * duration is one hundredth of a millisecond rather than zero, so
+ * `animationend` and `transitionend` still fire and code that waits on them,
+ * such as a modal that unmounts when its close animation completes, keeps
+ * working.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

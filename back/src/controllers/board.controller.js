@@ -13,7 +13,10 @@ export const createBoard = async (req, res, next) => {
 export const getBoard = async (req, res, next) => {
   try {
     const board = await boardService.getBoardById(req.params.id);
-    responseHandler(res, 200, board);
+    // The caller's own role, resolved by the same middleware that authorized
+    // the request, so the interface can hide what the server would refuse
+    // without re-deriving the rule (workspace admins are owners here too).
+    responseHandler(res, 200, { ...board.toJSON(), viewerRole: req.boardRole });
   } catch (error) {
     next(error);
   }
@@ -31,7 +34,16 @@ export const updateBoard = async (req, res, next) => {
 export const deleteBoard = async (req, res, next) => {
   try {
     const board = await boardService.deleteBoard(req.params.id);
-    responseHandler(res, 200, { message: 'Board deleted successfully' });
+    responseHandler(res, 200, { message: 'Board deleted successfully', deletedAt: board.deletedAt });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const restoreBoard = async (req, res, next) => {
+  try {
+    const board = await boardService.restoreBoard(req.params.id);
+    responseHandler(res, 200, board);
   } catch (error) {
     next(error);
   }
@@ -39,8 +51,9 @@ export const deleteBoard = async (req, res, next) => {
 
 export const getUserBoards = async (req, res, next) => {
   try {
-    const boards = await boardService.getUserBoards(req.user.id);
-    responseHandler(res, 200, boards);
+    const { limit, offset } = req.query;
+    const { boards, pagination } = await boardService.getUserBoards(req.user.id, { limit, offset });
+    responseHandler(res, 200, boards, { pagination });
   } catch (error) {
     next(error);
   }

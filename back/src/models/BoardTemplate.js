@@ -1,20 +1,11 @@
 import mongoose from 'mongoose';
+import { createColumnSchema } from './column.schema.js';
 
-const columnSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-  },
-  color: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'ColorPalette',
-    required: true,
-  },
-  order: {
-    type: Number,
-    required: true,
-  },
-});
+// A template's columns are a mould, not a live reference. Creating a board
+// copies them onto the board, which then owns them outright. Editing a
+// template from here on changes what future boards start with and nothing
+// about the boards already created from it.
+const columnSchema = createColumnSchema();
 
 const boardTemplateSchema = new mongoose.Schema(
   {

@@ -59,7 +59,6 @@ export default function useTextFile(path?: string, enabled = false): UseTextFile
     }
     // cleanup on unmount
     return () => controllerRef.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, path, fetchFile]);
 
   return {

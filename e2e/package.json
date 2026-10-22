@@ -1,0 +1,36 @@
+{
+  "name": "breezyboard-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End to end tests driving the running BreezyBoard stack",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium",
+    "verify:auth": "node verify/authorization.mjs",
+    "verify:session": "node verify/session.mjs",
+    "verify:api": "node verify/api-surface.mjs",
+    "verify:drafts": "node verify/drafts.mjs",
+    "verify:idle": "node verify/idle.mjs expire",
+    "verify:idle-extend": "node verify/idle.mjs extend",
+    "verify:csp": "node verify/csp.mjs",
+    "verify:integrity": "node verify/integrity.mjs",
+    "verify:workspaces": "node verify/workspaces.mjs",
+    "verify:a11y": "node verify/accessibility.mjs",
+    "verify:layout": "node verify/rendered-layout.mjs",
+    "verify:board": "node verify/board-layout.mjs",
+    "verify:responsive": "node verify/responsive.mjs",
+    "verify:tokens": "node verify/design-tokens.mjs",
+    "verify": "npm run verify:auth && npm run verify:session && npm run verify:api && npm run verify:drafts && npm run verify:integrity && npm run verify:workspaces && npm run verify:a11y && npm run verify:layout && npm run verify:board && npm run verify:responsive && npm run verify:tokens"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^22.20.5",
+    "typescript": "~5.8.3"
+  }
+}

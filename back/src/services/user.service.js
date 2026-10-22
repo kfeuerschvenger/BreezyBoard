@@ -1,8 +1,16 @@
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
+import { ErrorCode } from '../constants/errorCodes.js';
+import env from '../config/env.js';
+import logger from '../utils/logger.js';
+import { MAX_SEARCH_TERM_LENGTH } from '../validation/user.validation.js';
+
+/** Escapes every regex metacharacter so a search term is matched literally. */
+const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const searchUsers = async (q, excludeUserId, excludeBoardId = null) => {
   // If a boardId is provided, get the existing members of that board
@@ -20,19 +28,25 @@ export const searchUsers = async (q, excludeUserId, excludeBoardId = null) => {
         excludeUserIds = [...new Set(excludeUserIds.map(id => id.toString()))];
       }
     } catch (error) {
-      console.error('Error fetching board members:', error);
+      logger.error({ err: error }, 'Error fetching board members');
     }
   }
+
+  // The search term went into $regex verbatim, so a caller could send regex
+  // metacharacters and have Mongo evaluate them: at best a search that matches
+  // nothing sensible, at worst a pattern that scans the collection slowly.
+  // Escaped, and capped, so it can only ever be a literal substring.
+  const term = escapeRegex(String(q ?? '').slice(0, MAX_SEARCH_TERM_LENGTH));
 
   const filter = {
     $and: [
       {
         $or: [
-          { firstName: { $regex: q, $options: 'i' } },
-          { lastName: { $regex: q, $options: 'i' } },
-          { email: { $regex: q, $options: 'i' } },
-          { role: { $regex: q, $options: 'i' } },
-          { department: { $regex: q, $options: 'i' } },
+          { firstName: { $regex: term, $options: 'i' } },
+          { lastName: { $regex: term, $options: 'i' } },
+          { email: { $regex: term, $options: 'i' } },
+          { role: { $regex: term, $options: 'i' } },
+          { department: { $regex: term, $options: 'i' } },
         ],
       },
       { _id: { $nin: excludeUserIds } },
@@ -72,7 +86,7 @@ export const updateUser = async (id, updateData, actor = null) => {
     throw new ApiError(403, 'Forbidden: you can only update your own profile');
   }
 
-  const allowedFields = ['firstName', 'lastName', 'email', 'location', 'role', 'department', 'avatar'];
+  const allowedFields = ['firstName', 'lastName', 'email', 'location', 'role', 'department', 'avatar', 'breeze'];
   const payload = {};
 
   for (const key of allowedFields) {
@@ -95,6 +109,44 @@ export const updateUser = async (id, updateData, actor = null) => {
 };
 
 /**
+ * Change a user's password. Verifies the current password, hashes the new
+ * one, and bumps tokenVersion so every token issued before this call fails
+ * the auth middleware's version check on its next use, per the sliding
+ * session's revocation design. This is the sole reason this service
+ * imports bcrypt and env.
+ *
+ * @param {string} userId
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ * @returns {Promise<import('mongoose').Document>}
+ */
+export const changePassword = async (userId, currentPassword, newPassword) => {
+  const user = await User.findById(userId).select('+password');
+
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    // 400, not 401: the person is signed in and this is a field they got
+    // wrong. A 401 is what a client reads as an ended session.
+    throw new ApiError(400, 'Current password is incorrect', [], ErrorCode.WRONG_CURRENT_PASSWORD);
+  }
+
+  const salt = await bcrypt.genSalt(env.SALT);
+  user.password = await bcrypt.hash(newPassword, salt);
+  user.tokenVersion += 1;
+  // Every reset link requested before this change must not outlive it:
+  // whoever holds one would otherwise be able to overwrite the password the
+  // person has just chosen.
+  user.passwordResets = undefined;
+  await user.save();
+
+  return user;
+};
+
+/**
  * Upload avatar
  * - Expects `file` to be the multer file object
  * - Stores the public URL/path in user.avatar and returns that URL
@@ -114,7 +166,7 @@ export const uploadAvatar = async (id, file, actor = null) => {
     try {
       // delete uploaded file if user doesn't exist
       fs.unlinkSync(file.path);
-    } catch (e) {
+    } catch {
       // swallow
     }
     throw new ApiError(404, 'User not found');
@@ -128,7 +180,7 @@ export const uploadAvatar = async (id, file, actor = null) => {
         fs.unlinkSync(oldPath);
       }
     } catch (err) {
-      console.warn('Failed to remove old avatar file', err);
+      logger.warn({ err }, 'Failed to remove old avatar file');
     }
   }
 

@@ -1,0 +1,52 @@
+// The public surface of the boards feature. Another feature reaches this one
+// through this file and never into its internals, which is what the
+// dependency direction rule in the lint config enforces.
+export {
+  boardKeys,
+  useBoard,
+  useUpdateBoard,
+  useBoards,
+  useDashboardStats,
+  useCreateBoard,
+  useDeleteBoard,
+  useRestoreBoard,
+  useAddBoardMembers,
+  useTemplates,
+} from './queries';
+export { boardHueOf, boardHueOptions } from './boardHue';
+export type { BoardHueOption } from './boardHue';
+export { eyebrowFor, greetingFor, partOfDay } from './greeting';
+export type { PartOfDay } from './greeting';
+export { BoardCard } from './components/BoardCard';
+export type { BoardCardProps } from './components/BoardCard';
+export { BoardCardMenu } from './components/BoardCardMenu';
+export type { BoardCardMenuProps } from './components/BoardCardMenu';
+export { BoardHeader } from './components/BoardHeader';
+export type { BoardHeaderProps } from './components/BoardHeader';
+export { BoardActions } from './components/BoardActions';
+export type { BoardActionsProps } from './components/BoardActions';
+export { default as CreateBoardModal } from './components/CreateBoardModal';
+export { EditBoardModal } from './components/EditBoardModal';
+export type { EditBoardModalProps } from './components/EditBoardModal';
+export { BoardFormFields } from './components/BoardFormFields';
+export { boardFieldsSchema } from './boardForm';
+export type { BoardFieldValues } from './boardForm';
+export type { BoardFormData } from './components/CreateBoardModal';
+export { TemplatePicker } from './components/TemplatePicker';
+export type { TemplatePickerProps } from './components/TemplatePicker';
+export { HomeHero } from './components/HomeHero';
+export type { HomeHeroProps } from './components/HomeHero';
+export { NewBoardTile } from './components/NewBoardTile';
+export type { NewBoardTileProps } from './components/NewBoardTile';
+export { BoardStats } from './components/BoardStats';
+export type { BoardStatsProps } from './components/BoardStats';
+export { useBoardDashboard } from './hooks/useBoardDashboard';
+export type { UseBoardDashboardResult } from './hooks/useBoardDashboard';
+export { useDeleteBoardWithUndo } from './hooks/useDeleteBoardWithUndo';
+export type { BoardToDelete, UseDeleteBoardWithUndoResult } from './hooks/useDeleteBoardWithUndo';
+export { DeleteBoardDialog } from './components/DeleteBoardDialog';
+export type { DeleteBoardDialogProps } from './components/DeleteBoardDialog';
+export { useAddMembersFlow } from './hooks/useAddMembersFlow';
+export type { AddMembersDialogProps, AddMembersTarget, UseAddMembersFlowResult } from './hooks/useAddMembersFlow';
+export { useBoardMenu } from './hooks/useBoardMenu';
+export type { UseBoardMenuResult } from './hooks/useBoardMenu';

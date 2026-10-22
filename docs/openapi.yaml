@@ -1,0 +1,2706 @@
+openapi: 3.1.0
+info:
+  title: BreezyBoard API
+  version: 1.0.0
+  description: |-
+    The BreezyBoard API, the one service behind the web client. Every path below is relative to `/api/v1`. The same routers are also mounted at `/api`, a deprecated alias that answers identically and logs a warning the first time it is used.
+
+    Every success is `{ "success": true, "data": ... }`, with a `pagination` object beside `data` on paginated lists. Every failure is `{ "success": false, "message": "...", "code": "...", "errors": [...] }` with a machine readable `code`. Pagination is opt in: without `limit` a list returns everything, and `pagination.total` is always present.
+
+    Authentication is a bearer JWT in the `Authorization` header, obtained from `POST /auth/login` or `POST /auth/register`. There is no cookie. The session slides: every authenticated request is answered with a fresh token in the `X-Auth-Token` response header, and the client sends that one next. The token dies after JWT_INACTIVITY_TTL_MS without a request (15 minutes by default) and after JWT_ABSOLUTE_TTL_MS from sign in whatever happens (4 hours by default); logout and a password change revoke every earlier token at once.
+
+    Every response carries an `X-Request-Id`. Send your own in the request to have it echoed back, which ties a client log line to a server log line.
+
+    Ids are 24 character hexadecimal strings. A malformed id in a path answers 400 before the route reaches the database.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /api/v1
+    description: The current version of the API.
+tags:
+  - name: Auth
+    description: Accounts, the session and password recovery.
+  - name: Boards
+    description: Boards, their members, and the soft delete with restore.
+  - name: Tasks
+    description: Tasks, their checklists, ordering, and the soft delete with restore.
+  - name: Reference data
+    description: The colour palette and the board templates.
+  - name: Dashboard
+    description: Totals for the home page.
+  - name: Users
+    description: People, profiles and pictures.
+  - name: Workspaces
+    description: Workspaces and their members.
+  - name: Operations
+    description: Liveness for the container healthcheck and for monitors.
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Create an account
+      description: Creates the account and its personal workspace and signs the person in. Answers 400 when the email is already registered. Limited per client address, 20 an hour unless REGISTRATION_LIMIT_PER_HOUR says otherwise.
+      operationId: postAuthRegister
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: The account, and its first session token.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Sign in
+      description: A wrong password and an unknown email address answer the same 401, so the route cannot be used to find out which addresses have an account. Failures alone count towards the limit of 10 per 15 minutes per client address.
+      operationId: postAuthLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: The person, and a session token.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/forgot-password:
+    post:
+      tags:
+        - Auth
+      summary: Ask for a password reset link
+      description: Always answers 202 with the same body, whether or not the address has an account, and mails a link only when it does. Every request counts towards the limit of 10 per 15 minutes per client address, successful ones included.
+      operationId: postAuthForgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "202":
+          description: The request was accepted. Nothing says whether an email was sent.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: Set a new password with a mailed token
+      description: Consumes the token and revokes every session of the account. An unknown, expired or already used token answers one error, 400 with the code INVALID_RESET_TOKEN. Shares the recovery limit with the request for a link.
+      operationId: postAuthResetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: The password was changed and every session was revoked.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/validate-token:
+    get:
+      tags:
+        - Auth
+      summary: Check that the token is still good
+      description: Kept for clients that still call it on session restore. Prefer GET /auth/me.
+      operationId: getAuthValidateToken
+      deprecated: true
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The token is valid.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: End the session now
+      description: Revokes every token issued to the account before this call, so the one just used fails on its next use.
+      operationId: postAuthLogout
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The session ended.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoggedOutResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/ping:
+    get:
+      tags:
+        - Auth
+      summary: Renew the session with no other effect
+      description: The renewal happens in the authentication step, before the handler runs, and the new token is in the X-Auth-Token response header. Answers 204 with Cache-Control no-store.
+      operationId: getAuthPing
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: The session was renewed. There is no body.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: The signed in person
+      operationId: getAuthMe
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The account the token belongs to.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/change-password:
+    post:
+      tags:
+        - Auth
+      summary: Change the password
+      description: A wrong current password is a 400 with the code WRONG_CURRENT_PASSWORD, never a 401, because a client treats every 401 as an ended session. Success revokes every token issued before it. Failures count towards a limit of 10 per 15 minutes per account.
+      operationId: postAuthChangePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: The password changed. Sign in again with the new one.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /boards:
+    get:
+      tags:
+        - Boards
+      summary: List the boards the caller can open
+      description: Boards in the workspaces the caller belongs to that the caller created or is a member of, newest activity first. Soft deleted boards are not listed. Each item carries taskCount, memberCount, progress and viewerRole.
+      operationId: getBoards
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            exclusiveMinimum: 0
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: A page of boards, or all of them when limit is absent.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags:
+        - Boards
+      summary: Create a board
+      description: The columns are copied from the template onto the board. Without workspaceId the board goes into the caller's personal workspace.
+      operationId: postBoards
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBoardRequest"
+      responses:
+        "201":
+          description: The new board.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /boards/{id}:
+    get:
+      tags:
+        - Boards
+      summary: Read a board
+      description: "Access: Board member."
+      operationId: getBoardsById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The board, with viewerRole set to the role of the caller.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags:
+        - Boards
+      summary: Update a board
+      description: "Only title, description and color are applied. Other fields are ignored. Access: Board owner."
+      operationId: putBoardsById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBoardRequest"
+      responses:
+        "200":
+          description: The updated board.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags:
+        - Boards
+      summary: Delete a board
+      description: "A soft delete: the board and its tasks disappear from every read and can be brought back with the restore route until BOARD_RETENTION_MS has passed, after which a background job removes them for good. Access: Board owner."
+      operationId: deleteBoardsById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The board was marked deleted.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardDeletedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /boards/{id}/restore:
+    post:
+      tags:
+        - Boards
+      summary: Restore a deleted board
+      description: "Somebody with no role on the board gets the 404 an unknown id gets. A member who is not an owner gets a 403. Access: Board owner."
+      operationId: postBoardsByIdRestore
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The board, back as it was.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /boards/{id}/members:
+    patch:
+      tags:
+        - Boards
+      summary: Add members to a board
+      description: "Every id has to be an existing user, otherwise the answer is a 400. Somebody who is not yet in the workspace of the board is added to it as a member, since a board membership gives no access to anyone outside the workspace. Access: Board owner."
+      operationId: patchBoardsByIdMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddBoardMembersRequest"
+      responses:
+        "200":
+          description: The board with its members populated.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /tasks/board/{boardId}:
+    get:
+      tags:
+        - Tasks
+      summary: List the tasks of a board
+      description: "Live tasks only, ascending by order key. Soft deleted tasks are not listed. Access: Board member."
+      operationId: getTasksBoardByBoardId
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: boardId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            exclusiveMinimum: 0
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: A page of tasks, or all of them when limit is absent.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags:
+        - Tasks
+      summary: Create a task
+      description: "The task goes to the bottom of the column named by status. The order key is minted by the server. The status has to be the id of a column of this board, and the owner a member of it. Access: Board member."
+      operationId: postTasksBoardByBoardId
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: boardId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+      responses:
+        "201":
+          description: The new task.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /tasks/{id}:
+    get:
+      tags:
+        - Tasks
+      summary: Read a task
+      description: "Access: Member of the task's board."
+      operationId: getTasksById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The task.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags:
+        - Tasks
+      summary: Update a task
+      description: "The board and the order key cannot be changed here: a task changes column and position through the move route. Unknown fields are ignored. Access: Member of the task's board."
+      operationId: putTasksById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequest"
+      responses:
+        "200":
+          description: The updated task.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags:
+        - Tasks
+      summary: Delete a task
+      description: "A soft delete. The task keeps its id, dates, column and order key, and the restore route puts it back in the same place until BOARD_RETENTION_MS has passed. Access: Member of the task's board."
+      operationId: deleteTasksById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The task was marked deleted.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskDeletedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /tasks/{id}/restore:
+    post:
+      tags:
+        - Tasks
+      summary: Restore a deleted task
+      description: "Idempotent: restoring a task that is not deleted answers with the task. Somebody with no role on the board gets 404 whether the task exists or not. A task deleted longer ago than the retention window is a 404. Access: Member of the task's board."
+      operationId: postTasksByIdRestore
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The task, back in its column.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /tasks/{id}/move:
+    patch:
+      tags:
+        - Tasks
+      summary: Move a task between two neighbours
+      description: "The body names the column and the two tasks the card was dropped between, never a position. No afterId means the top of the column, no beforeId the bottom. A 409 with the code CONFLICT means a named neighbour is no longer where the client saw it: reload the board and try again. Access: Member of the task's board."
+      operationId: patchTasksByIdMove
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveTaskRequest"
+      responses:
+        "200":
+          description: The task with its new column and order key.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /tasks/{taskId}/checklist/{itemId}:
+    patch:
+      tags:
+        - Tasks
+      summary: Update a checklist item
+      description: "Access: Member of the task's board."
+      operationId: patchTasksByTaskIdChecklistByItemId
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateChecklistItemRequest"
+      responses:
+        "200":
+          description: The task with the item changed.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags:
+        - Tasks
+      summary: Remove a checklist item
+      description: "Access: Member of the task's board."
+      operationId: deleteTasksByTaskIdChecklistByItemId
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The task without the item.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /colors:
+    get:
+      tags:
+        - Reference data
+      summary: List the colour palette
+      operationId: getColors
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - board
+              - task
+              - column
+      responses:
+        "200":
+          description: Every colour, or those of one type.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ColorListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /colors/{id}:
+    get:
+      tags:
+        - Reference data
+      summary: Read a colour
+      operationId: getColorsById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The colour.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ColorResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /templates:
+    get:
+      tags:
+        - Reference data
+      summary: List the board templates
+      description: Oldest first. A template is the mould whose columns are copied onto a new board.
+      operationId: getTemplates
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every template.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /dashboard/stats:
+    get:
+      tags:
+        - Dashboard
+      summary: Totals over the boards the caller can open
+      description: Counted by the same rule as the board list, so the numbers always agree with it.
+      operationId: getDashboardStats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The four totals.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStatsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/search:
+    get:
+      tags:
+        - Users
+      summary: Search for people
+      description: At most 10 results, never including the caller.
+      operationId: getUsersSearch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Matched case insensitively as a literal substring of the first name, last name, email, role and department. At most 100 characters; omitted, everybody is a match.
+          schema:
+            type: string
+            maxLength: 100
+        - name: excludeBoardId
+          in: query
+          required: false
+          description: Leaves out the creator and the members of this board, so a picker never offers somebody already on it.
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: Matching people.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/board-members:
+    get:
+      tags:
+        - Users
+      summary: List the members of a board
+      description: "The board id travels in the query string. A missing or malformed id is a 400 before any board is looked up. Access: Board member."
+      operationId: getUsersBoardMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: boardId
+          in: query
+          required: true
+          description: The board whose members are listed. The caller needs the member role on it.
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The members of the board.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Read a person
+      operationId: getUsersById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The person.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags:
+        - Users
+      summary: Update a profile
+      description: "Only the caller's own profile can be updated. The password has its own route. Access: The person themself."
+      operationId: putUsersById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: The updated person.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /users/{id}/avatar:
+    post:
+      tags:
+        - Users
+      summary: Upload a profile picture
+      description: "A multipart form with one file field named avatar: png, jpeg, webp or gif, up to 6 MB. The bytes are checked against the declared type and a mismatch is rejected. A refused upload is a 400 and never a 500: INVALID_FILE_TYPE for a declared type that is not an image, FILE_TOO_LARGE for a file over the limit, VALIDATION_ERROR for a content mismatch. Access: The person themself."
+      operationId: postUsersByIdAvatar
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+              required:
+                - avatar
+            encoding:
+              avatar:
+                contentType: image/png, image/jpeg, image/webp, image/gif
+      responses:
+        "200":
+          description: The URL of the stored picture.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /workspaces:
+    get:
+      tags:
+        - Workspaces
+      summary: List the caller's workspaces
+      description: The personal workspace first, then the rest by name.
+      operationId: getWorkspaces
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The workspaces the caller belongs to.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags:
+        - Workspaces
+      summary: Create a workspace
+      description: The caller becomes its admin.
+      operationId: postWorkspaces
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: The new workspace.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /workspaces/{id}:
+    get:
+      tags:
+        - Workspaces
+      summary: Read a workspace
+      description: "A workspace that does not exist and one the caller is not in answer the same 403, so the route cannot be used to ask whether an id is real. Access: Workspace member."
+      operationId: getWorkspacesById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      responses:
+        "200":
+          description: The workspace with its members populated.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /workspaces/{id}/members:
+    patch:
+      tags:
+        - Workspaces
+      summary: Add members to a workspace
+      description: "Adding somebody who is already a member leaves their role alone. Access: Workspace admin."
+      operationId: patchWorkspacesByIdMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddWorkspaceMembersRequest"
+      responses:
+        "200":
+          description: The workspace with its members populated.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            X-Auth-Token:
+              $ref: "#/components/headers/XAuthToken"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /health:
+    get:
+      tags:
+        - Operations
+      summary: Is the API able to serve requests
+      description: Public. Answers 200 only when the database connection is up and answers a ping within 2 seconds, and 503 otherwise, with a body that names nothing about the deployment. The answer is reused for one second, and a client is limited to 120 requests a minute. Also served at /api/health, which the production image's healthcheck calls.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: The API and its database are up.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: The token from POST /auth/login or POST /auth/register, or the latest X-Auth-Token response header.
+  headers:
+    XRequestId:
+      description: The id of this request, the one sent in X-Request-Id or a generated UUID.
+      schema:
+        type: string
+    XAuthToken:
+      description: The renewed session token. Present on every response once the bearer token has been accepted, errors from the handler included. A client replaces the stored token with it.
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: "The request was refused before any work was done: a malformed id, a field that fails its schema (`errors` lists each as `{ field, message }`), or a rule the service enforces. Specific codes: VALIDATION_ERROR, INVALID_RESET_TOKEN, WRONG_CURRENT_PASSWORD, INVALID_FILE_TYPE, FILE_TOO_LARGE."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: Validation error
+            code: VALIDATION_ERROR
+            errors:
+              - field: title
+                message: Title is required
+    Unauthorized:
+      description: "No session. Codes: UNAUTHORIZED (no, malformed, expired or unknown token), TOKEN_REVOKED (the token predates a logout or a password change), SESSION_EXPIRED (the absolute limit passed). A client signs the person out on any of them."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: Authentication required
+            code: UNAUTHORIZED
+            errors: []
+    Forbidden:
+      description: The caller has a session but not the role the route needs.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: Not authorized to access this board
+            code: FORBIDDEN
+            errors: []
+    NotFound:
+      description: The resource does not exist, is soft deleted, or is one the route is documented to hide from a caller with no role on it.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: Board not found
+            code: NOT_FOUND
+            errors: []
+    Conflict:
+      description: The request disagrees with the current state of the data. The client should reload and try again.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: A neighbouring task is no longer where the client expected it. Reload the board and try again.
+            code: CONFLICT
+            errors: []
+    TooManyRequests:
+      description: The limiter for this route is spent. The body has no `errors`. The `RateLimit-*` response headers say when the budget returns.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: Too many attempts. Please wait before trying again.
+            code: RATE_LIMITED
+    InternalError:
+      description: An unexpected failure. The body names nothing about it and has no `errors`; the request id points at the log line.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+          example:
+            success: false
+            message: Internal Server Error
+            code: INTERNAL
+    ServiceUnavailable:
+      description: The database is not reachable. The body names nothing about the deployment.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                const: unavailable
+              message:
+                const: Service unavailable
+            required:
+              - status
+              - message
+          example:
+            status: unavailable
+            message: Service unavailable
+  schemas:
+    RegisterRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+        lastName:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          allOf:
+            - pattern: (?=.*[a-z])
+            - pattern: (?=.*[A-Z])
+            - pattern: (?=.*\d)
+      required:
+        - firstName
+        - lastName
+        - email
+        - password
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+      required:
+        - email
+        - password
+      additionalProperties: false
+    ForgotPasswordRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+        - email
+      additionalProperties: false
+    ResetPasswordRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 256
+        newPassword:
+          type: string
+          minLength: 8
+          allOf:
+            - pattern: (?=.*[a-z])
+            - pattern: (?=.*[A-Z])
+            - pattern: (?=.*\d)
+      required:
+        - token
+        - newPassword
+      additionalProperties: false
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 8
+          allOf:
+            - pattern: (?=.*[a-z])
+            - pattern: (?=.*[A-Z])
+            - pattern: (?=.*\d)
+      required:
+        - currentPassword
+        - newPassword
+      additionalProperties: false
+    CreateBoardRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        color:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        template:
+          anyOf:
+            - type: string
+              pattern: ^[0-9a-fA-F]{24}$
+            - type: "null"
+        workspaceId:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        members:
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      required:
+        - title
+        - color
+      additionalProperties: false
+    UpdateBoardRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        color:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+    AddBoardMembersRequest:
+      type: object
+      properties:
+        members:
+          minItems: 1
+          type: array
+          items:
+            type: string
+            pattern: ^[0-9a-fA-F]{24}$
+      required:
+        - members
+      additionalProperties: false
+    CreateTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        status:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        priority:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+        color:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        owner:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        boardId:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        checklist:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+                minLength: 1
+              completed:
+                type: boolean
+            required:
+              - text
+      required:
+        - title
+        - status
+        - color
+      additionalProperties: false
+    UpdateTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        status:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        priority:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+        color:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        owner:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        checklist:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+                minLength: 1
+              completed:
+                type: boolean
+            required:
+              - text
+    MoveTaskRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        afterId:
+          anyOf:
+            - type: string
+              pattern: ^[0-9a-fA-F]{24}$
+            - type: "null"
+        beforeId:
+          anyOf:
+            - type: string
+              pattern: ^[0-9a-fA-F]{24}$
+            - type: "null"
+      required:
+        - status
+      additionalProperties: false
+    UpdateChecklistItemRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+        completed:
+          type: boolean
+      additionalProperties: false
+    UpdateUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+        lastName:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        location:
+          type: string
+        role:
+          type: string
+        department:
+          type: string
+        avatar:
+          type: string
+        breeze:
+          type: string
+          enum:
+            - still
+            - calm
+            - breezy
+            - gusty
+      additionalProperties: false
+    CreateWorkspaceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+      required:
+        - name
+      additionalProperties: false
+    AddWorkspaceMembersRequest:
+      type: object
+      properties:
+        members:
+          minItems: 1
+          type: array
+          items:
+            type: object
+            properties:
+              user:
+                type: string
+                pattern: ^[0-9a-fA-F]{24}$
+              role:
+                type: string
+                enum:
+                  - admin
+                  - member
+            required:
+              - user
+            additionalProperties: false
+      required:
+        - members
+      additionalProperties: false
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        avatar:
+          type: string
+          description: An absolute URL, or an empty string when the person has no picture.
+        role:
+          type: string
+        department:
+          type: string
+        location:
+          type: string
+        breeze:
+          type: string
+          enum:
+            - still
+            - calm
+            - breezy
+            - gusty
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - _id
+        - id
+        - firstName
+        - lastName
+        - email
+        - avatar
+        - role
+        - department
+        - location
+        - breeze
+        - createdAt
+        - updatedAt
+      additionalProperties: {}
+    UserSummary:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatar:
+          type: string
+        email:
+          type: string
+        location:
+          type: string
+      required:
+        - _id
+        - firstName
+        - lastName
+      additionalProperties: {}
+    ColorRef:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        name:
+          type: string
+        value:
+          type: string
+          description: A hue key (`sky`, `teal`, `green`, `sand`, `coral`, `lavender`) for a board colour, a hex string otherwise.
+      required:
+        - _id
+        - name
+        - value
+      additionalProperties: {}
+    Color:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        name:
+          type: string
+        value:
+          type: string
+        type:
+          type: string
+          enum:
+            - board
+            - task
+            - column
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - _id
+        - name
+        - value
+        - type
+        - createdAt
+        - updatedAt
+      additionalProperties: {}
+    TemplateRef:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        name:
+          type: string
+        iconName:
+          type: string
+      required:
+        - _id
+        - name
+      additionalProperties: {}
+    TemplateColumn:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        title:
+          type: string
+        color:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        order:
+          type: number
+      required:
+        - _id
+        - title
+        - color
+        - order
+      additionalProperties: {}
+    Template:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        name:
+          type: string
+        description:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateColumn"
+        iconName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - _id
+        - name
+        - columns
+        - createdAt
+        - updatedAt
+      additionalProperties: {}
+    Column:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        title:
+          type: string
+        color:
+          anyOf:
+            - type: string
+              pattern: ^[0-9a-fA-F]{24}$
+            - $ref: "#/components/schemas/ColorRef"
+          description: A colour id in the board list, the populated colour everywhere else.
+        order:
+          type: number
+      required:
+        - _id
+        - title
+        - color
+        - order
+      additionalProperties: {}
+    Board:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        title:
+          type: string
+        description:
+          type: string
+        color:
+          $ref: "#/components/schemas/ColorRef"
+        template:
+          anyOf:
+            - $ref: "#/components/schemas/TemplateRef"
+            - type: "null"
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/Column"
+        workspaceId:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        createdBy:
+          anyOf:
+            - type: string
+              pattern: ^[0-9a-fA-F]{24}$
+            - $ref: "#/components/schemas/UserSummary"
+          description: The creator, populated in reads and left as an id in write responses.
+        members:
+          type: array
+          items:
+            anyOf:
+              - type: string
+                pattern: ^[0-9a-fA-F]{24}$
+              - $ref: "#/components/schemas/UserSummary"
+          description: Member ids, or populated people when the response lists members.
+        deletedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: Set while the board is soft deleted; only the restore route answers with a board in that state.
+        memberCount:
+          type: integer
+        taskCount:
+          description: Live tasks only. Present in the board list.
+          type: integer
+        progress:
+          description: "Whole percentage of live tasks that are complete: in the last column, or with every checklist item ticked. Present in the board list."
+          type: integer
+        viewerRole:
+          description: The caller's own role on the board. Present in the list and the single read.
+          type: string
+          enum:
+            - owner
+            - member
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - _id
+        - title
+        - color
+        - template
+        - columns
+        - workspaceId
+        - createdBy
+        - members
+        - deletedAt
+        - createdAt
+        - updatedAt
+      additionalProperties: {}
+    ChecklistItem:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        text:
+          type: string
+        completed:
+          type: boolean
+      required:
+        - _id
+        - text
+        - completed
+      additionalProperties: {}
+    Task:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+          description: The id of one of the board columns.
+        priority:
+          type: string
+          enum:
+            - low
+            - medium
+            - high
+        color:
+          $ref: "#/components/schemas/ColorRef"
+        owner:
+          $ref: "#/components/schemas/UserSummary"
+        boardId:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        order:
+          type: string
+          description: A fractional index, base 62. Tasks of a column sort ascending on it; the server mints it and a client never sends one.
+        checklist:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecklistItem"
+        deletedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - _id
+        - title
+        - status
+        - priority
+        - color
+        - boardId
+        - order
+        - checklist
+        - deletedAt
+        - createdAt
+        - updatedAt
+      additionalProperties: {}
+    Workspace:
+      type: object
+      properties:
+        _id:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        name:
+          type: string
+        createdBy:
+          type: string
+          pattern: ^[0-9a-fA-F]{24}$
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              user:
+                $ref: "#/components/schemas/UserSummary"
+              role:
+                type: string
+                enum:
+                  - admin
+                  - member
+            required:
+              - user
+              - role
+            additionalProperties: {}
+        isPersonal:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - _id
+        - name
+        - createdBy
+        - members
+        - isPersonal
+        - createdAt
+        - updatedAt
+      additionalProperties: {}
+    DashboardStats:
+      type: object
+      properties:
+        totalBoards:
+          type: integer
+        totalMembers:
+          type: integer
+        totalTasks:
+          type: integer
+        avgProgress:
+          type: integer
+          description: Whole percentage, averaged over boards, empty boards counting as zero.
+      required:
+        - totalBoards
+        - totalMembers
+        - totalTasks
+        - avgProgress
+      additionalProperties: {}
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+        limit:
+          description: Echoed only when the request sent `limit`.
+          type: integer
+        offset:
+          description: Echoed only when the request sent `limit`.
+          type: integer
+      required:
+        - total
+      additionalProperties: {}
+    ErrorBody:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - TOKEN_REVOKED
+            - SESSION_EXPIRED
+            - RATE_LIMITED
+            - INVALID_RESET_TOKEN
+            - WRONG_CURRENT_PASSWORD
+            - INVALID_FILE_TYPE
+            - FILE_TOO_LARGE
+            - CONFLICT
+            - INTERNAL
+        errors:
+          description: Per field issues on a validation failure, as `{ field, message }`. Mongoose validation failures list plain messages.
+          type: array
+          items:
+            anyOf:
+              - type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+                required:
+                  - field
+                  - message
+                additionalProperties: {}
+              - type: string
+      required:
+        - success
+        - message
+        - code
+      additionalProperties: {}
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+              description: "A signed JWT. Send it as `Authorization: Bearer <token>`."
+            user:
+              $ref: "#/components/schemas/User"
+          required:
+            - token
+            - user
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    UserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/User"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    UserListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    AvatarResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            avatar:
+              type: string
+              description: The absolute URL of the stored picture.
+          required:
+            - avatar
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    AcceptedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+              const: true
+          required:
+            - accepted
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    ResetResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            reset:
+              type: boolean
+              const: true
+          required:
+            - reset
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    ValidResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            valid:
+              type: boolean
+              const: true
+          required:
+            - valid
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    LoggedOutResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            loggedOut:
+              type: boolean
+              const: true
+          required:
+            - loggedOut
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    ChangedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            changed:
+              type: boolean
+              const: true
+          required:
+            - changed
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    BoardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/Board"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    BoardListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Board"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+      required:
+        - success
+        - data
+        - pagination
+      additionalProperties: {}
+    BoardDeletedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+              const: Board deleted successfully
+            deletedAt:
+              type: string
+              format: date-time
+          required:
+            - message
+            - deletedAt
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    TaskResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/Task"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    TaskListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+      required:
+        - success
+        - data
+        - pagination
+      additionalProperties: {}
+    TaskDeletedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          properties:
+            message:
+              type: string
+              const: Task deleted successfully
+          required:
+            - message
+          additionalProperties: {}
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    WorkspaceResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/Workspace"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    WorkspaceListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    ColorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/Color"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    ColorListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Color"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    TemplateListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Template"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    DashboardStatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/DashboardStats"
+      required:
+        - success
+        - data
+      additionalProperties: {}
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          const: ok
+        message:
+          type: string
+          const: Server is running
+      required:
+        - status
+        - message
+      additionalProperties: {}
