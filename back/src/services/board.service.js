@@ -385,7 +385,7 @@ const doneColumnOf = board => [...(board.columns ?? [])].sort((a, b) => a.order 
  * always zero. `taskCount` is a populate virtual that nothing ever
  * populated, `progress` was a broken virtual read through a `.lean()` query
  * that strips virtuals anyway, and `memberCount` only worked because it is a
- * plain getter. Finding P2-4.
+ * plain getter.
  *
  * A task counts as complete when it sits in its board's last column, or when
  * it has a checklist and every item on it is ticked. That second rule is
@@ -394,8 +394,8 @@ const doneColumnOf = board => [...(board.columns ?? [])].sort((a, b) => a.order 
  * status holds a column id.
  *
  * Matching every board's done column in one `$in` is correct rather than
- * merely convenient, and only became so in Phase 4b: column ids belong to a
- * single board now, so a task whose status is in that set is necessarily in
+ * merely convenient: column ids belong to a
+ * single board, so a task whose status is in that set is necessarily in
  * its own board's last column and not some other board's.
  *
  * @param {Array<{_id: any, columns?: Array<object>}>} boards

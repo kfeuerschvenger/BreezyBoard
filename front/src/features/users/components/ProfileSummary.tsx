@@ -19,7 +19,7 @@ export interface ProfileSummaryProps {
 /**
  * "March 2025", or nothing for a record with no joined date or one that does
  * not parse. `new Date('')` formats as the literal string "Invalid Date", and
- * a profile must never print that to the person. Finding P4-10.
+ * a profile must never print that to the person.
  */
 const formatBreezingSince = (dateString?: string): string | null => {
   if (!dateString) return null;
@@ -35,7 +35,7 @@ const formatBreezingSince = (dateString?: string): string | null => {
  *
  * It is a `header` inside the page's `main`, so a sectioning header and not a
  * second banner, and it holds the page's one `h1`. The cover is its gradient
- * until a cover image exists (Phase 8d) and is decoration. The name sits
+ * until a cover image exists and is decoration. The name sits
  * wholly below the cover from `sm` up, because ink on the gradient would not
  * hold its contrast; below `sm` the avatar and the name stack and the name is
  * below it anyway.

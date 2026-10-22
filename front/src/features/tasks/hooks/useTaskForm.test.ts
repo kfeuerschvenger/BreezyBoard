@@ -41,7 +41,7 @@ const submit = (result: { current: ReturnType<typeof useTaskForm> }) =>
   });
 
 describe('useTaskForm', () => {
-  // This is P0-1, which made task creation impossible for a year. Clearing an
+  // This can make task creation impossible. Clearing an
   // error writes `undefined` under a key that stays in the object, so a gate
   // counting keys is closed by the very act of fixing the field it complained
   // about. Choosing an owner is what creates that key, so a gate written the

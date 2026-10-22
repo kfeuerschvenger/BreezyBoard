@@ -92,7 +92,7 @@ const ownerIdOf = (owner: Task['owner'] | undefined): string => {
  * discards what another had just put in it.
  *
  * The submit gate reads error VALUES rather than error keys, which is the
- * whole of P0-1: clearing an error stores `undefined` under a key that stays
+ * whole point: clearing an error stores `undefined` under a key that stays
  * in the object, so counting keys leaves the form permanently unsubmittable.
  * Anything replacing this check has to keep that property.
  */

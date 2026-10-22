@@ -5,8 +5,7 @@ import * as axeMatchers from 'vitest-axe/matchers';
 import React from 'react';
 import type { ReactNode } from 'react';
 
-// The component layer of the accessibility gate in section 10.2 of the
-// revival plan. Registered globally so that any test can assert
+// The component layer of the accessibility gate. Registered globally so that any test can assert
 // `expect(await axe(container)).toHaveNoViolations()` without ceremony,
 // which is the point: a gate nobody can be bothered to reach for is not a
 // gate.

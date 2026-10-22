@@ -200,7 +200,7 @@ for (const viewport of VIEWPORTS) { // NOSONAR javascript:S9382 sequential on pu
     `widths ${m.columnWidths.join(", ")}`,
   );
   // The reference design's column. It does not change with the viewport, which
-  // is what makes the row scroll sideways at 1440 and fit at 1920 (P4-42).
+  // is what makes the row scroll sideways at 1440 and fit at 1920.
   check(
     "every column is 292 pixels wide, as the design draws it",
     m.columnWidths.every((width) => width === COLUMN_WIDTH),

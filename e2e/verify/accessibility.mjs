@@ -1,15 +1,13 @@
-// The end to end layer of the accessibility gate, section 10.2 of the
-// revival plan.
+// The end to end layer of the accessibility gate.
 //
 // It matters more than the other two layers because the defects it catches
-// are the ones static analysis structurally cannot see. The unlabelled
-// dialog below is the exact case the plan predicted: "an axe scan with the
-// task drawer open would have flagged the unlabeled dialog immediately". It
-// does, and nothing else in this repository does.
+// are the ones static analysis structurally cannot see. An unlabelled dialog
+// is the typical case: an axe scan with the task modal open flags it
+// immediately, and nothing else in this repository does.
 //
-// This is a ratchet rather than a pass/fail. The application has real
-// accessibility debt, all of it already written up as P4-3 and P4-5, and a
-// gate that simply failed on all of it would be switched off within a week.
+// This is a ratchet rather than a pass/fail. The application can carry real
+// accessibility debt, and a gate that simply failed on all of it would be
+// switched off within a week.
 // Instead each surface carries the count that was measured when the gate
 // went in, and the script fails on anything above it. The numbers can only
 // go down. When one reaches zero, delete its line rather than leaving a
@@ -42,10 +40,9 @@ const BASELINE = {
   // Added on 2026-10-05, the first time this dialog was ever scanned. Its one
   // number is the login page's own heading-order showing through from behind
   // it, the `h3` in the auth layout: the dialog contributes nothing of its
-  // own. It was the fifth hand-written modal until this change and the one
-  // P3-4 missed, so it had no dialog role, no accessible name, no focus trap
-  // and a close button with no name. It comes from the shared Modal now, and
-  // that is the whole argument of P3-4 in one measurement.
+  // own. It comes from the shared Modal, which gives it a dialog role, an
+  // accessible name, a focus trap and a close button with a name. A
+  // hand-written modal would have none of them.
   'login, forgot password open': {},
   register: {},
   // region and landmark-one-main were measured here and have no line now: the
@@ -75,9 +72,8 @@ const BASELINE = {
 // measurement reported eleven on the login page and four on the dashboard,
 // and every one of them turned out to be an artefact of scanning during the
 // entrance animation, which `settle` below now waits out. On the settled
-// page axe finds none. The contrast concern recorded in P4-5 is about icon
-// colours, which is WCAG 1.4.11 and a rule axe does not run by default, so
-// it is neither confirmed nor refuted by axe.
+// page axe finds none. Icon colour contrast is WCAG 1.4.11, a rule axe does
+// not run by default, so axe neither confirms nor refutes it.
 //
 // Contrast is measured here in a second way, which does not wait on axe: after
 // each scan `contrast.mjs` photographs the page with its glyphs removed and
@@ -228,9 +224,8 @@ check('the contrast sweep refuses ink at 30% opacity', probeFailed('probe faded'
 
 await scan('login');
 
-// The forgot password dialog was the fifth hand-written modal and the one
-// finding P3-4 missed, which is exactly what an unscanned state buys you. It
-// is scanned now, open.
+// The forgot password dialog is scanned open as well, because a dialog that
+// is never opened during a scan is a state the gate cannot see.
 await page.getByRole('button', { name: 'Forgot it?' }).click();
 await settled(page, { within: '[role="dialog"]', label: 'the forgot password dialog to finish opening' });
 await scan('login, forgot password open');

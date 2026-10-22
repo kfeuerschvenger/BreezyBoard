@@ -118,7 +118,7 @@ const Board = () => {
    * itself open holding the draft, and it can only do that if the failure
    * reaches it. A catch here returns normally, which tells the modal the
    * save succeeded, so it clears the draft and closes over work that was
-   * never written. That is finding P4-9.
+   * never written.
    *
    * Closing on success is the modal's job too, through onSaved.
    */

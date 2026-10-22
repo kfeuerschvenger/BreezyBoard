@@ -24,7 +24,7 @@ const FIELDS = [
 
 /**
  * "About you": the fields of the person's record. A bio belongs here and is
- * not here yet (Phase 8d), and the joined date is not a field, it is the line
+ * not here yet, and the joined date is not a field, it is the line
  * under the name.
  */
 export const ProfileForm: React.FC<ProfileFormProps> = ({ form, error, onSubmit, onCancel }) => {

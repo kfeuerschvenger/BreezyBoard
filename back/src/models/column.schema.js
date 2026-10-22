@@ -13,8 +13,8 @@ import mongoose from 'mongoose';
  * a column without touching any other board. While columns lived only on the
  * template, two boards created from one template shared the same column
  * subdocument ids, so renaming a column on either renamed it on both. A
- * task's `status` holds one of these ids, which is why this had to be
- * settled before anything else in Phase 4 could be built on it.
+ * task's `status` holds one of these ids, which is why the ids must be
+ * unique per board before anything else is built on them.
  *
  * @returns {mongoose.Schema} a fresh schema instance
  */

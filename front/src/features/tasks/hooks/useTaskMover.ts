@@ -82,8 +82,7 @@ export interface UseTaskMoverResult {
 /**
  * Moving a card, however it was asked for.
  *
- * Two rules below were findings before they were code, so they are the ones
- * any change here has to keep. Drag and drop and the "Move to" menu share this
+ * Two rules below are the ones any change here has to keep. Drag and drop and the "Move to" menu share this
  * hook so they share both: a drag started while a menu move is in flight
  * aborts it exactly as a second drag would.
  */
@@ -101,8 +100,7 @@ export function useTaskMover({ tasks, cache }: UseTaskMoverOptions): UseTaskMove
   // The move request currently in flight, if any. A second move started
   // before the first one answers aborts it rather than racing it: without
   // this, a slow first request can resolve after a second one and roll its
-  // own stale snapshot back over an update already on screen. That is
-  // finding P2-6.
+  // own stale snapshot back over an update already on screen.
   const inFlightMove = useRef<AbortController | null>(null);
 
   useEffect(() => () => inFlightMove.current?.abort(), []);

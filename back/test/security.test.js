@@ -8,8 +8,8 @@ import { registerUser } from './helpers/user.factory.js';
 
 // Suite 2: the documented security holes.
 //
-// Every hole recorded in the revival plan as P1-1 through P1-6 and H2 is now
-// closed, so every test here is an ordinary test(...) and must stay green.
+// Every hole covered here is closed, so every test is an ordinary test(...)
+// and must stay green.
 //
 // They started life wrapped in Vitest's test.fails(...), each asserting the
 // CORRECT secure behavior. While a hole was open the assertion threw, so the
@@ -35,8 +35,8 @@ describe('security tripwires', () => {
     board = await createBoard(owner.token, colors.boardColor._id);
   });
 
-  describe('P1-1: task IDOR, no board-membership check on individual task routes', () => {
-    // Finding P1-1: GET /api/tasks/:id now goes through requireTaskBoardRole,
+  describe('task IDOR: board-membership check on individual task routes', () => {
+    // GET /api/tasks/:id goes through requireTaskBoardRole,
     // which loads the task's board and rejects a caller who is not at least
     // a member of it.
     test('GET /api/tasks/:id on another users task should be 403', async () => {
@@ -47,7 +47,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Finding P1-1: PUT /api/tasks/:id now requires board membership via
+    // PUT /api/tasks/:id requires board membership via
     // requireTaskBoardRole.
     test('PUT /api/tasks/:id on another users task should be 403', async () => {
       const task = await createTask(owner.token, board._id, colors.taskColor._id);
@@ -60,7 +60,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Finding P1-1: DELETE /api/tasks/:id now requires board membership via
+    // DELETE /api/tasks/:id requires board membership via
     // requireTaskBoardRole.
     test('DELETE /api/tasks/:id on another users task should be 403', async () => {
       const task = await createTask(owner.token, board._id, colors.taskColor._id);
@@ -72,7 +72,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Finding P1-1: PATCH /api/tasks/:id/move now requires board membership
+    // PATCH /api/tasks/:id/move requires board membership
     // via requireTaskBoardRole.
     test('PATCH /api/tasks/:id/move on another users task should be 403', async () => {
       const columns = await boardColumns(board._id);
@@ -95,7 +95,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Finding P1-1: PATCH /api/tasks/:taskId/checklist/:itemId now requires
+    // PATCH /api/tasks/:taskId/checklist/:itemId requires
     // board membership via requireTaskBoardRole.
     test('PATCH /api/tasks/:taskId/checklist/:itemId on another users task should be 403', async () => {
       const task = await createTask(owner.token, board._id, colors.taskColor._id, {
@@ -111,7 +111,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Positive case for P1-1: a legitimate board member (not the creator)
+    // Positive case: a legitimate board member (not the creator)
     // must still be able to read a task on their own board. Guards against
     // requireTaskBoardRole denying everyone instead of enforcing the role
     // check.
@@ -131,8 +131,8 @@ describe('security tripwires', () => {
     });
   });
 
-  describe('P1-2: board members can perform creator-only actions', () => {
-    // Finding P1-2: PUT /api/boards/:id now requires the 'owner' role via
+  describe('board members cannot perform creator-only actions', () => {
+    // PUT /api/boards/:id requires the 'owner' role via
     // requireBoardRole('owner'), so a plain member can no longer take over
     // the board by replacing `members`/`createdBy`.
     test('a member should not be able to take over a board via PUT', async () => {
@@ -154,7 +154,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Finding P1-2: DELETE /api/boards/:id now requires the 'owner' role via
+    // DELETE /api/boards/:id requires the 'owner' role via
     // requireBoardRole('owner').
     test('a member should not be able to delete the board', async () => {
       const member = await registerUser();
@@ -170,7 +170,7 @@ describe('security tripwires', () => {
       expect(res.status).toBe(403);
     });
 
-    // Positive case for P1-2: the creator (owner) must still be able to
+    // Positive case: the creator (owner) must still be able to
     // update the board via PUT. Guards against requireBoardRole('owner')
     // denying everyone instead of enforcing the role check.
     test('the creator can still update the board via PUT', async () => {
@@ -184,8 +184,8 @@ describe('security tripwires', () => {
     });
   });
 
-  // Finding P1-3: PUT /api/tasks/:id used to accept a boardId in the body
-  // and relocate the task into a different board. Fixed: updateTaskSchema
+  // Mass assignment: PUT /api/tasks/:id must not accept a boardId in the body
+  // and relocate the task into a different board. updateTaskSchema
   // whitelists the body and strips boardId before it reaches
   // task.service.js updateTask, so the request succeeds but the task stays
   // on its original board.
@@ -223,13 +223,10 @@ describe('security tripwires', () => {
     expect(check.body.data.internalNote).toBeUndefined();
   });
 
-  // Finding P1-4, carried over to the contract that replaced the endpoint it
-  // was written against.
+  // Foreign neighbours in a move.
   //
-  // The bulk renumbering route these two tests used to drive no longer
-  // exists: ordering is a fractional index and a move writes one document,
-  // so there is nothing left to renumber. The property P1-4 protects is not
-  // gone with it, it only moved. A client still names other tasks when it
+  // Ordering is a fractional index and a move writes one document, so there
+  // is no bulk renumbering route to abuse. A client still names other tasks when it
   // moves one, as the neighbours it dropped between, and naming a task from
   // a board the caller has no business reading must not work.
   //
@@ -275,9 +272,8 @@ describe('security tripwires', () => {
     expect(res.body.data.order < first.order).toBe(true);
   });
 
-  // Finding P1-6: POST /api/auth/login used to treat an object value for
-  // `email` as a MongoDB query operator instead of rejecting non-string
-  // input. Fixed: loginSchema requires email to be a string in valid email
+  // NoSQL operator injection: POST /api/auth/login must not treat an object
+  // value for `email` as a MongoDB query operator. loginSchema requires email to be a string in valid email
   // format, so a non-string value like { $ne: null } fails validation (400)
   // before it ever reaches User.findOne({ email }).
   test('login with a $ne query operator as email should be rejected as invalid input', async () => {
@@ -296,7 +292,7 @@ describe('security tripwires', () => {
     expect(res.status).toBe(400);
   });
 
-  // Positive case for P1-6: a valid, correctly-typed email with a wrong
+  // Positive case: a valid, correctly-typed email with a wrong
   // password must still fail as an authentication error (401), not a
   // validation error. Guards against loginSchema turning every wrong
   // password into a 400.
@@ -310,7 +306,7 @@ describe('security tripwires', () => {
     expect(res.status).toBe(401);
   });
 
-  // Finding H2: GET /api/users/board-members now requires membership of the
+  // GET /api/users/board-members requires membership of the
   // queried board via requireBoardRole('member').
   test('GET /api/users/board-members for a board the caller does not belong to should be 403', async () => {
     const res = await request(app)
@@ -321,7 +317,7 @@ describe('security tripwires', () => {
     expect(res.status).toBe(403);
   });
 
-  // Positive case for H2: a genuine board member must still be able to list
+  // Positive case: a genuine board member must still be able to list
   // the board's members. Guards against requireBoardRole('member') denying
   // everyone instead of enforcing the role check.
   test('GET /api/users/board-members succeeds for a board member', async () => {

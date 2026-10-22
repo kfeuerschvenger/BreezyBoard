@@ -74,7 +74,7 @@ A route asks for a minimum role: `member` or `owner` on a board, `member` or `ad
 
 ## Authentication and sessions
 
-The full contract is section 9 of [REVIVAL-PLAN.md](REVIVAL-PLAN.md), with the reasoning for each choice. This is the summary.
+The session contract, in one diagram and one table.
 
 ```mermaid
 sequenceDiagram

@@ -12,8 +12,8 @@
 @import 'tailwindcss';
 
 /*
- * The design token layer, section 12.2 of the revival plan and the Phase 6b
- * specification in docs/design/SPEC.md.
+ * The design token layer: typefaces, colours, radii, shadows and motion,
+ * declared once.
  *
  * This block is the only place a visual value is declared. Under Tailwind 4
  * there is no config file and no implicit theme: a utility whose token is not
@@ -276,8 +276,7 @@
 }
 
 /*
- * Keyframes. Names and shapes follow section 5 of docs/design/SPEC.md. The two
- * the wind layer drives, `bbFlow` and `bbDrift`, are not in the table above
+ * Keyframes. The two the wind layer drives, `bbFlow` and `bbDrift`, are not in the table above
  * because each streak and particle carries its own duration and delay.
  */
 @keyframes bbFlow {

@@ -29,7 +29,7 @@ export const createBoardSchema = z
 
 // Whitelist for PUT /api/boards/:id. createdBy, members, _id and timestamps
 // are intentionally excluded: members has its own endpoint, and createdBy
-// must never be reassignable through a generic update (P1-2). Deliberately
+// must never be reassignable through a generic update. Deliberately
 // NOT .strict(): an unexpected field (e.g. a hijack attempt sending
 // createdBy/members) is silently stripped from result.data rather than
 // rejected, so the request still reaches requireBoardRole('owner') and is

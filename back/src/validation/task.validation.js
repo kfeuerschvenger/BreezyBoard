@@ -59,8 +59,8 @@ export const createTaskSchema = z
   .strict();
 
 // Whitelist for PUT /api/tasks/:id. boardId, order, _id and timestamps are
-// intentionally excluded: boardId is the P1-3 mass-assignment fix (a client
-// can no longer relocate a task into another board through this route), and
+// intentionally excluded: boardId is excluded to prevent mass assignment (a client
+// cannot relocate a task into another board through this route), and
 // `order` is never client-supplied anywhere, since the ordering key is
 // minted by the server from the neighbours a move names.
 // Deliberately NOT .strict(): an unexpected field (boardId included) is
