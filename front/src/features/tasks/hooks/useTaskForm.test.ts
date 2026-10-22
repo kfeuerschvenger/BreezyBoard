@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { flushDraft } from '@/test/flushDraft';
 import { useTaskForm, type StoredTask, type TaskColorOption } from './useTaskForm';
 import type { User } from '@/models';
 
@@ -237,6 +238,16 @@ describe('useTaskForm', () => {
   });
 
   describe('the draft of a task that is opened', () => {
+    // The draft is written on a throttle, so these tests take the clock into
+    // their own hands instead of waiting for it.
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     const DRAFT_KEY = 'breezyboard:draft:task:task-1';
     const STORED = {
       title: 'Half edited title',
@@ -278,6 +289,7 @@ describe('useTaskForm', () => {
       rerender({ open: true, task: EXISTING_TASK });
 
       await waitFor(() => expect(result.current.values.title).toBe('Half edited title'));
+      await flushDraft();
       expect(written.length).toBeGreaterThan(0);
       expect(written.every(value => value.title === 'Half edited title')).toBe(true);
     });
@@ -296,10 +308,10 @@ describe('useTaskForm', () => {
 
       act(() => result.current.setField('title', 'Typed after restoring'));
 
-      await waitFor(() => {
-        const stored = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? '{}');
-        expect(stored.value?.title).toBe('Typed after restoring');
-      });
+      await flushDraft();
+
+      const stored = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? '{}');
+      expect(stored.value?.title).toBe('Typed after restoring');
     });
 
     it('is kept under the task and under nothing else while the form is open', async () => {
@@ -313,9 +325,16 @@ describe('useTaskForm', () => {
     });
 
     it('is cleared once a save succeeds', async () => {
+      // The clock does not move on its own here. A write that lands after the
+      // clear is only visible if the throttle window has elapsed, and a clock
+      // that runs with the wall lets a slow machine close that window in the
+      // middle of the save.
+      vi.useRealTimers();
+      vi.useFakeTimers();
       const { result } = setup({ task: { ...EXISTING_TASK, title: 'Saved', owner: ADA._id }, colors: COLORS });
       act(() => result.current.setField('title', 'Typed'));
-      await waitFor(() => expect(window.localStorage.getItem(DRAFT_KEY)).not.toBeNull());
+      await flushDraft();
+      expect(window.localStorage.getItem(DRAFT_KEY)).not.toBeNull();
 
       await submit(result);
 

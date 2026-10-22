@@ -2,6 +2,9 @@ import { useCallback, useRef } from 'react';
 
 const PREFIX = 'breezyboard:draft:';
 
+/** Default minimum gap between draft writes, in milliseconds. */
+export const DRAFT_THROTTLE_MS = 500;
+
 interface StoredDraft<T> {
   savedAt: number;
   value: T;
@@ -33,7 +36,7 @@ export interface UseDraftResult<T> {
  * @param key stable identifier for the thing being edited, or null to disable
  * @param throttleMs minimum gap between writes
  */
-export function useDraft<T>(key: string | null, throttleMs = 500): UseDraftResult<T> {
+export function useDraft<T>(key: string | null, throttleMs = DRAFT_THROTTLE_MS): UseDraftResult<T> {
   const lastWriteRef = useRef(0);
   const pendingRef = useRef<number | null>(null);
 

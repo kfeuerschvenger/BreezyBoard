@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { flushDraft } from '@/test/flushDraft';
 import TaskModal from './TaskModal';
 import { ColorService, UserService } from '@/services';
 import type { Color, User } from '@/models';
@@ -25,6 +26,7 @@ vi.mock('@/services', () => ({
 // state.
 afterEach(() => {
   window.localStorage.clear();
+  vi.useRealTimers();
 });
 
 const mockedColorService = vi.mocked(ColorService);
@@ -677,7 +679,9 @@ describe('TaskModal on a task that exists', () => {
     });
 
     it('keeps the pending text in the field and in the draft when the save fails, and adds it once on a retry', async () => {
-      const user = userEvent.setup();
+      // The draft is written on a throttle, so the clock is the test's own.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       vi.spyOn(console, 'error').mockImplementation(() => {});
       const { onSave } = renderExisting();
       onSave.mockRejectedValueOnce(new Error('network down'));
@@ -690,6 +694,7 @@ describe('TaskModal on a task that exists', () => {
 
       expect(screen.getByRole('textbox', { name: ADD_FIELD })).toHaveValue('Pack the stove');
       expect(screen.queryByRole('textbox', { name: 'Checklist item 1' })).not.toBeInTheDocument();
+      await flushDraft();
       expect(window.localStorage.getItem('breezyboard:draft:task:task-1')).toContain('Pack the stove');
 
       await user.click(getSaveButton());
