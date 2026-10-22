@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 const PREFIX = 'breezyboard:draft:';
 
@@ -39,6 +39,8 @@ export interface UseDraftResult<T> {
 export function useDraft<T>(key: string | null, throttleMs = DRAFT_THROTTLE_MS): UseDraftResult<T> {
   const lastWriteRef = useRef(0);
   const pendingRef = useRef<number | null>(null);
+  // The value the trailing write is holding, so an unmount can store it.
+  const pendingValueRef = useRef<T | null>(null);
 
   const storageKey = key ? PREFIX + key : null;
 
@@ -83,18 +85,39 @@ export function useDraft<T>(key: string | null, throttleMs = DRAFT_THROTTLE_MS):
       if (pendingRef.current !== null) {
         window.clearTimeout(pendingRef.current);
       }
+      pendingValueRef.current = value;
       pendingRef.current = window.setTimeout(() => {
         pendingRef.current = null;
+        pendingValueRef.current = null;
         persist(value);
       }, throttleMs - sinceLast);
     },
     [storageKey, persist, throttleMs]
   );
 
+  // A trailing write that is still waiting when the owner goes away is stored
+  // now. Left to its timer it would land after the owner is gone, in a storage
+  // that something else may have cleared or rewritten in the meantime, and a
+  // tab closed inside the window would lose it altogether. The cleanup also
+  // runs when the key changes, which stores the held value under the key it
+  // was written for.
+  useEffect(
+    () => () => {
+      if (pendingRef.current === null) return;
+      window.clearTimeout(pendingRef.current);
+      pendingRef.current = null;
+      const held = pendingValueRef.current;
+      pendingValueRef.current = null;
+      if (held !== null) persist(held);
+    },
+    [persist]
+  );
+
   const clear = useCallback(() => {
     if (pendingRef.current !== null) {
       window.clearTimeout(pendingRef.current);
       pendingRef.current = null;
+      pendingValueRef.current = null;
     }
     if (!storageKey) return;
     try {
