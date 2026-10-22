@@ -1,7 +1,7 @@
 // Controls that land where they belong, measured on a rendered page.
 //
-// This script exists because of finding P4-13, and because of the shape of
-// defect it belongs to rather than the one instance. A control positioned
+// This script exists because of the shape of a defect, not one instance of
+// it. A control positioned
 // with `absolute` inside a parent that was never made `relative` is correct
 // markup, correct classes and correct behaviour: it reads fine in review, it
 // passes every component test, and it is in the wrong place on screen. The
@@ -91,8 +91,8 @@ check(
   describe(confirmToggle, confirmField)
 );
 
-// Two controls occupying the same point is the symptom that made P4-13
-// visible: whichever is painted last takes every click, so the one a person
+// Two controls occupying the same point is the symptom that makes this
+// defect visible: whichever is painted last takes every click, so the one a person
 // presses is not the one they think they are pressing.
 check(
   'the two toggles are not stacked on each other',

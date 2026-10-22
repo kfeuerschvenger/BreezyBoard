@@ -333,10 +333,8 @@ describe('TaskModal owner suggestions, by keyboard alone', () => {
     mockedUserService.getById.mockReset();
   });
 
-  // The suggestion list used to be a stack of divs with click handlers,
-  // reachable by mouse and by nothing else, which is what P4-3 records. The
-  // near-identical list in AddMemberModal already did this correctly, which
-  // is usually the sign that the pattern was known and this one was missed.
+  // The suggestion list must be real buttons, not a stack of divs with click
+  // handlers, which would be reachable by mouse and by nothing else.
   const openSuggestions = async (user: ReturnType<typeof userEvent.setup>, query = 'Ada') => {
     renderModal();
     await waitForColorsLoaded();

@@ -98,7 +98,7 @@ boardSchema.virtual('memberCount').get(function () {
 // undefined before the Promise ever mattered. And its completion test
 // compared `status` to the literal 'done', while status holds a column id,
 // so the comparison could never be true. Average progress was zero by
-// construction, which is finding P2-4.
+// construction.
 
 // The board list and the dashboard both run visibleBoardFilter, which asks
 // for boards in a set of workspaces that the caller either created or is a

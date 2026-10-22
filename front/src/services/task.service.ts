@@ -54,7 +54,7 @@ export const TaskService = {
   //
   // `signal` lets a caller abandon a move that a newer one has overtaken.
   // Without it a slow first request can resolve after a second one and
-  // undo it, which is the drag concurrency defect, P2-6.
+  // undo it.
   async move(taskId: string, newStatus: string, between: TaskNeighbours = {}, signal?: AbortSignal): Promise<Task> {
     const response = await api.patch(
       `/tasks/${taskId}/move`,

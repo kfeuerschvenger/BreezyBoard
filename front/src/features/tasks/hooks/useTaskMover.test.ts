@@ -175,7 +175,7 @@ describe('useTaskMover sharing its in-flight guard with dragging', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  // Finding P2-6 applies to the menu exactly as it does to a second drag: if
+  // Abandoning a stale move applies to the menu exactly as it does to a second drag: if
   // the two paths kept separate guards, a slow menu move could resolve after a
   // drag and roll its stale snapshot over it.
   it('abandons a slow menu move when a drag starts another, leaving the board to the drag', async () => {

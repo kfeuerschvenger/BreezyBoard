@@ -206,8 +206,8 @@ describe('CreateBoardModal', () => {
     // The defaults land on an async transition, so a fast typist is already
     // mid-word when they do. The implementation this replaced merged them
     // into the existing state; a wholesale reset throws the typing away, and
-    // that is the same class of defect as P2-10, where the colour fetch
-    // resolving late rebuilt the whole form and wiped what was in it.
+    // that is the defect where the colour fetch resolving late rebuilds the
+    // whole form and wipes what was in it.
     //
     // Caught by the end to end suite rather than here, because every other
     // test in this file politely waits for the data first. This one does not.

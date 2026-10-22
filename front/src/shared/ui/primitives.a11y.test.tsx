@@ -20,8 +20,7 @@ import {
 import type { SwatchOption } from './index';
 
 /**
- * The component layer of the accessibility gate in section 10.2 of the
- * revival plan.
+ * The component layer of the accessibility gate.
  *
  * These primitives are where accessibility is actually won: one Modal with a
  * labelled dialog role, a focus trap and focus restoration fixes five
@@ -29,7 +28,7 @@ import type { SwatchOption } from './index';
  * only checks the pages would let the primitive rot and catch it five times
  * over instead of once.
  *
- * Definition of done for a component from here on, per the plan: zero axe
+ * Definition of done for a component: zero axe
  * violations, operable by keyboard alone, correct role and accessible name.
  * The axe pass covers the first, the assertions around it cover the rest,
  * because axe cannot see focus order or whether escape does anything.
@@ -146,8 +145,8 @@ describe('Modal', () => {
 
     const dialog = screen.getByRole('dialog');
 
-    // CreateBoardModal has no dialog role at all, per P4-3. The point of a
-    // primitive is that this cannot be got wrong once.
+    // A hand-written modal can easily ship with no dialog role at all. The
+    // point of a primitive is that this cannot be got wrong.
     expect(dialog).toHaveAccessibleName('Create board');
     await noViolations(document.body);
   });
@@ -322,7 +321,7 @@ describe('StatTile', () => {
   });
 
   // The tone picks a whole class name out of a map rather than building one,
-  // which is the P4-6 failure: a composed class is not in the stylesheet at
+  // which avoids a classic failure: a composed class is not in the stylesheet at
   // all, and the tile renders unstyled while every assertion above passes.
   it('applies the whole background class its tone names', () => {
     render(<StatTile icon={<span>folder</span>} tone="sand" value={34} label="Total Tasks" />);
@@ -434,7 +433,7 @@ describe('PasswordInput', () => {
   // The toggle has to be inside a positioned wrapper. Two of the three
   // hand-written copies this replaces were not, so they rendered against an
   // ancestor further up the page. Asserted as a class, because the layout it
-  // produces exists only in a browser. Finding P4-13.
+  // produces exists only in a browser.
   it('keeps the toggle inside a positioned wrapper', () => {
     render(<PasswordInput aria-label="Password" />);
 

@@ -13,9 +13,9 @@ import {
 } from './windMath';
 
 /**
- * The expected strings are worked out from the formulas of section 5 of
- * docs/design/SPEC.md, not copied from the output, so a slip in either place
- * shows as a difference.
+ * The expected strings are worked out by hand from the formulas in
+ * windMath.ts, not copied from the output, so a slip in either place shows as
+ * a difference.
  */
 
 describe('streak formulas', () => {

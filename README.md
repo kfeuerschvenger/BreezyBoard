@@ -21,24 +21,12 @@ Access has two levels. A workspace member may be added to individual boards, and
 
 ## Architecture
 
-```
-  Browser
-     |
-     |  development: http://localhost:5173 (page), http://localhost:5000/api/v1 (API)
-     |  production:  one origin, nginx serves the page and proxies /api and /uploads
-     v
-+-----------------+   /api/v1   +-----------------+   mongodb   +-----------------+
-| front           +------------>| back            +------------>| mongo           |
-| React + Vite    |             | Express 5       |             | MongoDB 7       |
-| (nginx in prod) |             | Node 22         |             | replica set rs0 |
-+-----------------+             +--------+--------+             +-----------------+
-                                         |
-                                         | SMTP (password reset mail)
-                                         v
-                                +-----------------+
-                                | mailpit         |   development only,
-                                | web UI :8025    |   production uses a real relay
-                                +-----------------+
+```mermaid
+graph LR
+  B[Browser] -->|"development: :5173 the page, :5000/api/v1 the API<br/>production: one origin"| F["front<br/>React + Vite<br/>nginx in production"]
+  F -->|/api/v1| K["back<br/>Express 5<br/>Node 22"]
+  K -->|mongodb| M["mongo<br/>MongoDB 7<br/>replica set rs0"]
+  K -->|"SMTP: password reset mail"| P["mailpit, web UI on :8025<br/>development only<br/>production uses a real relay"]
 ```
 
 The backend is layered: routes, middleware, validation, controllers, services, models, and a background job that purges deleted boards. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -76,7 +64,7 @@ The contract is [docs/openapi.yaml](docs/openapi.yaml), generated from the same 
 
 After changing a route schema, regenerate the document and commit it:
 
-```
+```bash
 cd back
 npm run openapi
 ```
@@ -85,12 +73,17 @@ npm run openapi
 
 ## Data model
 
-```
-users --------< workspaces.members (role: admin | member)
-workspaces ---< boards
-boards -------< tasks
-boards embed their columns, copied from a boardtemplate when the board is created
-colorpalettes are referenced by boards (six hues), columns and tasks
+```mermaid
+erDiagram
+  USERS ||--o{ WORKSPACE_MEMBERS : "belongs (role: admin or member)"
+  WORKSPACES ||--o{ WORKSPACE_MEMBERS : has
+  WORKSPACES ||--o{ BOARDS : contains
+  BOARDS ||--o{ TASKS : contains
+  BOARDS ||--o{ COLUMNS : "embeds, copied from the template"
+  BOARDTEMPLATES ||--o{ COLUMNS : "mold for"
+  COLORPALETTES ||--o{ BOARDS : "color, six hues"
+  COLORPALETTES ||--o{ COLUMNS : color
+  COLORPALETTES ||--o{ TASKS : color
 ```
 
 A task's `status` is the id of one of its board's columns, and its `order` is a fractional index key: moving a card writes that one document. Boards and tasks carry `deletedAt` for the soft delete. Details are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -118,12 +111,11 @@ Playwright and the verify scripts need the development stack up, the seed run, a
 
 Work happens on typed branches (`feature/`, `fix/`, `chore/`, `docs/`, `refactor/`, `test/`). Nothing is pushed straight to `develop`, `test` or `main`: all three are protected and take changes only through pull requests.
 
-```
-feature/*  fix/*  chore/*  docs/*  refactor/*  test/*
-      |
-      |  pull request
-      v
-  develop ----- pull request -----> test ----- pull request, after manual testing -----> main
+```mermaid
+graph LR
+  T["feature/*, fix/*, chore/*<br/>docs/*, refactor/*, test/*"] -->|pull request| D[develop]
+  D -->|pull request| S[test]
+  S -->|"pull request, after manual testing"| M[main]
 ```
 
 Each pull request into `develop`, `test` or `main` must pass five CI jobs, defined in `.github/workflows/ci.yml`:
@@ -150,7 +142,7 @@ npm 11.17.0 blocks a dependency's install script unless `allowScripts` in that p
 
 The compose file refuses to start without `MONGO_USER`, `MONGO_PASSWORD`, `JWT_SECRET`, `CORS_ORIGINS`, `FRONTEND_URL`, `SMTP_HOST` and `MAIL_FROM`, and the backend refuses to start in production without a database connection string, a secret of at least 32 characters, an origin allowlist and a mail relay, and for any variable with a malformed value. The first start generates the MongoDB keyfile into its own volume.
 
-```
+```bash
 MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-trial-secret-not-for-real-use-0123456789 \
   CORS_ORIGINS=http://localhost:8080 FRONTEND_URL=http://localhost:8080 \
   SMTP_HOST=localhost MAIL_FROM='BreezyBoard <no-reply@example.test>' HTTP_PORT=8080 \
@@ -179,4 +171,3 @@ Those values are for a local trial of the production stack, never for a real dep
 | [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) | Every environment variable |
 | [docs/openapi.yaml](docs/openapi.yaml) | The API contract |
 | [e2e/verify/README.md](e2e/verify/README.md) | The standing verification scripts |
-| [docs/REVIVAL-PLAN.md](docs/REVIVAL-PLAN.md) | The revival plan, the session contract in section 9, and the record of every finding |

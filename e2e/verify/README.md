@@ -50,7 +50,7 @@ graph TD
   Q[accessibility.mjs] -->|axe on a real page| R[a ratchet that only<br/>ever goes down]
 ```
 
-**`authorization.mjs`** replays the exploit recorded in appendix A of the revival plan. It registers two accounts, has the first create a board and a task, and asserts twelve outcomes. Six are refusals for an outsider, three cover a legitimate member who is not the creator, and three confirm the owner can still do their work.
+**`authorization.mjs`** replays an authorization exploit: an authenticated outsider reading and changing another user's board and tasks. It registers two accounts, has the first create a board and a task, and asserts twelve outcomes. Six are refusals for an outsider, three cover a legitimate member who is not the creator, and three confirm the owner can still do their work.
 
 Those last three matter as much as the refusals. A middleware that denied everyone would pass every negative security assertion ever written, so a security check without positive cases proves nothing.
 
@@ -91,7 +91,7 @@ It is a ratchet rather than a pass. Each surface carries the violation count mea
 
 It earned its keep before it was even finished. The first measurement reported eleven contrast violations on the login page and four on the dashboard, and every one was an artefact of scanning during the entrance animation: framer-motion animates opacity from zero by writing inline styles, and axe computes contrast against whatever opacity it finds. The count moved between 0, 3 and 11 across consecutive runs of an identical page. The script now waits for animations to settle first, after which the count is zero, consistently. A ratchet built on a number that flaps is worse than no ratchet, because the first false red teaches everyone to ignore it.
 
-It also confirmed the prediction in section 10.2 of the revival plan, word for word: the task editor reports `aria-dialog-name`, an unlabelled dialog, which no lint rule and no unit test in this repository had ever noticed.
+It catches what no lint rule and no unit test can: an unlabelled dialog, reported by axe as `aria-dialog-name`.
 
 It also measures contrast, with `contrast.mjs`, after every scan. A hand picked list of colour pairs proves the pairs somebody thought of, and axe answers "incomplete" for text on translucent glass over a gradient, which is most of this interface. So the page is photographed with every glyph made transparent and each piece of text, each typed value and placeholder, and each glyph that is a control's only content, is compared with the lightest and the darkest pixel behind its box, after compositing a translucent colour or a faded parent over them. Text must reach 4.5:1, large text 3:1 and a glyph 3:1. It has no budget: a pair below its minimum fails the run and is fixed in the interface. It does not measure a disabled control (WCAG 1.4.3 exempts it), text under an inert layer or behind an open dialog, text clipped by a scrolling ancestor, screen reader only text, text painted with a gradient fill, or text that is rotated, whose axis aligned box takes in pixels that are not behind its glyphs. The ambient wind layer is hidden for the photograph, as it is in the pairs of `design-tokens.mjs`: a streak crossing a line of text for a moment is not its background. Four probes of known colour are put on the login page first, one to be refused at 3.2:1, one accepted, one accepted at the large text size and one refused at 30% opacity, so the sweep cannot pass by measuring nothing.
 
@@ -108,7 +108,7 @@ MONGO_USER=bb MONGO_PASSWORD=devpassword JWT_SECRET=local-trial-secret-not-for-r
 
 Controls that land where they belong, measured on a rendered page.
 
-It exists because of finding P4-13 and the class of defect it belongs to. A control positioned with absolute inside a parent that was never made relative is correct markup, correct classes and correct behaviour, and it is in the wrong place on screen. No layer below a real browser computes layout, so the static lint, axe and the component tests all pass while two password toggles sit stacked on each other above the wrong field.
+It exists for a class of defect that only a real browser can see. A control positioned with absolute inside a parent that was never made relative is correct markup, correct classes and correct behaviour, and it is in the wrong place on screen. No layer below a real browser computes layout, so the static lint, axe and the component tests all pass while two password toggles sit stacked on each other above the wrong field.
 
 It asserts containment rather than coordinates, so a redesign does not break it.
 
@@ -118,7 +118,7 @@ The board's layout, measured at 390, 1024 and 1440 pixels.
 
 It asserts that the document scrolls in neither direction, that the columns share one row at one fixed width inside a single horizontally scrolling container that can take focus, that a long column scrolls inside itself while its header stays put, that every column is 292 pixels wide, that an empty column says "Still air" and fills its column, that a column's composer stays at its foot in view while the cards scroll, that the empty board banner and its button are on screen without making the page scroll, and that holding a dragged card at the screen edge scrolls the row and lets the drop land in another column. None of this exists below a real browser, because jsdom loads no stylesheet.
 
-It found P4-16, absolutely positioned `sr-only` text escaping a column's scroller and growing the page.
+It also guards against absolutely positioned `sr-only` text escaping a column's scroller and growing the page.
 
 ## responsive.mjs
 

@@ -258,7 +258,7 @@ describe('useTaskDragAndDrop when a move fails', () => {
     expect(cache.replace).not.toHaveBeenCalled();
   });
 
-  // Finding P2-6. A second drag aborts the first, and the abandoned request
+  // A second drag aborts the first, and the abandoned request
   // must not touch the board afterwards: the newer move owns it now.
   it('leaves the board alone when its own request was abandoned for a newer one', async () => {
     const cache = makeCache();

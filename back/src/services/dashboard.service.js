@@ -26,7 +26,7 @@ export const getDashboardStats = async userId => {
   // sum. The old code summed `board.progress`, a virtual that is undefined
   // here because this query is lean and lean strips virtuals, so average
   // progress has been zero for every account that has ever used this
-  // product. That is finding P2-4 and its entire visible symptom.
+  // product.
   const summaries = await summariseBoardTasks(boards);
 
   let totalTasks = 0;

@@ -104,8 +104,8 @@ describe('tasks', () => {
 
     // A task filed under a status that names no column renders in no column
     // at all, invisible on the board while still counting in its totals.
-    // That is how the withdrawn P0-2 was produced, so it is a demonstrated
-    // defect rather than a theoretical one.
+    // That state is reachable by writing an arbitrary status, so it is a
+    // demonstrated defect rather than a theoretical one.
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });

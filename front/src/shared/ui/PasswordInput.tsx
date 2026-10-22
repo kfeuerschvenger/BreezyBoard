@@ -26,7 +26,7 @@ const BASE_CLASSES = `${FIELD_CLASSES} h-12 rounded-field pr-12`;
  * point rather than a detail. Two of the three hand-written copies of this
  * put an absolutely positioned toggle next to the field instead of inside a
  * positioned parent, so both landed against an ancestor further up: above
- * the first field and on top of each other. That is finding P4-13, and it is
+ * the first field and on top of each other. That is
  * invisible to every test below a real browser, because nothing else
  * computes layout.
  *

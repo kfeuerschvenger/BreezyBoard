@@ -141,7 +141,7 @@ describe('Board page rendering', () => {
     expect(within(doneColumn.firstElementChild as HTMLElement).getByText('0')).toBeInTheDocument();
   });
 
-  it('pins current behavior (finding P2-9): a task with a status matching no column renders in no column, and the board still renders', async () => {
+  it('pins current behavior: a task with a status matching no column renders in no column, and the board still renders', async () => {
     mockedBoardService.getById.mockResolvedValue(board);
     mockedTaskService.getByBoard.mockResolvedValue([
       makeTask({ _id: 'task-todo', title: 'Write the spec', status: 'col-todo' }),

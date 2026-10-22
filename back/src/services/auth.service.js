@@ -91,8 +91,8 @@ export const registerUser = async userData => {
   // all. Every board belongs to a workspace, so a user who exists without
   // one can log in and then cannot do anything: the failure would look like
   // a bug in board creation rather than a half-finished registration. The
-  // replica set that Phase 4 introduced for the board delete cascade is what
-  // makes this possible.
+  // replica set, which the board delete cascade also needs, is what makes
+  // this possible.
   const session = await mongoose.startSession();
   let user = null;
 

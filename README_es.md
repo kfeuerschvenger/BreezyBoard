@@ -171,4 +171,3 @@ Esos valores sirven para probar el stack de producción en local, nunca para un 
 | [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) | Todas las variables de entorno |
 | [docs/openapi.yaml](docs/openapi.yaml) | El contrato de la API |
 | [e2e/verify/README.md](e2e/verify/README.md) | Los scripts permanentes de verificación |
-| [docs/REVIVAL-PLAN.md](docs/REVIVAL-PLAN.md) | El plan de recuperación, el contrato de sesión de la sección 9 y el registro de cada hallazgo |

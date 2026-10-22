@@ -7,8 +7,8 @@ import tseslint from 'typescript-eslint';
 import { globalIgnores } from 'eslint/config';
 
 /**
- * The dependency direction from section 12.3 of the revival plan, as rules
- * rather than as a convention.
+ * The dependency direction between layers, as rules rather than as a
+ * convention.
  *
  * A structure that cannot be verified automatically is a convention, and
  * this codebase is the evidence of what happens to those. The rules go in
@@ -95,8 +95,7 @@ export default tseslint.config([
       tseslint.configs.recommended,
       reactHooks.configs['recommended-latest'],
       reactRefresh.configs.vite,
-      // The static layer of the accessibility gate in section 10.2. It
-      // catches the class of defect that P4-3 is made of: labels with no
+      // The static layer of the accessibility gate. It catches labels with no
       // associated control, click handlers with no keyboard equivalent,
       // aria-hidden over real information, invalid ARIA.
       jsxA11y.flatConfigs.recommended,
