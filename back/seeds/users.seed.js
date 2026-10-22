@@ -1,7 +1,9 @@
+import './requireSeedEnvironment.js';
 import mongoose from 'mongoose';
 import env from '../src/config/env.js';
 import bcrypt from 'bcryptjs';
 import User from '../src/models/User.js';
+import Workspace from '../src/models/Workspace.js';
 
 const connectDB = async () => {
   try {
@@ -73,17 +75,29 @@ const seedUsers = [
 const seed = async () => {
   await connectDB();
 
-  // Delete existing users
+  // Delete existing users, and the personal workspaces that belong to them.
+  // Leaving those behind would orphan a workspace per seeded account on
+  // every run, and the next seed would create another set.
   await User.deleteMany();
+  await Workspace.deleteMany({ isPersonal: true });
 
-  // Create users with hashed passwords
+  // Create users with hashed passwords. Each one gets the personal
+  // workspace that registration would have given it, because a user without
+  // one cannot create a board at all.
   for (const user of seedUsers) {
     const salt = await bcrypt.genSalt(env.SALT);
     const hashedPassword = await bcrypt.hash(user.password, salt);
 
-    await User.create({
+    const created = await User.create({
       ...user,
       password: hashedPassword,
+    });
+
+    await Workspace.create({
+      name: 'Personal',
+      createdBy: created._id,
+      members: [{ user: created._id, role: 'admin' }],
+      isPersonal: true,
     });
   }
 

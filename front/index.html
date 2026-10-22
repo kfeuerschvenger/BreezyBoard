@@ -2,7 +2,19 @@
 <html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="viewport" content="minimum-scale=1, initial-scale=1, width=device-width, user-scalable=no" />
+    <!-- user-scalable=no used to be here, which stops a person pinching to
+         zoom. That fails WCAG 1.4.4 and it is the one accessibility defect
+         in this application that no component can fix, because it disables
+         the browser's own remedy for every other one. -->
+    <!-- interactive-widget=resizes-content makes the on-screen keyboard shrink
+         the layout viewport, so dynamic viewport units, and the bottom sheet
+         sized with them, end above the keyboard instead of behind it. Browsers
+         that do not support it ignore it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+    <!-- Matches the Referrer-Policy header nginx sends in production, so the
+         development server holds the same line: the password reset page is
+         opened with a credential in its address. -->
+    <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#333" />
     <meta name="og:description" property="og:description" content="BreezyBoard application" />
@@ -14,7 +26,7 @@
     <link rel="apple-touch-icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="author" content="Kevin Feuerschvenger" />
     <meta name="keywords" content="Kanban, Project Management, Task Management, Boards, BreezyBoard" />
-    <title>Boards</title>
+    <title>BreezyBoard</title>
   </head>
   <body>
     <div id="root"></div>

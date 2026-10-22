@@ -1,0 +1,142 @@
+name: breezyboard
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: breezyboard-mongo
+    restart: unless-stopped
+    # A single node replica set rather than a standalone instance. Multi
+    # document transactions are only available on a replica set or a sharded
+    # cluster, and the board delete cascade needs one. A single node is enough
+    # for that: it provides the oplog and the session support transactions are
+    # built on, without the operational weight of real replication.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-boards-db}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    # The health check doubles as the one time initiator. A fresh data volume
+    # starts uninitiated, so rs.status() throws and the catch initiates the
+    # set; every later run finds it already configured and does nothing. The
+    # exit code then reports healthy only once the node is actually a writable
+    # primary, which is what dependent services need to wait for, rather than
+    # merely answering a ping.
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - |
+          try { rs.status() } catch (error) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }) }
+          quit(db.hello().isWritablePrimary ? 0 : 1)
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # A local mail catcher. It accepts anything the API sends over SMTP and
+  # delivers it nowhere: the message is only readable in its web interface
+  # and through its HTTP API, which the end to end suite uses to follow a
+  # password reset link. Development only, there is no counterpart in
+  # docker-compose.prod.yml, where the API must be pointed at a real relay.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: breezyboard-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
+  back:
+    build:
+      context: ./back
+      target: dev
+    container_name: breezyboard-back
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      PORT: 5000
+      # replicaSet=rs0 is what makes the driver open sessions against a
+      # replica set topology, which is the prerequisite for transactions. A
+      # tool connecting from the host instead of from this network cannot use
+      # it, because the seed list it receives names mongo:27017, a hostname
+      # that only resolves inside the compose network. Use
+      # mongodb://localhost:27017/boards-db?directConnection=true from the host.
+      MONGODB_URI: mongodb://mongo:27017/${MONGO_DB:-boards-db}?replicaSet=rs0
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
+      NODE_ENV: development
+      SALT: 10
+      # The sliding session's two independent clocks: the inactivity window
+      # (rewritten on every renewal) and the absolute cap anchored on
+      # sessionStartedAt (never rewritten). Both are validated with a
+      # fallback in back/src/config/env.js, so these are the operational
+      # defaults, not a required setting.
+      JWT_INACTIVITY_TTL_MS: ${JWT_INACTIVITY_TTL_MS:-900000}
+      JWT_ABSOLUTE_TTL_MS: ${JWT_ABSOLUTE_TTL_MS:-14400000}
+      # Development only. The standing scripts in e2e/verify register real
+      # accounts, and a full run plus the browser suite very nearly spends
+      # the production budget of twenty an hour, after which the limit
+      # surfaces as a browser test timing out and reads as a product defect.
+      # docker-compose.prod.yml deliberately does not set this, so production
+      # keeps the strict default from back/src/config/env.js.
+      REGISTRATION_LIMIT_PER_HOUR: ${REGISTRATION_LIMIT_PER_HOUR:-500}
+      # Development only, for the same reason: the end to end suite asks for
+      # password resets from one address, and the production budget would
+      # turn a repeated run into a rate limit that reads as a defect.
+      PASSWORD_RECOVERY_LIMIT_PER_15_MIN: ${PASSWORD_RECOVERY_LIMIT_PER_15_MIN:-500}
+      # Development only: the browser suite asks for resets from addresses it
+      # reuses, and the production gap of a minute between two emails to one
+      # address would make the second request send nothing.
+      PASSWORD_RESET_COOLDOWN_MS: ${PASSWORD_RESET_COOLDOWN_MS:-1000}
+      # Password reset mail goes to the Mailpit container above. Port 1025
+      # is its SMTP listener and needs no authentication. FRONTEND_URL is the
+      # origin the reset link points at, so it is the address a browser on
+      # the host uses, not a name inside the compose network.
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      # Mailpit speaks no TLS, and the API requires it everywhere else. This
+      # opt-out exists for this container alone: the production configuration
+      # refuses to start with it set, and docker-compose.prod.yml never
+      # mentions it.
+      SMTP_ALLOW_PLAINTEXT: "true"
+      FRONTEND_URL: http://localhost:${FRONT_PORT:-5173}
+      DOTENV_CONFIG_QUIET: "true"
+    ports:
+      - "${BACK_PORT:-5000}:5000"
+    volumes:
+      # Source only. node_modules deliberately stays inside the image: the bind
+      # mounts above do not cover it, so a named volume there would only shadow
+      # the image's tree with a stale copy and make every dependency change
+      # require deleting a volume by hand.
+      - ./back/src:/app/src
+      - ./back/seeds:/app/seeds
+      - uploads:/app/uploads
+
+  front:
+    build:
+      context: ./front
+      target: dev
+    container_name: breezyboard-front
+    restart: unless-stopped
+    depends_on:
+      - back
+    environment:
+      VITE_API_URL: http://localhost:${BACK_PORT:-5000}/api/v1
+      VITE_USE_STRICT_MODE: "false"
+    ports:
+      - "${FRONT_PORT:-5173}:5173"
+    volumes:
+      - ./front/src:/app/src
+      - ./front/public:/app/public
+      - ./front/index.html:/app/index.html
+      - ./front/vite.config.ts:/app/vite.config.ts
+
+volumes:
+  mongo-data:
+  uploads:

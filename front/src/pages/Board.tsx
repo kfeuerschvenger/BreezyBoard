@@ -1,324 +1,237 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Board as BoardModel, Task } from '@/models';
-import { BoardService, TaskService } from '@/services';
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import type { Task } from '@/models';
+import { TaskService } from '@/services';
+import type { TaskNeighbours } from '@/services/task.service';
+import { byOrder } from '@/features/board';
+import { BoardHeader, boardHueOf } from '@/features/boards';
+import { useColors } from '@/features/colors';
 import {
-  closestCorners,
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { motion } from 'framer-motion';
-import { Plus } from 'lucide-react';
-import Column from '../components/Column';
-import PageHeader from '../components/PageHeader';
-import TaskCard from '../components/TaskCard';
-import TaskDrawer from '../components/TaskDrawer';
-import UserAvatar from '../components/UserAvatar';
-
-interface ColumnData {
-  _id: string;
-  id: string;
-  title: string;
-  color: string;
-  order: number;
-}
+  BoardColumns,
+  TaskModal,
+  useBoardData,
+  useDeleteTaskWithUndo,
+  useLeavingCards,
+  useTaskDragAndDrop,
+} from '@/features/tasks';
+import type { MoveTarget, StoredTask } from '@/features/tasks';
+import { IconPlus } from '@tabler/icons-react';
+import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
+import { Button, LoadingScreen, Icon } from '@/shared/ui';
+import { useAuth } from '@/hooks/useAuth';
+import { ShellAction } from '@/app/layouts/shell/ShellAction';
+import NotFound from './NotFound';
 
 const Board = () => {
   const navigate = useNavigate();
   const { boardId } = useParams<{ boardId: string }>();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [currentBoard, setCurrentBoard] = useState<BoardModel | null>(null);
-  const [columns, setColumns] = useState<ColumnData[]>([]);
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  // The task as it was when it was opened. The form is built from this copy
+  // and keeps it for as long as the modal is open, and while it leaves after
+  // a delete, when the task is no longer on the board to be read from.
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Changes each time something asks for the first column's composer.
+  const [composerRequest, setComposerRequest] = useState(0);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const { user } = useAuth();
+  const { board, columns, tasks, taskColors, cache, isLoading, error, notFound } = useBoardData(boardId);
+  const { data: taskPalette } = useColors('task');
+  // A board that cannot be shown hands the screen to NotFound, which names the
+  // tab itself, so the board stands aside rather than overwrite it.
+  useDocumentTitle(notFound ? null : `${board?.title ?? 'Board'} | BreezyBoard`);
 
-  useEffect(() => {
-    if (!boardId) return;
+  const drag = useTaskDragAndDrop({
+    tasks,
+    columns,
+    cache,
+  });
 
-    const fetchBoardData = async () => {
-      try {
-        setIsLoading(true);
+  // A deleted card is off the board's list at once and plays its exit from a
+  // picture kept here. Neither the request nor the toast wait for it.
+  const { leaving, leave, end } = useLeavingCards();
+  const { deleteTask } = useDeleteTaskWithUndo({ cache, onRemoved: leave });
 
-        // Get current board
-        const boardData = await BoardService.getById(boardId);
-        setCurrentBoard(boardData);
-
-        // Get board tasks and sort by order
-        const tasksData = await TaskService.getByBoard(boardId);
-        const sortedTasks = tasksData.sort((a, b) => a.order - b.order);
-        setTasks(sortedTasks);
-
-        // Prepare columns from board template
-        if (boardData.template && typeof boardData.template !== 'string' && boardData.template.columns) {
-          const formattedColumns = boardData.template.columns.map((col: any) => ({
-            id: col._id,
-            _id: col._id,
-            title: col.title,
-            color: col.color?.value || '#64748B',
-            order: col.order,
-          }));
-          setColumns(formattedColumns);
-        }
-      } catch (error) {
-        console.error('Error loading board data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchBoardData();
-  }, [boardId]);
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    setActiveTask(tasks.find(task => task._id === active.id) || null);
-  };
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    // If dropping outside any container or no active task
-    if (!over || !activeTask) {
-      setActiveTask(null);
-      return;
-    }
-
-    // Check if we're dropping on a column or a task
-    const isOverColumn = columns.some(col => col.id === over.id);
-    const overTask = tasks.find(task => task._id === over.id);
-
-    // Determine the target column ID
-    let targetColumnId: string;
-    if (isOverColumn) {
-      targetColumnId = over.id as string;
-    } else if (overTask) {
-      targetColumnId = overTask.status;
-    } else {
-      setActiveTask(null);
-      return;
-    }
-
-    // If moving to a different column
-    if (activeTask.status !== targetColumnId) {
-      const originalStatus = activeTask.status;
-
-      // Get tasks in target column to determine new order
-      const targetColumnTasks = tasks.filter(task => task.status === targetColumnId);
-      const newOrder = targetColumnTasks.length > 0 ? Math.max(...targetColumnTasks.map(t => t.order)) + 1 : 0;
-
-      // Optimistic UI update
-      setTasks(prev =>
-        prev.map(task => (task._id === activeTask._id ? { ...task, status: targetColumnId, order: newOrder } : task))
-      );
-
-      try {
-        await TaskService.move(activeTask._id, targetColumnId, newOrder);
-      } catch (error) {
-        // Revert on error
-        setTasks(prev =>
-          prev.map(task =>
-            task._id === activeTask._id ? { ...task, status: originalStatus, order: activeTask.order } : task
-          )
-        );
-        console.error('Error moving task:', error);
-      }
-    }
-    // If reordering within the same column
-    else if (overTask && activeTask._id !== overTask._id) {
-      // Get all tasks in the current column
-      const columnTasks = tasks.filter(task => task.status === targetColumnId).sort((a, b) => a.order - b.order);
-
-      // Find indices
-      const oldIndex = columnTasks.findIndex(task => task._id === activeTask._id);
-      const newIndex = columnTasks.findIndex(task => task._id === overTask._id);
-
-      if (oldIndex !== newIndex) {
-        // Reorder tasks
-        const reorderedTasks = arrayMove(columnTasks, oldIndex, newIndex);
-
-        // Update orders
-        const updatedTasks = reorderedTasks.map((task, index) => ({
-          ...task,
-          order: index,
-        }));
-
-        // Update state with reordered tasks
-        setTasks(prev => {
-          const otherTasks = prev.filter(task => task.status !== targetColumnId);
-          return [...otherTasks, ...updatedTasks];
-        });
-
-        try {
-          // Update orders in backend
-          await TaskService.updateOrders(
-            boardId!,
-            updatedTasks.map(task => ({ id: task._id, order: task.order }))
-          );
-        } catch (error) {
-          // Revert on error
-          const tasksData = await TaskService.getByBoard(boardId!);
-          const sortedTasks = tasksData.sort((a, b) => a.order - b.order);
-          setTasks(sortedTasks);
-          console.error('Error updating task orders:', error);
-        }
-      }
-    }
-
-    setActiveTask(null);
-  };
-
-  const handleTaskClick = (task: Task) => {
+  const openTask = (task: Task) => {
     setSelectedTask(task);
-    setDrawerOpen(true);
+    setModalOpen(true);
   };
 
-  const handleTaskSave = async (taskData: Partial<Task>) => {
-    if (!boardId) {
-      console.error('No boardId available for creating task.');
-      return;
-    }
+  // What the board holds for the open task now. A "Move to" inside the modal
+  // changes its column on the board, and the copy the form was built from
+  // does not follow.
+  const liveTask = selectedTask ? tasks.find(task => task._id === selectedTask._id) : undefined;
+  const moveTargets = useMemo<MoveTarget[]>(() => columns.map(({ id, title }) => ({ id, title })), [columns]);
 
+  /**
+   * Moves the open task to the foot of a column from inside the modal. It goes
+   * through the board's own mover, so it shares the request guard with a drag,
+   * and says the result in the board's live region. It does not use
+   * `moveToColumn`, which also asks for focus on the card's menu: the focus
+   * belongs to the modal for as long as it is open.
+   */
+  const moveOpenTask = async (target: MoveTarget) => {
+    if (!liveTask) return;
+    const outcome = await drag.mover.move(liveTask, target.id);
+    if (outcome === 'moved') drag.mover.announce(`Moved ${liveTask.title} to ${target.title}.`);
+    if (outcome === 'failed') drag.mover.announce(`Could not move ${liveTask.title} to ${target.title}.`);
+  };
+
+  const deleteOpenTask = async () => {
+    if (liveTask) await deleteTask(liveTask);
+  };
+
+  const requestComposer = () => setComposerRequest(count => count + 1);
+
+  /**
+   * Adds a card from a column's composer: a title, and its author as the
+   * owner, since whoever types a card is the person who has it in hand. The
+   * description is optional and is left empty. The server needs a colour, so
+   * the first of the task palette is sent, as the task form preselects it. It
+   * rejects when the card could not be saved and the composer keeps what was
+   * typed.
+   */
+  const createTask = async (columnId: string, title: string): Promise<Task> => {
+    if (!boardId) throw new Error('No board was specified in the address.');
+    const color = taskPalette?.[0]?._id;
+    if (!color) throw new Error('The task colours have not loaded.');
+
+    const created = await TaskService.create(boardId, {
+      title,
+      status: columnId,
+      color,
+      ...(user && { owner: user._id }),
+    });
+    cache.write([...(cache.read() ?? []), created]);
+    return created;
+  };
+
+  const moveTask = async (taskId: string, newStatus: string, between: TaskNeighbours = {}) => {
     try {
-      let result: Task;
-
-      if (taskData._id) {
-        result = await TaskService.update(taskData._id, taskData);
-      } else {
-        result = await TaskService.create(boardId, taskData);
-      }
-
-      setTasks(prev => {
-        if (taskData._id) {
-          return prev.map(t => (t._id === taskData._id ? result : t));
-        } else {
-          return [...prev, result];
-        }
-      });
-
-      // Only move to done if there are checklist items AND all are completed
-      const hasChecklist = result.checklist && result.checklist.length > 0;
-      const allCompleted = hasChecklist && result.checklist.every(item => item.completed);
-
-      if (hasChecklist && allCompleted && result.status !== 'done') {
-        // Find column with highest order (last column)
-        const doneColumn = columns.reduce((max, col) => (col.order > max.order ? col : max), columns[0]);
-
-        if (doneColumn) {
-          await handleTaskMove(result._id, doneColumn.id);
-        }
-      }
-
-      setDrawerOpen(false);
-    } catch (error) {
-      console.error('Error saving task:', error);
-    }
-  };
-
-  const handleAddTask = () => {
-    if (!boardId || !columns.length) return;
-
-    const defaultColumn = columns[0];
-
-    const newTask: Partial<Task> = {
-      title: 'New Task',
-      description: '',
-      status: defaultColumn.id,
-      priority: 'medium',
-      color: defaultColumn.color,
-      owner: '',
-      boardId,
-      checklist: [],
-    };
-
-    setSelectedTask(newTask as Task);
-    setDrawerOpen(true);
-  };
-
-  const handleTaskMove = async (taskId: string, newStatus: string) => {
-    try {
-      await TaskService.move(taskId, newStatus);
-      setTasks(prev => prev.map(task => (task._id === taskId ? { ...task, status: newStatus } : task)));
+      cache.replace(await TaskService.move(taskId, newStatus, between));
     } catch (error) {
       console.error('Error moving task:', error);
     }
   };
 
-  if (isLoading) {
+  /**
+   * Deliberately does not catch. The modal reports a failed save and keeps
+   * itself open holding the draft, and it can only do that if the failure
+   * reaches it. A catch here returns normally, which tells the modal the
+   * save succeeded, so it clears the draft and closes over work that was
+   * never written. That is finding P4-9.
+   *
+   * Closing on success is the modal's job too, through onSaved.
+   */
+  const saveTask = async (taskData: StoredTask) => {
+    const result = await TaskService.update(taskData._id, taskData);
+    cache.replace(result);
+
+    // A task whose checklist is entirely done moves itself to the last
+    // column. `status` holds a column id, so comparing it to the literal
+    // 'done' never matched; the last column is resolved by order instead.
+    const isChecklistComplete = Boolean(result.checklist?.length) && result.checklist.every(item => item.completed);
+    if (!isChecklistComplete || columns.length === 0) return;
+
+    const doneColumn = columns.reduce((last, column) => (column.order > last.order ? column : last), columns[0]);
+    if (result.status === doneColumn.id) return;
+
+    // Completing a checklist sends the task to the bottom of that column,
+    // which is the only neighbour that needs naming. Its own failure is
+    // reported and swallowed: the task was saved, and telling the person it
+    // was not because a follow-up move failed would be a worse answer.
+    const doneTasks = tasks.filter(task => task.status === doneColumn.id).sort(byOrder);
+    await moveTask(result._id, doneColumn.id, {
+      afterId: doneTasks.length > 0 ? doneTasks[doneTasks.length - 1]._id : null,
+    });
+  };
+
+  if (isLoading) return <LoadingScreen label="Loading this board" fill="parent" />;
+
+  // Ahead of the generic failure: a board that is missing, deleted or not the
+  // caller's answers the same on every attempt, so "Try again" would only
+  // repeat the answer.
+  if (notFound) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <NotFound
+        title="Board not found"
+        description="This board does not exist, was deleted, or you do not have access to it."
+      />
+    );
+  }
+
+  if (error || !board) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <div role="alert" className="max-w-md rounded-panel border border-line-08 bg-surface p-8 text-center shadow-card">
+          <p className="mb-2 font-medium text-ink">This board could not be loaded</p>
+          <p className="mb-6 text-sm text-ink-secondary">{error}</p>
+          <div className="flex justify-center gap-3">
+            <Button type="button" onClick={() => window.location.reload()}>
+              Try again
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+              Back to boards
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
 
+  // The last column is where work has landed, by order, which is also how a
+  // finished checklist picks the column it moves a task to.
+  const lastColumn = columns.reduce<(typeof columns)[number] | null>(
+    (last, column) => (!last || column.order > last.order ? column : last),
+    null,
+  );
+  const landed = lastColumn ? tasks.filter(task => task.status === lastColumn.id).length : 0;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <PageHeader
-        title={currentBoard ? currentBoard.title : 'Project Board'}
-        subtitle="Manage tasks in this board"
-        showBackButton
-        onBack={() => navigate('/')}
-      >
-        <button
-          onClick={handleAddTask}
-          className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
-          disabled={!columns.length}
+    // Fills the frame the app gives the board page, which is pinned to the
+    // viewport: the header takes what it needs and the columns take the rest,
+    // so the only things that scroll are the column row sideways and each
+    // column body down.
+    <div className="flex min-h-0 flex-1 animate-bb-view-once flex-col overflow-hidden">
+      <BoardHeader board={board} landed={landed} total={tasks.length} onDeleted={() => navigate('/')} />
+
+      <ShellAction>
+        <Button
+          type="button"
+          size="sm"
+          onClick={requestComposer}
+          disabled={columns.length === 0}
+          leftIcon={<Icon as={IconPlus} size={18} />}
         >
-          <Plus size={20} />
-          Add Task
-        </button>
-        <UserAvatar />
-      </PageHeader>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto p-8">
-        {columns.length > 0 ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {columns.map(column => (
-                <Column
-                  key={column.id}
-                  column={column}
-                  tasks={tasks.filter(task => task.status === column.id)}
-                  onTaskClick={handleTaskClick}
-                />
-              ))}
-            </div>
+          Add card
+        </Button>
+      </ShellAction>
 
-            <DragOverlay>{activeTask ? <TaskCard task={activeTask} isDragging /> : null}</DragOverlay>
-          </DndContext>
-        ) : (
-          <div className="text-center py-12">
-            <div className="text-gray-500 text-lg">No columns available for this board</div>
-            <p className="text-gray-400 mt-2">This board template doesn't have any columns configured.</p>
-          </div>
-        )}
+      <BoardColumns
+        columns={columns}
+        tasks={tasks}
+        drag={drag}
+        taskColors={taskColors}
+        hue={boardHueOf(board.color)}
+        onTaskClick={openTask}
+        onCreateTask={createTask}
+        composerRequest={composerRequest}
+        onRequestComposer={requestComposer}
+        leaving={leaving}
+        onLeavingEnd={end}
+      />
 
-        <TaskDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          task={selectedTask}
-          onSave={handleTaskSave}
-        />
-      </motion.div>
+      <TaskModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        task={selectedTask}
+        onSave={saveTask}
+        boardTitle={board.title}
+        hue={boardHueOf(board.color)}
+        columns={moveTargets}
+        columnId={liveTask?.status ?? selectedTask?.status}
+        onMove={moveOpenTask}
+        onDelete={deleteOpenTask}
+      />
     </div>
   );
 };

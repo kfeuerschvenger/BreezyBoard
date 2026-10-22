@@ -1,0 +1,28 @@
+name: Deploy test
+
+# Placeholder. Deployment is built in the separate environments project
+# (docs/REVIVAL-PLAN.md, "Test and production environments"), which fills in
+# the job below. Until then a merge into test deploys nothing.
+on:
+  push:
+    branches: [test]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Deploys to this environment run one at a time and a running deploy is never
+  # cancelled. GitHub keeps one pending run behind it and replaces an older
+  # pending run with a newer one, so only the newest queued deploy runs, which
+  # is the right outcome for a deploy: it ships the latest commit.
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Deployment is not built yet
+        run: echo "Deployment to the test environment belongs to the separate environments project. Nothing is deployed."

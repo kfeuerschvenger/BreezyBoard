@@ -1,0 +1,168 @@
+name: CI
+
+# Runs on every pull request into develop, test and main and on every push to
+# them. The job names below are what branch protection requires, so renaming
+# one detaches it from the rule: back, front, e2e, docker, audit.
+#
+# Playwright and e2e/verify need the whole stack running and stay local gates.
+on:
+  pull_request:
+    branches: [develop, test, main]
+  push:
+    branches: [develop, test, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A pull request shares one group per ref, so a newer push supersedes the
+  # run in progress. A push gets a group of its own per ref and commit: with a
+  # shared group GitHub keeps one running and one pending run and drops the
+  # older pending one, which would leave the middle of three quick pushes
+  # without a result. The ref is part of the key because the same commit
+  # promoted from test to main would otherwise share a group with itself.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.ref, github.sha) }}
+  # Only a superseded pull request run is cancelled. A push to develop, test
+  # or main always runs to the end, so the branch history keeps a result for
+  # every commit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  back:
+    name: back
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Where mongodb-memory-server keeps its mongod binary, read by its
+      # postinstall during npm ci and again by the tests. It sits outside
+      # node_modules because npm ci deletes node_modules before it installs.
+      # The runner context is not available in a job level env, so the path is
+      # the fixed home directory of the ubuntu runner.
+      MONGOMS_DOWNLOAD_DIR: /home/runner/.cache/mongoms
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # Restored before the install: the postinstall of mongodb-memory-server
+      # downloads the binary during npm ci, which the composite action runs, so
+      # a cache restored after it would find the download already done. The key
+      # follows the lockfile because the binary version is tied to the
+      # mongodb-memory-server release it pins.
+      - name: Cache the MongoDB binary
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /home/runner/.cache/mongoms
+          key: mongoms-${{ runner.os }}-${{ hashFiles('back/package-lock.json') }}
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: back
+      - name: Lint
+        working-directory: back
+        run: npm run lint
+      # docs/openapi.yaml is generated from the route schemas. This fails when
+      # a schema changed and the file was not regenerated with
+      # `npm run openapi` and committed.
+      - name: OpenAPI document is up to date
+        working-directory: back
+        run: npm run openapi:check
+      # The tests start their own MongoDB replica set in memory
+      # (test/globalSetup.js), so no database service is needed.
+      - name: Test
+        working-directory: back
+        run: npm test
+
+  front:
+    name: front
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: front
+      - name: Lint
+        working-directory: front
+        run: npx eslint src/
+      # tsc -b is the type check, and vite build the production bundle.
+      # tsc --noEmit checks nothing here because the root tsconfig only has
+      # project references.
+      - name: Build
+        working-directory: front
+        run: npm run build
+      # One file at a time: with files in parallel a loaded runner trips the
+      # default waitFor timeouts in the suite.
+      - name: Test
+        working-directory: front
+        run: npx vitest run --no-file-parallelism
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node-npm
+        with:
+          working-directory: e2e
+      - name: Typecheck
+        working-directory: e2e
+        run: npm run typecheck
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Throwaway values so that docker-compose.prod.yml can be parsed. They
+      # reach no running container: the images are built and thrown away.
+      MONGO_USER: ci
+      MONGO_PASSWORD: ci-not-a-secret
+      # At least 32 characters, the length the backend demands of a production secret.
+      JWT_SECRET: ci-throwaway-secret-not-for-real-use-0000
+      CORS_ORIGINS: http://localhost
+      FRONTEND_URL: http://localhost
+      SMTP_HOST: localhost
+      MAIL_FROM: ci@localhost
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # The production images exactly as docker-compose.prod.yml builds them.
+      - name: Build the production images
+        run: docker compose -f docker-compose.prod.yml build
+      # The development stages, which docker-compose.yml builds.
+      - name: Build the backend development image
+        run: docker build --target dev --tag breezyboard-back-dev back
+      - name: Build the frontend development image
+        run: docker build --target dev --tag breezyboard-front-dev front
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+      # The same npm as the other jobs, so the gate audits with the npm the
+      # project is developed with and not the npm 10 bundled with Node 22. The
+      # composite action is not reused because it also runs npm ci in a
+      # package, which an audit from the lockfiles does not need. Raise it
+      # together with .github/actions/setup-node-npm.
+      - name: Install npm 11.17.0
+        run: npm install --global npm@11.17.0
+      # Fails on any moderate, high or critical advisory and on five or more
+      # low ones, in back, front and e2e, development dependencies included.
+      # An audit that cannot reach the registry fails as well. It runs from
+      # the lockfiles, so no install is needed.
+      - name: Unit tests of the gate
+        run: node --test scripts/audit-gate.test.mjs
+      - name: Audit gate
+        run: node scripts/audit-gate.mjs

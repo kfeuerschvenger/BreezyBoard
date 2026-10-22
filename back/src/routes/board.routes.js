@@ -1,17 +1,45 @@
 import express from 'express';
 import * as BoardController from '../controllers/board.controller.js';
-import { authenticate, authorizeBoard } from '../middleware/auth.middleware.js';
+import { authenticate, requireBoardRole } from '../middleware/auth.middleware.js';
+import { validate } from '../middleware/validate.middleware.js';
+import { paginationQuerySchema } from '../validation/common.validation.js';
+import {
+  addBoardMembersSchema,
+  createBoardSchema,
+  idParamSchema,
+  updateBoardSchema,
+} from '../validation/board.validation.js';
 
 const router = express.Router();
 
 // Protect all routes after this middleware
 router.use(authenticate);
 
-router.get('/', BoardController.getUserBoards);
-router.post('/', BoardController.createBoard);
-router.get('/:id', authorizeBoard, BoardController.getBoard);
-router.put('/:id', authorizeBoard, BoardController.updateBoard);
-router.delete('/:id', authorizeBoard, BoardController.deleteBoard);
-router.patch('/:id/members', authorizeBoard, BoardController.addBoardMembers);
+router.get('/', validate({ query: paginationQuerySchema }), BoardController.getUserBoards);
+router.post('/', validate({ body: createBoardSchema }), BoardController.createBoard);
+router.get('/:id', validate({ params: idParamSchema }), requireBoardRole('member'), BoardController.getBoard);
+// Destructive/ownership-changing operations require the creator, not just any member.
+router.put(
+  '/:id',
+  validate({ params: idParamSchema, body: updateBoardSchema }),
+  requireBoardRole('owner'),
+  BoardController.updateBoard
+);
+router.delete('/:id', validate({ params: idParamSchema }), requireBoardRole('owner'), BoardController.deleteBoard);
+// The one route that may see a soft-deleted board. The role is still resolved
+// first, so only an owner can reach it. Somebody with no role on the board gets
+// the 404 an unknown id gets; a member who is not an owner gets a 403.
+router.post(
+  '/:id/restore',
+  validate({ params: idParamSchema }),
+  requireBoardRole('owner', { includeDeleted: true }),
+  BoardController.restoreBoard
+);
+router.patch(
+  '/:id/members',
+  validate({ params: idParamSchema, body: addBoardMembersSchema }),
+  requireBoardRole('owner'),
+  BoardController.addBoardMembers
+);
 
 export default router;
