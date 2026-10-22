@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { flushDraft } from '@/test/flushDraft';
 import userEvent from '@testing-library/user-event';
@@ -55,7 +55,11 @@ beforeEach(() => {
   mockedTemplateService.getAll.mockReset().mockResolvedValue(TEMPLATES);
 });
 
+// Unmounting comes first: useDraft writes what it is still holding back when
+// the component goes away, and that write has to land before the storage is
+// emptied rather than after it, where the next test would find it.
 afterEach(() => {
+  cleanup();
   window.localStorage.clear();
 });
 

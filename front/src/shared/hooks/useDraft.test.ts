@@ -73,6 +73,36 @@ describe('useDraft', () => {
     expect(result.current.read()).toBe('abc');
   });
 
+  // The component can be gone before the trailing write is due, as when a modal
+  // closes half a second after the last keystroke. The held back value is
+  // stored at that moment, so the write neither waits on a timer that outlives
+  // its owner nor fires into a storage somebody else has since emptied.
+  it('stores the value it is holding back when it unmounts, and leaves no timer behind', () => {
+    const { result, unmount } = renderHook(() => useDraft<string>('task:1', 500));
+    act(() => result.current.write('a'));
+    act(() => result.current.write('abc'));
+    expect(window.localStorage.getItem('breezyboard:draft:task:1')).toContain('"a"');
+
+    unmount();
+
+    expect(window.localStorage.getItem('breezyboard:draft:task:1')).toContain('"abc"');
+
+    window.localStorage.removeItem('breezyboard:draft:task:1');
+    act(() => vi.advanceTimersByTime(600));
+    expect(window.localStorage.getItem('breezyboard:draft:task:1')).toBeNull();
+  });
+
+  it('does not bring a draft back by unmounting after it was cleared', () => {
+    const { result, unmount } = renderHook(() => useDraft<string>('task:1', 500));
+    act(() => result.current.write('a'));
+    act(() => result.current.write('abc'));
+    act(() => result.current.clear());
+
+    unmount();
+
+    expect(window.localStorage.getItem('breezyboard:draft:task:1')).toBeNull();
+  });
+
   it('survives localStorage throwing on write', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('QuotaExceededError');
