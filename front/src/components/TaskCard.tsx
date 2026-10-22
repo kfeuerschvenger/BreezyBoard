@@ -236,8 +236,7 @@ const TaskCardView: React.FC<TaskCardViewProps> = ({
 
             The dnd-kit spread MUST still come last: it supplies onPointerDown
             and onKeyDown, which are the sensor activators, and a duplicate JSX
-            prop declared after a spread silently replaces them. That is
-            finding P0-3. aria-label survives because dnd-kit does not set it.
+            prop declared after a spread silently replaces them. aria-label survives because dnd-kit does not set it.
           */}
           {picture ? (
             <span className="flex size-6 items-center justify-center text-ink-tertiary" aria-hidden="true">

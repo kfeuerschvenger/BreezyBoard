@@ -47,8 +47,8 @@ const ComingSoonRow: React.FC<ComingSoonRowProps> = ({ title, description }) => 
  * there is none here, because sway is the Gusty level and nothing else, and a
  * second control for the same motion would let the two disagree.
  *
- * Due-date nudges need due dates (Phase 8a) and the weekly digest needs a
- * scheduled mail job (Phase 8d), so both are disabled.
+ * Due-date nudges need due dates and the weekly digest needs a scheduled
+ * mail job, neither of which exists yet, so both are disabled.
  */
 export const BreezePreferences: React.FC = () => (
   <ProfilePanel title="Your breeze" description="How much the interface moves, and what it tells you.">

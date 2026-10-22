@@ -104,8 +104,8 @@ const CreateBoardModal: React.FC<CreateBoardModalProps> = ({ open, onClose, onCr
   // Anything already in the form wins over both, and that ordering is the
   // whole point rather than a detail. This effect fires when an async fetch
   // resolves, which is exactly when somebody is mid-word, so it is the same
-  // hazard as P2-10: state derived from an async value must be merged, never
-  // replaced.
+  // hazard as any state derived from an async value: it must be merged,
+  // never replaced.
   //
   // The merge is written field by field, and only into fields that are still
   // empty, rather than as one reset() carrying the four computed values. The

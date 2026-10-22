@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { objectIdSchema } from './common.validation.js';
 
-// Closes finding L3: GET /api/colors accepted any value for `type` and
-// passed it straight into the Mongo filter with no validation.
+// GET /api/colors validates `type` so that an arbitrary value is never passed
+// straight into the Mongo filter.
 export const getColorsQuerySchema = z
   .object({
     type: z.enum(['board', 'task', 'column']).optional(),

@@ -18,7 +18,7 @@ export interface AvatarUploaderProps {
  *
  * The file input is hidden with `sr-only` rather than with `hidden`, which
  * compiles to `display:none` and takes a control out of the focus order
- * altogether, so changing an avatar would be mouse-only. Finding P4-11.
+ * altogether, so changing an avatar would be mouse-only.
  *
  * The name is on the input rather than on the label drawn around it, because
  * the input is the control; the focus ring is on the label, because the label

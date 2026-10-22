@@ -16,8 +16,8 @@ type LegalModalProps = {
  * Everything that used to be here about backdrops, panels, animation
  * variants, the escape listener and focusing the close button is gone: it
  * lives in the shared Modal, which also traps focus and restores it to
- * whatever opened the dialog, neither of which this copy did. That is
- * finding P3-4, the modal shell reimplemented four times.
+ * whatever opened the dialog, neither of which a hand-written
+ * modal shell does.
  */
 const LegalModal: React.FC<LegalModalProps> = ({ open, onClose, title, filePath }) => {
   const { data, loading, error, refetch } = useTextFile(filePath, open);

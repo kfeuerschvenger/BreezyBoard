@@ -64,9 +64,9 @@ export function useBoardDashboard(): UseBoardDashboardResult {
       writeError ??
       (boardsQuery.isError || statsQuery.isError ? 'Failed to load data. Please try again later.' : null),
 
-    // Read from the mutation rather than mirrored into state beside it. The
-    // mirror was the defect recorded as P4-8: nothing ever wrote a board id
-    // into it, so the in-flight state could not be reached at all.
+    // Read from the mutation rather than mirrored into state beside it: a
+    // mirror needs something to write the board id into it, and without that
+    // the in-flight state cannot be reached at all.
     isDeleting: (boardId: string) => boardDeletion.pendingId === boardId,
 
     deleteBoard: board =>

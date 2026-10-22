@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 
 /**
- * The server state layer decided in section 11.4 of the revival plan.
+ * The server state layer.
  *
  * No real time transport is built. Concurrency on a board is occasional, so
  * the application revalidates when the window regains focus rather than
@@ -11,7 +11,7 @@ import { QueryClient } from '@tanstack/react-query';
  * Server-Sent Events stream is ever added, it writes through that entry
  * point and no page changes.
  *
- * This also leaves the session design in section 9.7 alone, which a stream
+ * This also leaves the session design alone (see docs/ARCHITECTURE.md), which a stream
  * would not have. Every authenticated request renews the token, so anything
  * that polls quietly turns a fifteen minute inactivity window into a session
  * that never ends. Focus is a human action, not a timer: a window nobody

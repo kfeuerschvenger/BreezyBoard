@@ -162,13 +162,13 @@ describe('TaskCard priority', () => {
     expect(chip).toHaveClass(`text-${hue}-deep`);
   });
 
-  // P4-3 recorded the whole badge as aria-hidden, which hid real information
-  // rather than a decorative icon: this is the only place a task shows its
-  // priority, so hiding it left the card saying nothing about it at all.
+  // The badge must not be aria-hidden as a whole: it is real information, not
+  // a decorative icon. This is the only place a task shows its priority, so
+  // hiding it would leave the card saying nothing about it at all.
   //
   // Asserted on the attribute and on the text, because a plain text query
   // reads the DOM and finds the content either way.
-  it('announces the priority instead of hiding it (P4-3)', () => {
+  it('announces the priority instead of hiding it', () => {
     renderCard(makeTask({ priority: 'high' }));
 
     const chip = within(card()).getByText('High').closest('span.rounded-pill') as HTMLElement;
@@ -317,7 +317,7 @@ describe('TaskCard drag handle', () => {
     const handle = screen.getByLabelText('Drag handle');
     // dnd-kit sets the role and tabindex itself, and the spread order in the
     // card is what keeps them: a duplicate prop after the spread silently
-    // replaces the sensor activators, which is what finding P0-3 was.
+    // replaces the sensor activators.
     expect(handle).toHaveAttribute('role', 'button');
     expect(handle).toHaveAttribute('tabindex', '0');
   });

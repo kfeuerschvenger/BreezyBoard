@@ -1,5 +1,6 @@
 /**
- * The formulas of the wind layer, from section 5 of docs/design/SPEC.md.
+ * The formulas of the wind layer: streak curves, widths, dashes and strokes,
+ * and particle positions, shapes and fills, each derived from the index.
  *
  * Every streak and particle is a function of its index and nothing else: no
  * random number is drawn, so the same level always produces the same markup,

@@ -24,8 +24,7 @@ export interface AddMemberModalProps {
  *
  * The backdrop, the panel, the animation, the escape handler and the close
  * button come from the shared Modal, which also traps focus and restores it
- * to whatever opened the dialog. That was finding P3-4, the modal shell
- * written out four times.
+ * to whatever opened the dialog.
  */
 export const AddMemberModal: React.FC<AddMemberModalProps> = ({
   open,

@@ -83,7 +83,7 @@ const check = (label, got, expected) => {
   log(`${ok ? 'PASS' : 'FAIL'}  ${label}  -> ${got} (expected ${expected})`);
 };
 
-log('--- the original appendix A exploit ---');
+log('--- the original exploit ---');
 check('GET  /boards/:id      as outsider', (await req('GET', `/boards/${boardId}`, attacker.token)).status, 403);
 check('GET  /tasks/:id       as outsider', (await req('GET', `/tasks/${taskId}`, attacker.token)).status, 403);
 check(

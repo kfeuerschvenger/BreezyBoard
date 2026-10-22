@@ -1,8 +1,7 @@
 name: Deploy production
 
-# Placeholder. Deployment is built in the separate environments project
-# (docs/REVIVAL-PLAN.md, "Test and production environments"), which fills in
-# the job below. Until then a merge into main deploys nothing.
+# Placeholder. Deployment belongs to a separate environments project that is
+# not built yet and will fill in the job below. Until then a merge into main deploys nothing.
 on:
   push:
     branches: [main]

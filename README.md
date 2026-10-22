@@ -179,4 +179,3 @@ Those values are for a local trial of the production stack, never for a real dep
 | [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) | Every environment variable |
 | [docs/openapi.yaml](docs/openapi.yaml) | The API contract |
 | [e2e/verify/README.md](e2e/verify/README.md) | The standing verification scripts |
-| [docs/REVIVAL-PLAN.md](docs/REVIVAL-PLAN.md) | The revival plan, the session contract in section 9, and the record of every finding |

@@ -19,7 +19,6 @@ export const PRIORITY_LABELS: Record<TaskPriority, string> = {
  * source, so `has-[:checked]:${...}` names rules that were never emitted and
  * paints nothing, and composing it from a value holding two classes lets only
  * the first inherit the variant while the second applies unconditionally.
- * That is finding P4-7.
  */
 export const PRIORITY_HUE: Record<TaskPriority, 'green' | 'sand' | 'coral'> = {
   low: 'green',
