@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
 import { flushDraft } from '@/test/flushDraft';
@@ -24,7 +24,12 @@ vi.mock('@/services', () => ({
 // one test would leak into the next test that opens the modal for the same
 // task/boardId and get restored, silently changing that test's starting form
 // state.
+//
+// Unmounting comes first: useDraft writes what it is still holding back when
+// the component goes away, and that write has to land before the storage is
+// emptied rather than after it, where the next test would find it.
 afterEach(() => {
+  cleanup();
   window.localStorage.clear();
   vi.useRealTimers();
 });

@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { flushDraft } from '@/test/flushDraft';
 import { useTaskForm, type StoredTask, type TaskColorOption } from './useTaskForm';
 import type { User } from '@/models';
 
+// Unmounting comes first: useDraft writes what it is still holding back when
+// the hook goes away, and that write has to land before the storage is emptied
+// rather than after it, where the next test would find it.
 afterEach(() => {
+  cleanup();
   window.localStorage.clear();
 });
 
