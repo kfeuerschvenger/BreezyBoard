@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { flushDraft } from '@/test/flushDraft';
 import { CardComposer } from './CardComposer';
 
 const renderComposer = (onSubmit = vi.fn().mockResolvedValue(undefined), openRequest = 0) =>
@@ -11,8 +12,16 @@ const openIt = async () => {
   return screen.getByRole('textbox', { name: 'Title of the new card in Backlog' });
 };
 
+// The draft is written on a throttle, so the tests that read it back take the
+// clock into their own hands. shouldAdvanceTime keeps user-event and waitFor
+// moving.
 beforeEach(() => {
   window.localStorage.clear();
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('CardComposer closed', () => {
@@ -108,9 +117,8 @@ describe('CardComposer adding a card', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added First to Backlog.'));
     expect(field).toHaveValue('First and then');
-    await waitFor(() =>
-      expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).toContain('First and then'),
-    );
+    await flushDraft();
+    expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).toContain('First and then');
   });
 
   it('adds once however many times Enter is pressed while it is saving', async () => {
@@ -201,7 +209,8 @@ describe('CardComposer draft', () => {
     const { unmount } = renderComposer();
     const field = await openIt();
     await userEvent.type(field, 'Half a thought');
-    await waitFor(() => expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).toContain('Half a thought'));
+    await flushDraft();
+    expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).toContain('Half a thought');
     unmount();
 
     renderComposer();
@@ -221,7 +230,8 @@ describe('CardComposer draft', () => {
   it('keeps a draft per column', async () => {
     const { unmount } = render(<CardComposer columnId="col-1" columnTitle="Backlog" onSubmit={vi.fn()} />);
     await userEvent.type(await openIt(), 'Backlog thought');
-    await waitFor(() => expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).not.toBeNull());
+    await flushDraft();
+    expect(window.localStorage.getItem('breezyboard:draft:composer:col-1')).not.toBeNull();
     unmount();
 
     render(<CardComposer columnId="col-2" columnTitle="Doing" onSubmit={vi.fn()} />);

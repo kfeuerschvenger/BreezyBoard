@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithQuery } from '@/test/renderWithQuery';
+import { flushDraft } from '@/test/flushDraft';
 import userEvent from '@testing-library/user-event';
 import CreateBoardModal from './CreateBoardModal';
 import { ColorService, TemplateService } from '@/services';
@@ -234,14 +235,25 @@ describe('CreateBoardModal', () => {
   });
 
   describe('draft persistence', () => {
+    // The draft is written on a throttle, so a test that reads storage right
+    // after typing needs the clock under its own control.
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('keeps what was typed so losing the page does not lose the work', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       open();
 
       await waitFor(() => expect(titleBox()).toBeInTheDocument());
       await user.type(titleBox(), 'Half written');
+      await flushDraft();
 
-      await waitFor(() => expect(storedDraft()).toMatchObject({ title: 'Half written' }));
+      expect(storedDraft()).toMatchObject({ title: 'Half written' });
     });
 
     it('restores that draft the next time it opens', async () => {
@@ -333,12 +345,13 @@ describe('CreateBoardModal', () => {
     });
 
     it('keeps the draft when the modal is closed without submitting', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { rerender } = renderWithQuery(<CreateBoardModal open onClose={vi.fn()} onCreateBoard={vi.fn()} />);
 
       await waitFor(() => expect(titleBox()).toBeInTheDocument());
       await user.type(titleBox(), 'Changed my mind');
-      await waitFor(() => expect(storedDraft()).toMatchObject({ title: 'Changed my mind' }));
+      await flushDraft();
+      expect(storedDraft()).toMatchObject({ title: 'Changed my mind' });
 
       rerender(<CreateBoardModal open={false} onClose={vi.fn()} onCreateBoard={vi.fn()} />);
 
