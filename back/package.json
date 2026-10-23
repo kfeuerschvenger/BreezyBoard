@@ -10,6 +10,7 @@
     "seed:users": "node seeds/users.seed.js",
     "seed:all": "npm run seed:templates && npm run seed:users",
     "migrate:board-hues": "node seeds/migrate_board_hues.js",
+    "migrate:column-hues": "node seeds/migrate_column_hues.js",
     "lint": "eslint .",
     "openapi": "node scripts/openapi.mjs",
     "openapi:check": "node scripts/openapi.mjs --check",

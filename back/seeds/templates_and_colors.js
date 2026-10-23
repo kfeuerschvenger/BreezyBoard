@@ -16,8 +16,9 @@ const connectDB = async () => {
 };
 
 const allColors = [
-  // Colors for boards: the six design hues, stored by key. The interface
-  // derives each hue's steps from its own token layer.
+  // Colors for boards and columns: the six design hues, stored by key. The
+  // interface derives each hue's steps from its own token layer. A column is
+  // painted from the same six entries, since a hue key is unique in the palette.
   ...BOARD_HUES.map(hue => ({ name: BOARD_HUE_NAMES[hue], value: hue, type: 'board' })),
 
   // Colors for tasks
@@ -31,36 +32,21 @@ const allColors = [
   { name: 'Sunflower', value: '#F7DC6F', type: 'task' },
   { name: 'Wisteria', value: '#BB8FCE', type: 'task' },
   { name: 'Cornflower', value: '#85C1E9', type: 'task' },
-
-  // Colors for columns
-  { name: 'Slate', value: '#64748B', type: 'column' },
-  { name: 'Blue', value: '#3B82F6', type: 'column' },
-  { name: 'Amber', value: '#F59E0B', type: 'column' },
-  { name: 'Emerald', value: '#10B981', type: 'column' },
-  { name: 'Violet', value: '#7C3AED', type: 'column' },
-  { name: 'Orange', value: '#F97316', type: 'column' },
-  { name: 'Cyan', value: '#06B6D4', type: 'column' },
-  { name: 'Green', value: '#16A34A', type: 'column' },
-  { name: 'Purple', value: '#8B5CF6', type: 'column' },
-  { name: 'Light Blue', value: '#0EA5E9', type: 'column' },
-  { name: 'Red', value: '#EF4444', type: 'column' },
-  { name: 'Light Green', value: '#14B8A6', type: 'column' },
-  { name: 'Indigo', value: '#6366F1', type: 'column' },
-  { name: 'Dark Green', value: '#059669', type: 'column' },
-  { name: 'Pink', value: '#F472B6', type: 'column' },
-  { name: 'Gray', value: '#6B7280', type: 'column' },
 ];
 
+// A template's column colour is a hue key, replaced by the id of its palette
+// entry when the template is written. The last column of each template is
+// green, the hue of where work lands.
 const seedTemplates = [
   {
     name: 'Kanban Board',
     description: 'Organize tasks in columns with drag-and-drop functionality',
     iconName: 'Folder',
     columns: [
-      { title: 'Backlog', color: '#64748B', order: 0 },
-      { title: 'Up Next', color: '#3B82F6', order: 1 },
-      { title: 'In Progress', color: '#F59E0B', order: 2 },
-      { title: 'Done', color: '#10B981', order: 3 },
+      { title: 'Backlog', color: 'sky', order: 0 },
+      { title: 'Up Next', color: 'lavender', order: 1 },
+      { title: 'In Progress', color: 'sand', order: 2 },
+      { title: 'Done', color: 'green', order: 3 },
     ],
   },
   {
@@ -68,10 +54,10 @@ const seedTemplates = [
     description: 'Minimal personal board to focus on daily and weekly priorities',
     iconName: 'CheckSquare',
     columns: [
-      { title: 'Inbox', color: '#7C3AED', order: 0 },
-      { title: 'Today', color: '#F97316', order: 1 },
-      { title: 'This Week', color: '#06B6D4', order: 2 },
-      { title: 'Done', color: '#16A34A', order: 3 },
+      { title: 'Inbox', color: 'lavender', order: 0 },
+      { title: 'Today', color: 'sand', order: 1 },
+      { title: 'This Week', color: 'teal', order: 2 },
+      { title: 'Done', color: 'green', order: 3 },
     ],
   },
   {
@@ -79,10 +65,10 @@ const seedTemplates = [
     description: 'Plan product milestones and priorities across upcoming horizons',
     iconName: 'Target',
     columns: [
-      { title: 'Ideas', color: '#8B5CF6', order: 0 },
-      { title: 'Planned', color: '#06B6D4', order: 1 },
-      { title: 'In Development', color: '#F59E0B', order: 2 },
-      { title: 'Launched', color: '#14B8A6', order: 3 },
+      { title: 'Ideas', color: 'lavender', order: 0 },
+      { title: 'Planned', color: 'sky', order: 1 },
+      { title: 'In Development', color: 'sand', order: 2 },
+      { title: 'Launched', color: 'green', order: 3 },
     ],
   },
   {
@@ -90,10 +76,10 @@ const seedTemplates = [
     description: 'Track and resolve bugs with clear states for QA and development',
     iconName: 'Bug',
     columns: [
-      { title: 'New', color: '#EF4444', order: 0 },
-      { title: 'Triaged', color: '#F97316', order: 1 },
-      { title: 'Fixing', color: '#F59E0B', order: 2 },
-      { title: 'Closed', color: '#10B981', order: 3 },
+      { title: 'New', color: 'coral', order: 0 },
+      { title: 'Triaged', color: 'sand', order: 1 },
+      { title: 'Fixing', color: 'sky', order: 2 },
+      { title: 'Closed', color: 'green', order: 3 },
     ],
   },
   {
@@ -101,10 +87,10 @@ const seedTemplates = [
     description: 'Coordinate content creation and publication in a simple flow',
     iconName: 'FileText',
     columns: [
-      { title: 'Ideas', color: '#8B5CF6', order: 0 },
-      { title: 'Assigned', color: '#3B82F6', order: 1 },
-      { title: 'In Progress', color: '#F59E0B', order: 2 },
-      { title: 'Published', color: '#10B981', order: 3 },
+      { title: 'Ideas', color: 'lavender', order: 0 },
+      { title: 'Assigned', color: 'sky', order: 1 },
+      { title: 'In Progress', color: 'sand', order: 2 },
+      { title: 'Published', color: 'green', order: 3 },
     ],
   },
   {
@@ -112,10 +98,10 @@ const seedTemplates = [
     description: 'Visualize opportunities from initial contact through close',
     iconName: 'Phone',
     columns: [
-      { title: 'Leads', color: '#6366F1', order: 0 },
-      { title: 'Contacted', color: '#0EA5E9', order: 1 },
-      { title: 'Proposal', color: '#F59E0B', order: 2 },
-      { title: 'Closed', color: '#059669', order: 3 },
+      { title: 'Leads', color: 'lavender', order: 0 },
+      { title: 'Contacted', color: 'sky', order: 1 },
+      { title: 'Proposal', color: 'sand', order: 2 },
+      { title: 'Closed', color: 'green', order: 3 },
     ],
   },
   {
@@ -123,10 +109,10 @@ const seedTemplates = [
     description: 'Collect, prioritize, and convert user feedback into planned work',
     iconName: 'MessageSquare',
     columns: [
-      { title: 'New', color: '#64748B', order: 0 },
-      { title: 'Upvoted', color: '#F472B6', order: 1 },
-      { title: 'Planned', color: '#0EA5E9', order: 2 },
-      { title: 'Implemented', color: '#10B981', order: 3 },
+      { title: 'New', color: 'sky', order: 0 },
+      { title: 'Upvoted', color: 'coral', order: 1 },
+      { title: 'Planned', color: 'teal', order: 2 },
+      { title: 'Implemented', color: 'green', order: 3 },
     ],
   },
   {
@@ -134,10 +120,10 @@ const seedTemplates = [
     description: 'Centralize candidates and keep the hiring process transparent',
     iconName: 'UserPlus',
     columns: [
-      { title: 'Applicants', color: '#64748B', order: 0 },
-      { title: 'Interviewing', color: '#F97316', order: 1 },
-      { title: 'Offered', color: '#3B82F6', order: 2 },
-      { title: 'Decision', color: '#6B7280', order: 3 },
+      { title: 'Applicants', color: 'sky', order: 0 },
+      { title: 'Interviewing', color: 'sand', order: 1 },
+      { title: 'Offered', color: 'lavender', order: 2 },
+      { title: 'Decision', color: 'green', order: 3 },
     ],
   },
   {
@@ -145,10 +131,10 @@ const seedTemplates = [
     description: 'Fast, focused flow to detect, mitigate and close operational incidents',
     iconName: 'AlertTriangle',
     columns: [
-      { title: 'Detected', color: '#EF4444', order: 0 },
-      { title: 'Investigating', color: '#F97316', order: 1 },
-      { title: 'Mitigating', color: '#F59E0B', order: 2 },
-      { title: 'Resolved', color: '#10B981', order: 3 },
+      { title: 'Detected', color: 'coral', order: 0 },
+      { title: 'Investigating', color: 'sand', order: 1 },
+      { title: 'Mitigating', color: 'sky', order: 2 },
+      { title: 'Resolved', color: 'green', order: 3 },
     ],
   },
 ];
@@ -174,7 +160,7 @@ const seed = async () => {
     ...template,
     columns: template.columns.map(column => ({
       ...column,
-      color: colorMap.get(column.color), // Replace hex value with ObjectId
+      color: colorMap.get(column.color), // Replace hue key with ObjectId
     })),
   }));
 

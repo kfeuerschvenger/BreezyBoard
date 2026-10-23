@@ -3,6 +3,31 @@ import ColorPalette from '../models/ColorPalette.js';
 import { BOARD_HUES, BOARD_HUE_NAMES, DEFAULT_BOARD_HUE, isBoardHue, nearestBoardHue } from '../constants/boardHues.js';
 
 /**
+ * Makes sure the palette holds one `board` entry per hue and answers with the
+ * id of each. A board's colour and a column's colour both point at these.
+ *
+ * @returns {Promise<{ hueIds: Record<string, import('mongoose').Types.ObjectId>, hueEntriesCreated: number }>}
+ */
+export const ensureHueEntries = async () => {
+  let hueEntriesCreated = 0;
+  const hueIds = {};
+
+  for (const hue of BOARD_HUES) {
+    const existing = await ColorPalette.findOne({ type: 'board', value: hue });
+    if (existing) {
+      hueIds[hue] = existing._id;
+      continue;
+    }
+
+    const created = await ColorPalette.create({ name: BOARD_HUE_NAMES[hue], value: hue, type: 'board' });
+    hueIds[hue] = created._id;
+    hueEntriesCreated += 1;
+  }
+
+  return { hueIds, hueEntriesCreated };
+};
+
+/**
  * Moves every board onto the six design hues.
  *
  * The board palette used to be eight hex colours. It is now the six hues, and
@@ -33,20 +58,7 @@ import { BOARD_HUES, BOARD_HUE_NAMES, DEFAULT_BOARD_HUE, isBoardHue, nearestBoar
  *   missing one, and how many palette entries were removed and created.
  */
 export const migrateBoardHues = async () => {
-  let hueEntriesCreated = 0;
-  const hueIds = {};
-
-  for (const hue of BOARD_HUES) {
-    const existing = await ColorPalette.findOne({ type: 'board', value: hue });
-    if (existing) {
-      hueIds[hue] = existing._id;
-      continue;
-    }
-
-    const created = await ColorPalette.create({ name: BOARD_HUE_NAMES[hue], value: hue, type: 'board' });
-    hueIds[hue] = created._id;
-    hueEntriesCreated += 1;
-  }
+  const { hueIds, hueEntriesCreated } = await ensureHueEntries();
 
   // Read lean, as plain objects. An old entry holds a hex value, which the
   // model would refuse to save, and nothing here saves one.
