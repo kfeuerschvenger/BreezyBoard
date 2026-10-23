@@ -21,6 +21,21 @@ export const apiErrorCodeOf = (error: unknown): string | undefined => {
 };
 
 /**
+ * The `message` of a failed request's error body, or undefined when there is
+ * none. Only for answers whose text is written for a person to read, such as
+ * the 409 that names the column that still has cards.
+ */
+export const apiErrorMessageOf = (error: unknown): string | undefined => {
+  if (!isAxiosError(error)) {
+    return undefined;
+  }
+
+  const message = (error.response?.data as { message?: unknown } | undefined)?.message;
+
+  return typeof message === 'string' ? message : undefined;
+};
+
+/**
  * Whether a failed read means the address does not lead to anything the
  * caller can see, as opposed to the request having failed.
  *

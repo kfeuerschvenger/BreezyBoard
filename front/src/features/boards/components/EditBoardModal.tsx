@@ -2,27 +2,41 @@ import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useColors } from '@/features/colors';
-import type { Board, Color } from '@/models';
+import type { Board, Color, Column } from '@/models';
+import { apiErrorMessageOf, httpStatusOf } from '@/shared/lib/httpStatus';
 import { Button, Modal } from '@/shared/ui';
+import { MIN_COLUMNS, columnsChanged, columnsRequest, rowsFromColumns } from '../boardColumns';
+import type { ColumnChange } from '../boardColumns';
 import { boardHueOptions } from '../boardHue';
-import { boardFieldsSchema } from '../boardForm';
-import type { BoardFieldValues } from '../boardForm';
+import { editBoardSchema } from '../boardForm';
+import type { BoardFieldValues, EditBoardValues } from '../boardForm';
 import { BoardFormFields } from './BoardFormFields';
+import { ColumnsEditor } from './ColumnsEditor';
+
+/** What Save hands over: the board's fields, and its columns when they were changed. */
+export type EditBoardSave = BoardFieldValues & { columns?: ColumnChange[] };
 
 export interface EditBoardModalProps {
   open: boolean;
-  board: Pick<Board, 'title' | 'description' | 'color'>;
+  /** `columns` switches on the columns section, which a board page offers and nothing else does. */
+  board: Pick<Board, 'title' | 'description' | 'color'> & { columns?: Column[] };
+  /** Live cards in each column by column id, which is what decides whether a column can be removed. */
+  taskCounts?: Readonly<Record<string, number>>;
+  /** Opens with the cursor in the name of the column to add. */
+  focusColumns?: boolean;
   onClose: () => void;
   /** Rejects when the save fails, so the dialog can say so and keep the edits. */
-  onSave: (values: BoardFieldValues) => Promise<void>;
+  onSave: (values: EditBoardSave) => Promise<void>;
 }
 
 const NO_COLORS: Color[] = [];
+const NO_COUNTS: Readonly<Record<string, number>> = {};
 
 const colorIdOf = (color: Board['color']) => (typeof color === 'string' ? color : (color?._id ?? ''));
 
 /**
- * Changes a board's name, description and colour.
+ * Changes a board's name, description and colour, and on a board page its
+ * columns.
  *
  * The same fields and the same validation as the create dialog, through the
  * shared `BoardFormFields` and `boardFieldsSchema`. It is a dialog of its own
@@ -31,20 +45,35 @@ const colorIdOf = (color: Board['color']) => (typeof color === 'string' ? color 
  * survives a reload, and the defaults applied as the lists arrive. An edit
  * starts from a board that already has every value.
  *
+ * Every change to the columns waits in the form with the rest, and Save sends
+ * them in the same request as the board's own fields: the server applies all
+ * of it or none of it. Cancel discards all of it.
+ *
  * A failed save keeps the dialog open with what was typed and says so. The
- * save rejecting is the only signal, which is why `onSave` must not catch.
+ * save rejecting is the only signal, which is why `onSave` must not catch. A
+ * 409 is the one failure whose text is shown as the server wrote it, because it
+ * names the column that gained cards while the dialog was open.
  */
-export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalProps) => {
+export const EditBoardModal = ({ open, board, taskCounts = NO_COUNTS, focusColumns = false, onClose, onSave }: EditBoardModalProps) => {
   const colorsQuery = useColors('board');
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const initial = useMemo<BoardFieldValues>(
-    () => ({ title: board.title, description: board.description ?? '', color: colorIdOf(board.color) }),
-    [board.title, board.description, board.color]
+  const hasColumns = board.columns !== undefined;
+
+  const initial = useMemo<EditBoardValues>(
+    () => ({
+      title: board.title,
+      description: board.description ?? '',
+      color: colorIdOf(board.color),
+      ...(board.columns && { columns: rowsFromColumns(board.columns) }),
+    }),
+    [board.title, board.description, board.color, board.columns]
   );
 
-  const form = useForm<BoardFieldValues>({
-    resolver: zodResolver(boardFieldsSchema),
+  const schema = useMemo(() => editBoardSchema((board.columns?.length ?? 0) >= MIN_COLUMNS), [board.columns]);
+
+  const form = useForm<EditBoardValues>({
+    resolver: zodResolver(schema),
     defaultValues: initial,
     mode: 'onChange',
   });
@@ -72,10 +101,17 @@ export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalP
   const submit = handleSubmit(async values => {
     setSaveError(null);
 
+    const { columns, ...fields } = values;
+    const changed = columns !== undefined && board.columns !== undefined && columnsChanged(rowsFromColumns(board.columns), columns);
+
     try {
-      await onSave(values);
-    } catch {
-      setSaveError('The board could not be saved. Your changes are still here, so you can try again.');
+      await onSave(changed ? { ...fields, columns: columnsRequest(columns) } : fields);
+    } catch (error) {
+      setSaveError(
+        httpStatusOf(error) === 409
+          ? (apiErrorMessageOf(error) ?? 'A column still has cards. Move them first and try again.')
+          : 'The board could not be saved. Your changes are still here, so you can try again.'
+      );
       return;
     }
 
@@ -87,7 +123,7 @@ export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalP
       open={open}
       onClose={onClose}
       title="Edit board"
-      subtitle="Change the name, description or colour"
+      subtitle={hasColumns ? 'Change the name, description, colour or columns' : 'Change the name, description or colour'}
       footer={
         <div className="flex w-full flex-wrap items-center justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -117,6 +153,10 @@ export const EditBoardModal = ({ open, board, onClose, onSave }: EditBoardModalP
       <FormProvider {...form}>
         <form id="edit-board-form" onSubmit={submit} className="space-y-6">
           <BoardFormFields colors={colorsQuery.data ?? NO_COLORS} />
+
+          {hasColumns && (
+            <ColumnsEditor colors={colorsQuery.data ?? NO_COLORS} taskCounts={taskCounts} focusAdd={focusColumns} />
+          )}
         </form>
       </FormProvider>
     </Modal>

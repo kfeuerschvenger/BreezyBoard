@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BoardService, DashboardService, TemplateService } from '@/services';
 import { userKeys } from '@/features/users';
 import type { Board } from '@/models';
+import type { ColumnChange } from './boardColumns';
 
 /**
  * Query keys for everything board shaped, in one place.
@@ -79,8 +80,12 @@ const useBoardMutation = <TArgs, TResult>(mutationFn: (args: TArgs) => Promise<T
   });
 };
 
-/** The fields an edit can change. The template only seeds columns, so it is not among them. */
-export type BoardChanges = Pick<Board, 'title' | 'description'> & { color: string };
+/**
+ * The fields an edit can change. The template only seeds columns, so it is not
+ * among them. `columns` is the complete new list in its new order, and a save
+ * that leaves it out leaves the columns alone.
+ */
+export type BoardChanges = Partial<Pick<Board, 'title' | 'description'>> & { color?: string; columns?: ColumnChange[] };
 
 /**
  * Saves an edit and writes it into both caches that hold the board.
@@ -89,10 +94,11 @@ export type BoardChanges = Pick<Board, 'title' | 'description'> & { color: strin
  * populated and no `viewerRole`, a different shape from the read the board
  * page holds, and replacing the cached board with it would silently drop the
  * role and swap the members for objects the page never asked for. What
- * changed is exactly the three fields, so those are merged into what each
- * cache already has. The dashboard list and the board page therefore agree
- * straight away, with no refetch: the totals do not depend on any of the
- * three, so the stats are left alone.
+ * changed is the title, the description, the colour and, when the request
+ * carried them, the columns, so those are merged into what each cache already
+ * has. The dashboard list and the board page therefore agree straight away,
+ * with no refetch: the totals do not depend on any of them, so the stats are
+ * left alone.
  */
 export const useUpdateBoard = () => {
   const queryClient = useQueryClient();
@@ -100,12 +106,13 @@ export const useUpdateBoard = () => {
   return useMutation({
     mutationFn: ({ boardId, changes }: { boardId: string; changes: BoardChanges }) =>
       BoardService.update(boardId, changes),
-    onSuccess: (updated, { boardId }) => {
+    onSuccess: (updated, { boardId, changes }) => {
       const merge = <T extends Pick<Board, 'title' | 'description' | 'color'>>(board: T): T => ({
         ...board,
         title: updated.title,
         description: updated.description,
         color: updated.color,
+        ...(changes.columns && { columns: updated.columns }),
       });
 
       queryClient.setQueryData<Board>(boardKeys.detail(boardId), previous => previous && merge(previous));

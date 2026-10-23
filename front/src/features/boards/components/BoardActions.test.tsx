@@ -137,6 +137,75 @@ describe('BoardActions', () => {
   });
 });
 
+describe('BoardActions managing columns', () => {
+  const columns = [
+    { _id: 'col-a', title: 'Backlog', color: BLUE, order: 0 },
+    { _id: 'col-b', title: 'Done', color: GREEN, order: 1 },
+  ];
+
+  it('sends the whole column list with the fields and writes what the server answers into both caches', async () => {
+    const answered = [
+      { _id: 'col-a', title: 'Inbox', color: BLUE, order: 0 },
+      { _id: 'col-b', title: 'Done', color: GREEN, order: 1 },
+    ];
+    mockedBoardService.update.mockResolvedValue(makeBoard({ columns: answered, viewerRole: undefined }));
+    const board = makeBoard({ columns });
+    const { queryClient } = renderWithQuery(<BoardActions board={board} onDeleted={vi.fn()} taskCounts={{}} />);
+    queryClient.setQueryData(boardKeys.detail('board-1'), board);
+    queryClient.setQueryData(boardKeys.list(), [board]);
+
+    await openEditor();
+    await userEvent.clear(await screen.findByRole('textbox', { name: 'Name of column 1' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name of column 1' }), 'Inbox');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(mockedBoardService.update).toHaveBeenCalledTimes(1));
+    expect(mockedBoardService.update).toHaveBeenCalledWith('board-1', {
+      title: 'Launch Plan',
+      description: 'Old words',
+      color: 'color-blue',
+      columns: [
+        { _id: 'col-a', title: 'Inbox', color: 'color-blue' },
+        { _id: 'col-b', title: 'Done', color: 'color-green' },
+      ],
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryData<Board>(boardKeys.detail('board-1'))?.columns.map(item => item.title)).toEqual([
+        'Inbox',
+        'Done',
+      ])
+    );
+    expect(queryClient.getQueryData<Board[]>(boardKeys.list())?.[0].columns.map(item => item.title)).toEqual([
+      'Inbox',
+      'Done',
+    ]);
+  });
+
+  it('leaves the columns of the caches alone when the save did not carry any', async () => {
+    mockedBoardService.update.mockResolvedValue(makeBoard({ title: 'Renamed', columns: [] }));
+    const board = makeBoard({ columns });
+    const { queryClient } = renderWithQuery(<BoardActions board={board} onDeleted={vi.fn()} taskCounts={{}} />);
+    queryClient.setQueryData(boardKeys.detail('board-1'), board);
+
+    await openEditor();
+    await userEvent.clear(await screen.findByRole('textbox', { name: /^board name/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /^board name/i }), 'Renamed');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    await waitFor(() => expect(queryClient.getQueryData<Board>(boardKeys.detail('board-1'))?.title).toBe('Renamed'));
+    expect(queryClient.getQueryData<Board>(boardKeys.detail('board-1'))?.columns).toHaveLength(2);
+  });
+
+  it('has no Add column button and no columns section without the counts of the page that holds the cards', async () => {
+    renderWithQuery(<BoardActions board={makeBoard({ columns })} onDeleted={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Add column' })).not.toBeInTheDocument();
+    await openEditor();
+    await screen.findByRole('dialog', { name: 'Edit board' });
+    expect(screen.queryByRole('heading', { name: 'Columns' })).not.toBeInTheDocument();
+  });
+});
+
 describe('BoardActions adding members', () => {
   const ADA = { _id: 'user-ada', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', avatar: '' };
 

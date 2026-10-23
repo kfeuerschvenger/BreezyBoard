@@ -10,6 +10,9 @@ export type { IconButtonProps, IconButtonShape, IconButtonSize } from './IconBut
 export { Input } from './Input';
 export type { InputProps } from './Input';
 
+export { Select } from './Select';
+export type { SelectProps } from './Select';
+
 export { PasswordInput } from './PasswordInput';
 export type { PasswordInputProps } from './PasswordInput';
 
