@@ -58,6 +58,91 @@ const assertBoardColorExists = async colorId => {
   }
 };
 
+// A column is painted in one of the six hues, the same entries a board's own
+// colour comes from, because a hue key is unique in the palette and so one
+// entry per hue serves both. Every id is looked up before it is written, for
+// the reason a board colour is, and a repeated id counts once.
+const assertColumnColorsExist = async colorIds => {
+  const unique = [...new Set(colorIds.map(String))];
+  const found = await ColorPalette.countDocuments({ _id: { $in: unique }, type: 'board', value: { $in: BOARD_HUES } });
+
+  if (found !== unique.length) {
+    throw new ApiError(400, 'every column color must be the id of a hue', [], ErrorCode.VALIDATION_ERROR);
+  }
+};
+
+/**
+ * Turns the list of columns an edit sends into the list to store, or refuses.
+ *
+ * The request is the whole new list in its new order. A column that carries an
+ * id is one of the board's own and keeps it, which is what keeps every task's
+ * `status` pointing at it; one without an id is new. A column of the board that
+ * the list leaves out is a removal, and a removal needs the column to have no
+ * live tasks: it is refused with a 409 naming the first column that still has
+ * some, before anything is written. Deleted tasks do not block it. They stay in
+ * the trash under the id of a column that no longer exists, and a restore puts
+ * them in the first column.
+ *
+ * The check and the write that follows are two operations, so a card created in
+ * the column in the gap between them is not excluded.
+ *
+ * @param {string} boardId
+ * @param {Array<{ _id?: string, title: string, color: string }>} requested
+ * @returns {Promise<Array<{ _id: mongoose.Types.ObjectId, title: string, color: string, order: number }>>}
+ */
+const planColumns = async (boardId, requested) => {
+  const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns');
+
+  if (!board) {
+    throw new ApiError(404, 'Board not found');
+  }
+
+  const storedIds = new Set(board.columns.map(column => column._id.toString()));
+  const keptIds = new Set();
+
+  for (const column of requested) {
+    if (!column._id) continue;
+
+    const id = column._id.toLowerCase();
+
+    if (!storedIds.has(id)) {
+      throw new ApiError(400, 'columns may only keep the ids of columns the board already has', [], ErrorCode.VALIDATION_ERROR);
+    }
+    keptIds.add(id);
+  }
+
+  await assertColumnColorsExist(requested.map(column => column.color));
+
+  const removed = board.columns.filter(column => !keptIds.has(column._id.toString()));
+
+  if (removed.length > 0) {
+    const occupied = new Set(
+      await Task.distinct('status', {
+        boardId,
+        status: { $in: removed.map(column => column._id.toString()) },
+        deletedAt: null,
+      })
+    );
+    const blocking = [...removed].sort((a, b) => a.order - b.order).find(column => occupied.has(column._id.toString()));
+
+    if (blocking) {
+      throw new ApiError(
+        409,
+        `The column "${blocking.title}" still has tasks. Move them to another column before removing it.`,
+        [{ columnId: blocking._id.toString(), title: blocking.title }],
+        ErrorCode.CONFLICT
+      );
+    }
+  }
+
+  return requested.map((column, order) => ({
+    _id: column._id ? new mongoose.Types.ObjectId(column._id) : new mongoose.Types.ObjectId(),
+    title: column.title,
+    color: column.color,
+    order,
+  }));
+};
+
 // The schema checks that each member id is shaped like an id, and nothing
 // checks that it names a person. Without this, an id that belongs to nobody
 // is stored in Board.members and ensureWorkspaceMembership then makes it a
@@ -159,10 +244,15 @@ export const getBoardById = async id => {
  * below carry `deletedAt: null` in their own filter and treat no match as a
  * missing board.
  */
-export const updateBoard = async (id, updateData) => {
-  if (updateData.color !== undefined) {
-    await assertBoardColorExists(updateData.color);
+export const updateBoard = async (id, { columns, ...fields }) => {
+  if (fields.color !== undefined) {
+    await assertBoardColorExists(fields.color);
   }
+
+  // Every rule is checked before the one write below, and that write replaces
+  // the whole list on one document, so a rejected column leaves the title, the
+  // colour and the columns exactly as they were.
+  const updateData = columns === undefined ? fields : { ...fields, columns: await planColumns(id, columns) };
 
   const board = await Board.findOneAndUpdate({ _id: id, deletedAt: null }, updateData, {
     new: true,

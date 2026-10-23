@@ -405,7 +405,7 @@ paths:
       tags:
         - Boards
       summary: Update a board
-      description: "Only title, description and color are applied. Other fields are ignored. Access: Board owner."
+      description: "Only title, description, color and columns are applied. Other fields are ignored. `columns` is the complete new list in its new order: a column that carries its `_id` keeps it, one without is created, and one left out is removed. A name is 1 to 40 characters and unique on the board ignoring case, a board has 2 to 8 columns, and each color is the id of a hue. A column can be removed only while it has no live tasks, otherwise the answer is a 409 naming it. Every rule is checked before anything is written, so a refused edit changes nothing. Access: Board owner."
       operationId: putBoardsById
       security:
         - bearerAuth: []
@@ -442,6 +442,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "500":
           $ref: "#/components/responses/InternalError"
     delete:
@@ -1695,6 +1697,26 @@ components:
         color:
           type: string
           pattern: ^[0-9a-fA-F]{24}$
+        columns:
+          minItems: 2
+          maxItems: 8
+          type: array
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+                pattern: ^[0-9a-fA-F]{24}$
+              title:
+                type: string
+                minLength: 1
+                maxLength: 40
+              color:
+                type: string
+                pattern: ^[0-9a-fA-F]{24}$
+            required:
+              - title
+              - color
     AddBoardMembersRequest:
       type: object
       properties:

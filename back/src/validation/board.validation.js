@@ -27,6 +27,63 @@ export const createBoardSchema = z
   })
   .strict();
 
+export const COLUMN_NAME_MAX_LENGTH = 40;
+export const MIN_COLUMNS = 2;
+export const MAX_COLUMNS = 8;
+
+// One column as an edit sends it. A column that already exists carries its
+// `_id`, which is how it keeps the id every task's `status` points at; a new
+// column has none and is given one by the server. There is no `order`: the
+// position of a column in the array is its position on the board.
+const boardColumnSchema = z.object({
+  _id: objectIdSchema.optional(),
+  title: z
+    .string()
+    .trim()
+    .min(1, 'A column needs a name')
+    .max(COLUMN_NAME_MAX_LENGTH, `A column name is at most ${COLUMN_NAME_MAX_LENGTH} characters`),
+  color: objectIdSchema,
+});
+
+/**
+ * The complete, ordered list of a board's columns, as the edit dialog sends it
+ * on Save. It replaces the stored list: a column that is absent is removed,
+ * which the service allows only for a column with no live tasks.
+ *
+ * Names are compared ignoring case because the task modal's move buttons, the
+ * dialog's positions and the landed toast all name a column by its title.
+ */
+export const boardColumnsSchema = z
+  .array(boardColumnSchema)
+  .min(MIN_COLUMNS, `A board keeps at least ${MIN_COLUMNS} columns`)
+  .max(MAX_COLUMNS, `A board has at most ${MAX_COLUMNS} columns`)
+  .superRefine((columns, context) => {
+    const seenTitles = new Set();
+    const seenIds = new Set();
+
+    columns.forEach((column, index) => {
+      const key = column.title.toLowerCase();
+
+      if (seenTitles.has(key)) {
+        context.addIssue({
+          code: 'custom',
+          path: [index, 'title'],
+          message: `Two columns are called "${column.title}". Column names must be different`,
+        });
+      }
+      seenTitles.add(key);
+
+      if (column._id) {
+        const id = column._id.toLowerCase();
+
+        if (seenIds.has(id)) {
+          context.addIssue({ code: 'custom', path: [index, '_id'], message: 'A column appears twice' });
+        }
+        seenIds.add(id);
+      }
+    });
+  });
+
 // Whitelist for PUT /api/boards/:id. createdBy, members, _id and timestamps
 // are intentionally excluded: members has its own endpoint, and createdBy
 // must never be reassignable through a generic update. Deliberately
@@ -45,6 +102,7 @@ export const updateBoardSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').optional(),
   description: z.string().trim().optional(),
   color: objectIdSchema.optional(),
+  columns: boardColumnsSchema.optional(),
 });
 
 export const addBoardMembersSchema = z

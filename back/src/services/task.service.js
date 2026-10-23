@@ -27,6 +27,13 @@ const loadColumnIds = async boardId => {
   return board.columns.map(column => column._id.toString());
 };
 
+// The board's columns, first to last.
+const boardColumnsByOrder = async boardId => {
+  const board = await Board.findById(boardId).select('columns');
+
+  return [...(board?.columns ?? [])].sort((a, b) => a.order - b.order);
+};
+
 // A well-formed id that belongs to a different board is still wrong, and it
 // is the failure with real consequences: the task disappears from the board
 // it was filed under while continuing to count in its totals. The shape check
@@ -209,6 +216,9 @@ export const deleteTask = async id => {
  * every later drop between them impossible, so the restored task is re-keyed
  * to sit immediately above the card that took its place.
  *
+ * A task whose column has been removed since it was deleted is restored into
+ * the board's first column, at the bottom of it.
+ *
  * @param {string} id
  * @param {{ retentionMs?: number, now?: Date }} [options]
  * @returns {Promise<object>} the restored task
@@ -226,10 +236,24 @@ export const restoreTask = async (id, { retentionMs = env.BOARD_RETENTION_MS, no
   const update = { deletedAt: null };
 
   if (candidate.deletedAt) {
-    const { boardId, status, order } = candidate;
+    const { boardId, order } = candidate;
+    let { status } = candidate;
+
+    // A column can be removed while it holds only deleted tasks, and those
+    // stay in the trash naming a column that is gone. Such a task is restored
+    // into the board's first column, at the foot of it: its old key was minted
+    // among the cards of another column and means nothing here.
+    const columns = await boardColumnsByOrder(boardId);
+
+    if (columns.length > 0 && !columns.some(column => column._id.toString() === status)) {
+      status = columns[0]._id.toString();
+      update.status = status;
+      update.order = await keyAtEndOfColumn(boardId, status);
+    }
+
     const live = { boardId, status, deletedAt: null, _id: { $ne: candidate._id } };
 
-    if (await Task.exists({ ...live, order })) {
+    if (update.order === undefined && (await Task.exists({ ...live, order }))) {
       const above = await Task.findOne({ ...live, order: { $lt: order } })
         .sort({ order: -1 })
         .select('order');
