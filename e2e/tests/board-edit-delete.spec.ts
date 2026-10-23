@@ -62,7 +62,8 @@ test.describe('editing and deleting a board from its page', () => {
     const boardId = await seedBoard(page, authedUser.token!, [['Keep me']]);
     await logInThroughTheUi(page, authedUser);
     await page.goto(boardUrl(boardId));
-    const title = await page.getByRole('heading', { level: 1 }).innerText();
+    // The owner's board name is a field inside the h1, so it is read from the field.
+    const title = await page.getByRole('textbox', { name: 'Board name' }).inputValue();
 
     const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' });
     await expect(breadcrumb.getByRole('listitem')).toHaveText(['Home', 'Boards', title]);
@@ -85,7 +86,8 @@ test.describe('editing and deleting a board from its page', () => {
     await logInThroughTheUi(page, authedUser);
     await page.goto(boardUrl(boardId));
     await expect(page.getByText('First task')).toBeVisible();
-    const title = await page.getByRole('heading', { level: 1 }).innerText();
+    // The owner's board name is a field inside the h1, so it is read from the field.
+    const title = await page.getByRole('textbox', { name: 'Board name' }).inputValue();
 
     await chooseFromBoardMenu(page, 'Delete board');
     const confirm = page.getByRole('dialog', { name: 'Delete this board?' });
@@ -116,7 +118,8 @@ test.describe('editing and deleting a board from its page', () => {
     const boardId = await seedBoard(page, authedUser.token!, [['Doomed task']]);
     await logInThroughTheUi(page, authedUser);
     await page.goto(boardUrl(boardId));
-    const title = await page.getByRole('heading', { level: 1 }).innerText();
+    // The owner's board name is a field inside the h1, so it is read from the field.
+    const title = await page.getByRole('textbox', { name: 'Board name' }).inputValue();
 
     await chooseFromBoardMenu(page, 'Delete board');
     await page.getByRole('dialog', { name: 'Delete this board?' }).getByRole('button', { name: 'Delete board' }).click();

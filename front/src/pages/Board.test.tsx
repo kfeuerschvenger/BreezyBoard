@@ -644,13 +644,129 @@ describe('Board page owner actions', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Options for Launch Plan' }));
     await user.click(screen.getByRole('menuitem', { name: 'Edit board' }));
-    const name = await screen.findByRole('textbox', { name: /board name/i });
+    // The page's own title field is named "Board name" too, so the dialog's is
+    // looked up inside the dialog.
+    const dialog = await screen.findByRole('dialog', { name: 'Edit board' });
+    const name = within(dialog).getByRole('textbox', { name: /board name/i });
     await user.clear(name);
     await user.type(name, 'Relaunch Plan');
     await user.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Relaunch Plan' })).toBeInTheDocument();
     expect(mockedBoardService.getById).toHaveBeenCalledTimes(1);
+  });
+
+  describe('columns and the title, in place', () => {
+    it('lets the owner rename a column from its header, sending the whole list with the one name changed', async () => {
+      const user = userEvent.setup();
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+      mockedBoardService.update.mockResolvedValue({
+        ...board,
+        columns: [{ ...board.columns[0], title: 'Inbox' }, board.columns[1]],
+      });
+      renderBoard();
+
+      const field = await screen.findByRole('textbox', { name: 'Name of column To Do' });
+      await user.clear(field);
+      await user.type(field, 'Inbox{Enter}');
+
+      await waitFor(() =>
+        expect(mockedBoardService.update).toHaveBeenCalledExactlyOnceWith(BOARD_ID, {
+          columns: [
+            { _id: 'col-todo', title: 'Inbox', color: 'c1' },
+            { _id: 'col-done', title: 'Done', color: 'c2' },
+          ],
+        })
+      );
+      expect(await screen.findByRole('textbox', { name: 'Name of column Inbox' })).toHaveValue('Inbox');
+    });
+
+    it('refuses a name another column has and says so in a toast', async () => {
+      const user = userEvent.setup();
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+      renderBoard();
+
+      const field = await screen.findByRole('textbox', { name: 'Name of column To Do' });
+      await user.clear(field);
+      await user.type(field, 'done{Enter}');
+
+      expect(await screen.findByText('Another column already has that name')).toBeInTheDocument();
+      expect(mockedBoardService.update).not.toHaveBeenCalled();
+      expect(field).toHaveValue('To Do');
+    });
+
+    it('shows a member the names as text, with no title field, no column fields and no Add column', async () => {
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'member' });
+      renderBoard();
+
+      await screen.findByRole('heading', { name: 'To Do' });
+
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Add column' })).not.toBeInTheDocument();
+    });
+
+    it('gives the owner the Add column button, and the dialog it opens blocks removing a column that holds cards', async () => {
+      const user = userEvent.setup();
+      mockedBoardService.getById.mockResolvedValue({
+        ...board,
+        viewerRole: 'owner',
+        columns: [
+          board.columns[0],
+          { _id: 'col-doing', title: 'Doing', color: { _id: 'c1', value: 'sky' }, order: 1 },
+          { ...board.columns[1], order: 2 },
+        ],
+      });
+      mockedTaskService.getByBoard.mockResolvedValue([
+        makeTask({ _id: 'task-1', title: 'Write the spec', status: 'col-todo' }),
+        makeTask({ _id: 'task-2', title: 'Ship it', status: 'col-todo', order: 'a1' }),
+      ]);
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Add column' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Edit board' });
+      const remove = within(dialog).getByRole('button', { name: 'Remove To Do' });
+      expect(remove).toBeDisabled();
+      expect(remove).toHaveAccessibleDescription(/^To Do has 2 cards\./);
+      expect(within(dialog).getByRole('button', { name: 'Remove Doing' })).toBeEnabled();
+    });
+
+    it('draws a new column on the page as soon as it is saved, with its hue', async () => {
+      const user = userEvent.setup();
+      mockedColorService.getByType.mockResolvedValue([
+        { _id: 'c1', name: 'Sky', value: 'sky' },
+        { _id: 'c2', name: 'Green', value: 'green' },
+      ]);
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+      mockedBoardService.update.mockResolvedValue({
+        ...board,
+        columns: [
+          board.columns[0],
+          { _id: 'col-new', title: 'Review', color: { _id: 'c1', value: 'sky' }, order: 1 },
+          { ...board.columns[1], order: 2 },
+        ],
+      });
+      renderBoard();
+
+      await user.click(await screen.findByRole('button', { name: 'Add column' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit board' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'New column name' }), 'Review');
+      await user.click(within(dialog).getByRole('button', { name: 'Add column' }));
+      await user.click(within(dialog).getByRole('button', { name: 'Save Changes' }));
+
+      expect(await screen.findByRole('textbox', { name: 'Name of column Review' })).toBeInTheDocument();
+      expect(mockedBoardService.update).toHaveBeenCalledWith(
+        BOARD_ID,
+        expect.objectContaining({
+          columns: [
+            { _id: 'col-todo', title: 'To Do', color: 'c1' },
+            { title: 'Review', color: 'c1' },
+            { _id: 'col-done', title: 'Done', color: 'c2' },
+          ],
+        })
+      );
+      expect(document.querySelector('[data-column="col-new"] span.bg-sky-mid')).not.toBeNull();
+    });
   });
 
   it('leaves for the dashboard once the board is deleted, and the Undo toast goes with the person', async () => {

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithQuery } from '@/test/renderWithQuery';
-import { ColorService } from '@/services';
+import { BoardService, ColorService } from '@/services';
 import { hueFromSeed, MID_BACKGROUND } from '@/shared/ui';
 import type { Board, Color, User } from '@/models';
 import { BoardHeader } from './BoardHeader';
@@ -136,6 +137,125 @@ describe('BoardHeader owner', () => {
     renderHeader(makeBoard({ createdBy: 'user-ada' }));
 
     expect(screen.queryByText(/Owner:/)).not.toBeInTheDocument();
+  });
+});
+
+describe('BoardHeader title in place', () => {
+  const titleField = () => screen.getByRole('textbox', { name: 'Board name' });
+
+  it('gives the owner the name as a field inside the one h1', () => {
+    renderHeader(makeBoard());
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Launch Plan' })).toContainElement(titleField());
+    expect(titleField()).toHaveValue('Launch Plan');
+  });
+
+  it('gives a member the name as text', () => {
+    renderHeader(makeBoard({ viewerRole: 'member' }));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Launch Plan' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('saves the new name, and only it, when the field loses focus', async () => {
+    vi.mocked(BoardService.update).mockReset().mockResolvedValue(makeBoard({ title: 'Relaunch Plan' }));
+    renderHeader(makeBoard());
+
+    await userEvent.clear(titleField());
+    await userEvent.type(titleField(), 'Relaunch Plan');
+    await userEvent.tab();
+
+    await waitFor(() => expect(BoardService.update).toHaveBeenCalledExactlyOnceWith('board-1', { title: 'Relaunch Plan' }));
+  });
+
+  it('saves on Enter and reverts on Escape without a request', async () => {
+    vi.mocked(BoardService.update).mockReset().mockResolvedValue(makeBoard({ title: 'Relaunch Plan' }));
+    renderHeader(makeBoard());
+
+    await userEvent.clear(titleField());
+    await userEvent.type(titleField(), 'Discarded{Escape}');
+    expect(titleField()).toHaveValue('Launch Plan');
+    expect(BoardService.update).not.toHaveBeenCalled();
+
+    await userEvent.clear(titleField());
+    await userEvent.type(titleField(), 'Relaunch Plan{Enter}');
+    await waitFor(() => expect(BoardService.update).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the name and tells the person when it is emptied', async () => {
+    vi.mocked(BoardService.update).mockReset();
+    renderHeader(makeBoard());
+
+    await userEvent.clear(titleField());
+    await userEvent.tab();
+
+    expect(BoardService.update).not.toHaveBeenCalled();
+    expect(titleField()).toHaveValue('Launch Plan');
+    expect(await screen.findByText('A board needs a name.')).toBeInTheDocument();
+  });
+
+  it('goes back to the old name and tells the person when the save fails', async () => {
+    vi.mocked(BoardService.update).mockReset().mockRejectedValue(new Error('offline'));
+    renderHeader(makeBoard());
+
+    await userEvent.clear(titleField());
+    await userEvent.type(titleField(), 'Relaunch Plan');
+    await userEvent.tab();
+
+    expect(await screen.findByText('The board could not be renamed. Nothing was changed.')).toBeInTheDocument();
+    expect(titleField()).toHaveValue('Launch Plan');
+  });
+});
+
+describe('BoardHeader Add column', () => {
+  const renderWithCounts = (board: Board, counts: Record<string, number> | null = {}) =>
+    renderWithQuery(
+      <BoardHeader board={board} landed={0} total={0} onDeleted={vi.fn()} taskCounts={counts ?? undefined} />
+    );
+
+  const withColumns = (overrides: Partial<Board> = {}) =>
+    makeBoard({
+      columns: [
+        { _id: 'col-a', title: 'Backlog', color: GREEN, order: 0 },
+        { _id: 'col-b', title: 'Done', color: GREEN, order: 1 },
+      ],
+      ...overrides,
+    });
+
+  it('is a button of the owner, beside the board menu', async () => {
+    renderWithCounts(withColumns());
+
+    expect(await screen.findByRole('button', { name: 'Add column' })).toBeInTheDocument();
+  });
+
+  it('is not offered to a member, or where the page holds no cards to count', () => {
+    const { unmount } = renderWithCounts(withColumns({ viewerRole: 'member' }));
+    expect(screen.queryByRole('button', { name: 'Add column' })).not.toBeInTheDocument();
+    unmount();
+
+    renderWithCounts(withColumns(), null);
+    expect(screen.queryByRole('button', { name: 'Add column' })).not.toBeInTheDocument();
+  });
+
+  it('opens the edit dialog on its columns section, with the cursor in the name of the new column', async () => {
+    renderWithCounts(withColumns());
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add column' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Edit board' });
+    expect(within(dialog).getByRole('heading', { name: 'Columns' })).toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getByRole('textbox', { name: 'New column name' })).toHaveFocus());
+  });
+
+  it('is not what the board menu opens: Edit board leaves the cursor out of the new column field', async () => {
+    renderWithCounts(withColumns());
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Options for Launch Plan' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit board' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Edit board' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(within(dialog).getByRole('textbox', { name: 'New column name' })).not.toHaveFocus();
   });
 });
 

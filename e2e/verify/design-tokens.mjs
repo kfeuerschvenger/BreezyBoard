@@ -1488,11 +1488,16 @@ for (const [hue] of Object.entries(HUE_ANGLES)) { // NOSONAR javascript:S9382 se
   });
   check(`a ${hue} board is created`, created.status(), 201);
 }
-const refusedHex = await page.request.post(`${API}/boards`, {
+// A task colour is a real palette entry that belongs to another surface. A
+// column is painted from the six hues, so its colour is a valid board colour.
+const homeTaskPalette = (await (await page.request.get(`${API}/colors?type=task`, homeAuth)).json()).data;
+const refusedTaskColor = await page.request.post(`${API}/boards`, {
   ...homeAuth,
-  data: { title: 'Home hex', color: homeTemplate.columns[0].color._id ?? homeTemplate.columns[0].color, template: homeTemplate._id },
+  data: { title: 'Home task colour', color: homeTaskPalette[0]._id, template: homeTemplate._id },
 });
-check('a column colour is refused as a board colour', refusedHex.status(), 400);
+check('a task colour is refused as a board colour', refusedTaskColor.status(), 400);
+const templateColumnColor = homeTemplate.columns[0].color._id ?? homeTemplate.columns[0].color;
+check('the first template column is painted from one of the six hues', Object.keys(HUE_ANGLES).includes(homePalette.find(entry => entry._id === templateColumnColor)?.value), true);
 
 const homeContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 const homePage = await homeContext.newPage();
@@ -1781,8 +1786,9 @@ await boardPage.getByText('Gate high task', { exact: true }).waitFor();
 await settled(boardPage, { label: 'the board to stop animating' });
 
 const boardStructure = await boardPage.evaluate(() => ({
-  h1: [...document.querySelectorAll('h1')].map(h => h.textContent),
-  columns: [...document.querySelectorAll('[role="region"][aria-label="Board columns"] h2')].map(h => h.textContent),
+  // The owner's board name and column names are fields inside their headings.
+  h1: [...document.querySelectorAll('h1')].map(h => h.querySelector('input')?.value ?? h.textContent),
+  columns: [...document.querySelectorAll('[role="region"][aria-label="Board columns"] h2')].map(h => h.querySelector('input')?.value ?? h.textContent),
   cardTitles: [...document.querySelectorAll('[data-task-card] h3')].map(h => h.textContent),
   footers: document.querySelectorAll('footer').length,
 }));
@@ -1881,7 +1887,8 @@ for (const name of ['Home', 'Boards']) { // NOSONAR javascript:S9382 sequential 
 check('the two breadcrumb separators are in the tertiary ink', await crumbNav.locator('li[aria-hidden="true"]').evaluateAll(items => items.map(li => getComputedStyle(li).color)).then(async colors => (await Promise.all(colors.map(c => paintOf(boardPage, c)))).join('|')), [await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-tertiary')), await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-tertiary'))].join('|'));
 check('the board name in the breadcrumb is text, not a link', await boardPage.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]').evaluate(el => `${el.tagName} ${el.closest('a') === null}`), 'LI true');
 const landedColumn = boardPage.locator('[data-column]').nth(3);
-check('the last column has the arrival icon and a green dot, and keeps its own name', `${await landedColumn.locator('h2 ~ svg').count()} ${await landedColumn.getByRole('heading', { level: 2 }).textContent()}`, `1 ${gateBoardColumns[3].title}`);
+check('the last column has the arrival icon, and keeps its own name', `${await landedColumn.locator('h2 ~ svg').count()} ${await landedColumn.getByRole('textbox', { name: /^Name of column / }).inputValue()}`, `1 ${gateBoardColumns[3].title}`);
+check('the last column dot is the hue its owner chose, not a colour of its own', await landedColumn.locator('h2').locator('xpath=preceding-sibling::span[1]').getAttribute('class').then(value => /bg-(sky|teal|green|sand|coral|lavender)-mid/.exec(value)?.[0]), `bg-${gateBoardColumns[3].color.value}-mid`);
 check('the card in the last column is drawn as done, in the secondary text', await paintOf(boardPage, await landedColumn.getByRole('button', { name: 'Gate landed task', exact: true }).evaluate(el => getComputedStyle(el).color)), await paintOf(boardPage, await tokenValue(boardPage, '--color-ink-secondary')));
 check('an empty column says Still air', await boardPage.locator('[data-column]').nth(2).getByText('Still air').isVisible(), true);
 
@@ -1937,7 +1944,7 @@ const carry = async (pg, title, toColumn) => {
   // what a person waits for before letting go. A column that never lights is
   // left for the checks to report, with what was on screen.
   const lit = await pg
-    .locator('[data-column][data-highlighted] h2', { hasText: toColumn })
+    .locator('[data-column][data-highlighted]', { has: pg.getByRole('textbox', { name: `Name of column ${toColumn}` }) })
     .waitFor({ state: 'attached', timeout: WAIT_MS })
     .then(() => true, () => false);
   // The gap opens and the column brightens over a few hundred milliseconds,
@@ -1961,10 +1968,10 @@ const held = pg =>
         borderColor: gapStyle.borderTopColor,
         background: gapStyle.backgroundColor,
         duration: gapStyle.animationDuration,
-        inColumn: gap.closest('[data-column]').querySelector('h2').textContent,
+        inColumn: gap.closest('[data-column]').querySelector('h2 input').value,
         hidden: gap.getAttribute('aria-hidden'),
       },
-      lit: lit.map(column => column.querySelector('h2').textContent),
+      lit: lit.map(column => column.querySelector('h2 input').value),
       litBackground: litStyle?.backgroundColor,
       litBorder: litStyle?.borderTopColor,
       overlay: overlay && { rotate: overlayStyle.rotate, scale: overlayStyle.scale, hidden: overlay.getAttribute('aria-hidden') },
@@ -1994,7 +2001,7 @@ const toMs = value => Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 100
     .waitForFunction(
       ([title, column]) =>
         [...document.querySelectorAll('[data-task-card]')].some(
-          card => card.querySelector('h3')?.textContent === title && card.closest('[data-column]')?.querySelector('h2')?.textContent === column,
+          card => card.querySelector('h3')?.textContent === title && card.closest('[data-column]')?.querySelector('h2 input')?.value === column,
         ),
       ['Gate low task', gateBoardColumns[1].title],
       { timeout: 5000 },
@@ -2002,7 +2009,7 @@ const toMs = value => Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 100
     .catch(() => {});
   const landed = await pg.evaluate(title => {
     const card = [...document.querySelectorAll('[data-task-card]')].find(c => c.querySelector('h3')?.textContent === title);
-    return { column: card?.closest('[data-column]')?.querySelector('h2').textContent, duration: card && getComputedStyle(card).animationDuration, gaps: document.querySelectorAll('[data-drop-gap]').length, lit: document.querySelectorAll('[data-highlighted]').length };
+    return { column: card?.closest('[data-column]')?.querySelector('h2 input').value, duration: card && getComputedStyle(card).animationDuration, gaps: document.querySelectorAll('[data-drop-gap]').length, lit: document.querySelectorAll('[data-highlighted]').length };
   }, 'Gate low task');
   check(`${mode}: the card lands in the column it was carried to`, landed.column, gateBoardColumns[1].title);
   check(`${mode}: no gap and no highlight are left behind`, `${landed.gaps} ${landed.lit}`, '0 0');
@@ -2160,7 +2167,7 @@ await settled(motionPage, { label: 'the board to stop animating with motion on' 
             if (event.animationName !== 'bbLand' || !(card instanceof Element) || card.querySelector('h3')?.textContent !== title) return;
             const style = getComputedStyle(card);
             resolve({
-              column: card.closest('[data-column]')?.querySelector('h2').textContent,
+              column: card.closest('[data-column]')?.querySelector('h2 input').value,
               animation: style.animationName,
               duration: style.animationDuration,
               easing: style.animationTimingFunction,

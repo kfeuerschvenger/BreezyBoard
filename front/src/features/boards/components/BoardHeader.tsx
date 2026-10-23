@@ -1,7 +1,9 @@
 import React from 'react';
 import type { Board } from '@/models';
-import { Avatar, Cover, ProgressBar } from '@/shared/ui';
+import { useToast } from '@/shared/hooks/useToast';
+import { Avatar, Cover, InlineEdit, ProgressBar } from '@/shared/ui';
 import { boardHueOf } from '../boardHue';
+import { useUpdateBoard } from '../queries';
 import { BoardActions } from './BoardActions';
 
 export interface BoardHeaderProps {
@@ -12,6 +14,8 @@ export interface BoardHeaderProps {
   total: number;
   /** Runs once the board is deleted, to leave a page that no longer has a board. */
   onDeleted: () => void;
+  /** Live cards in each column, by column id. With it the owner can manage the board's columns from the header. */
+  taskCounts?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -46,10 +50,16 @@ const CoverMark: React.FC = () => (
  * One person is shown, the owner. A board has members, but a task has one
  * assignee and the design's stack of every member would imply more than the
  * product offers.
+ *
+ * The owner edits the name where it is read, and it saves when the field loses
+ * focus. Anybody else reads it as text.
  */
-export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, onDeleted }) => {
+export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, onDeleted, taskCounts }) => {
+  const updateBoard = useUpdateBoard();
+  const toast = useToast();
   const hue = boardHueOf(board.color);
   const title = board.title || 'Untitled Board';
+  const isOwner = board.viewerRole === 'owner';
   const percent = total === 0 ? 0 : Math.round((landed / total) * 100);
 
   const owner = typeof board.createdBy === 'object' ? board.createdBy : null;
@@ -67,7 +77,20 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, 
 
         <div className="min-w-0">
           <h1 className="break-words font-heading text-[28px] font-bold leading-tight tracking-tight text-ink sm:text-4xl">
-            {title}
+            {isOwner ? (
+              <InlineEdit
+                value={title}
+                label="Board name"
+                emptyMessage="A board needs a name."
+                failureMessage="The board could not be renamed. Nothing was changed."
+                onError={message => toast.show({ message })}
+                onSave={async next => {
+                  await updateBoard.mutateAsync({ boardId: board._id, changes: { title: next } });
+                }}
+              />
+            ) : (
+              title
+            )}
           </h1>
           {board.description && (
             <p className="mt-0.5 line-clamp-2 text-[14.5px] leading-snug text-ink-secondary">{board.description}</p>
@@ -75,7 +98,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, 
         </div>
       </div>
 
-      <div className="ml-auto flex max-w-full items-end gap-4">
+      <div className="ml-auto flex max-w-full flex-wrap items-end justify-end gap-x-4 gap-y-3">
         {/* 190 pixels where there is room, and less on a 320 pixel phone, where the avatar and the menu need theirs. */}
         <div className="w-47.5 min-w-0 shrink">
           <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[12.5px] text-ink-secondary">
@@ -101,7 +124,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, 
           </span>
         )}
 
-        <BoardActions board={board} onDeleted={onDeleted} />
+        <BoardActions board={board} onDeleted={onDeleted} taskCounts={taskCounts} />
       </div>
     </header>
   );

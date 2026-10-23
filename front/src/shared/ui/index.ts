@@ -7,6 +7,9 @@ export type { ButtonProps, ButtonSize, ButtonVariant } from './Button';
 export { IconButton } from './IconButton';
 export type { IconButtonProps, IconButtonShape, IconButtonSize } from './IconButton';
 
+export { InlineEdit } from './InlineEdit';
+export type { InlineEditProps } from './InlineEdit';
+
 export { Input } from './Input';
 export type { InputProps } from './Input';
 
