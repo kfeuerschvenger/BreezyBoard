@@ -16,8 +16,25 @@ const readBoard = async (page: Page, token: string, boardId: string) => {
   const response = await page.request.get(`${API_URL}/boards/${boardId}`, { headers: { Authorization: `Bearer ${token}` } });
   return (await response.json()).data as {
     title: string;
+    columnsVersion: number;
     columns: { _id: string; title: string; order: number; color: { _id: string } }[];
   };
+};
+
+/** Adds a column the way a second session would: straight to the API, with the version it just read. */
+const addColumnElsewhere = async (page: Page, token: string, boardId: string, title: string) => {
+  const stored = await readBoard(page, token, boardId);
+  const response = await page.request.put(`${API_URL}/boards/${boardId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      columns: [
+        ...stored.columns.map(column => ({ _id: column._id, title: column.title, color: column.color._id })),
+        { title, color: stored.columns[0].color._id },
+      ],
+      columnsVersion: stored.columnsVersion,
+    },
+  });
+  expect(response.status()).toBe(200);
 };
 
 test.describe('managing a board\'s columns', () => {
@@ -104,11 +121,64 @@ test.describe('managing a board\'s columns', () => {
     const withoutBacklog = stored.columns.filter(column => column.title !== 'Backlog');
     const refused = await page.request.put(`${API_URL}/boards/${boardId}`, {
       headers: { Authorization: `Bearer ${authedUser.token}` },
-      data: { columns: withoutBacklog.map(column => ({ _id: column._id, title: column.title, color: column.color._id })) },
+      data: {
+        columns: withoutBacklog.map(column => ({ _id: column._id, title: column.title, color: column.color._id })),
+        columnsVersion: stored.columnsVersion,
+      },
     });
     expect(refused.status()).toBe(409);
     expect((await refused.json()).message).toContain('"Backlog"');
     expect((await readBoard(page, authedUser.token!, boardId)).columns).toHaveLength(3);
+  });
+
+  test('a dialog opened before another session changed the columns is refused, then reloaded and saved', async ({
+    page,
+    authedUser,
+  }) => {
+    const boardId = await seedBoard(page, authedUser.token!, [['A card']]);
+    await logInThroughTheUi(page, authedUser);
+    await page.goto(boardUrl(boardId));
+    await expect.poll(() => columnNames(page)).toEqual(TEMPLATE_COLUMNS);
+
+    await page.getByRole('button', { name: 'Add column' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Edit board' });
+    await dialog.getByRole('button', { name: 'Remove Up Next' }).click();
+
+    await addColumnElsewhere(page, authedUser.token!, boardId, 'Added elsewhere');
+
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    const alert = dialog.getByRole('alert');
+    await expect(alert).toContainText('changed by someone else while you were editing. Nothing was saved.');
+    expect((await readBoard(page, authedUser.token!, boardId)).columns).toHaveLength(5);
+
+    await alert.getByRole('button', { name: 'Reload columns' }).click();
+    await expect(dialog.getByRole('textbox', { name: /^Name of column \d$/ })).toHaveCount(5);
+    await expect(alert).toBeHidden();
+
+    await dialog.getByRole('button', { name: 'Remove Up Next' }).click();
+    await dialog.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => columnNames(page)).toEqual(['Backlog', 'In Progress', 'Done', 'Added elsewhere']);
+  });
+
+  test('renaming a column in place from an out of date page keeps a column another session added', async ({
+    page,
+    authedUser,
+  }) => {
+    const boardId = await seedBoard(page, authedUser.token!, [['A card']]);
+    await logInThroughTheUi(page, authedUser);
+    await page.goto(boardUrl(boardId));
+    await expect.poll(() => columnNames(page)).toEqual(TEMPLATE_COLUMNS);
+
+    await addColumnElsewhere(page, authedUser.token!, boardId, 'Added elsewhere');
+
+    const column = page.getByRole('textbox', { name: 'Name of column Backlog' });
+    await column.fill('Inbox');
+    await column.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Name of column Inbox' })).toHaveValue('Inbox');
+
+    const stored = await readBoard(page, authedUser.token!, boardId);
+    expect(stored.columns.map(item => item.title)).toEqual(['Inbox', 'Up Next', 'In Progress', 'Done', 'Added elsewhere']);
   });
 
   test('the owner renames a column and the board in place, and a member can do neither', async ({
