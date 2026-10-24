@@ -112,7 +112,35 @@ export const useUpdateBoard = () => {
         title: updated.title,
         description: updated.description,
         color: updated.color,
-        ...(changes.columns && { columns: updated.columns }),
+        ...(changes.columns && { columns: updated.columns, columnsVersion: updated.columnsVersion }),
+      });
+
+      queryClient.setQueryData<Board>(boardKeys.detail(boardId), previous => previous && merge(previous));
+      queryClient.setQueryData<Board[]>(boardKeys.list(), previous =>
+        previous?.map(board => (board._id === boardId ? merge(board) : board))
+      );
+    },
+  });
+};
+
+/**
+ * Renames one column from its header. The request names the column and the new
+ * title and nothing else, so it cannot overwrite a column another session
+ * added, which sending the whole list would. The answer carries the board's
+ * columns and their new version, and those are all that is merged into the two
+ * caches that hold the board, for the reason `useUpdateBoard` gives.
+ */
+export const useRenameBoardColumn = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ boardId, columnId, title }: { boardId: string; columnId: string; title: string }) =>
+      BoardService.renameColumn(boardId, columnId, title),
+    onSuccess: (updated, { boardId }) => {
+      const merge = <T extends Pick<Board, 'columns' | 'columnsVersion'>>(board: T): T => ({
+        ...board,
+        columns: updated.columns,
+        columnsVersion: updated.columnsVersion,
       });
 
       queryClient.setQueryData<Board>(boardKeys.detail(boardId), previous => previous && merge(previous));

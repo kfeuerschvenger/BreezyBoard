@@ -31,11 +31,12 @@ const COLUMNS: Column[] = [
   column('col-done', 'Done', 'green', 2),
 ];
 
-const BOARD: Pick<Board, 'title' | 'description' | 'color'> & { columns: Column[] } = {
+const BOARD: Pick<Board, 'title' | 'description' | 'color' | 'columnsVersion'> & { columns: Column[] } = {
   title: 'Launch Plan',
   description: 'Everything for the launch',
   color: COLORS[0],
   columns: COLUMNS,
+  columnsVersion: 4,
 };
 
 beforeEach(() => {
@@ -226,6 +227,7 @@ describe('EditBoardModal, columns', () => {
           { _id: 'col-doing', title: 'In progress', color: 'c-sand' },
           { _id: 'col-done', title: 'Done', color: 'c-green' },
         ],
+        columnsVersion: 4,
       });
     });
 

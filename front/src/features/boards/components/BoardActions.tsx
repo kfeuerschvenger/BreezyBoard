@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { IconDots, IconPencil, IconPlus, IconTrash, IconUserPlus } from '@tabler/icons-react';
 import type { Board } from '@/models';
+import { BoardService } from '@/services';
 import { AddMemberModal } from '@/features/users';
 import { Button, Menu, MenuItem, Icon } from '@/shared/ui';
 import { useAddMembersFlow } from '../hooks/useAddMembersFlow';
 import { useDeleteBoardWithUndo } from '../hooks/useDeleteBoardWithUndo';
-import { useUpdateBoard } from '../queries';
+import { boardKeys, useUpdateBoard } from '../queries';
 import { DeleteBoardDialog } from './DeleteBoardDialog';
 import { EditBoardModal } from './EditBoardModal';
 
@@ -40,6 +42,7 @@ export const BoardActions = ({ board, onDeleted, taskCounts }: BoardActionsProps
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const updateBoard = useUpdateBoard();
+  const queryClient = useQueryClient();
   const { deleteBoard } = useDeleteBoardWithUndo();
   const addMembers = useAddMembersFlow();
 
@@ -62,6 +65,20 @@ export const BoardActions = ({ board, onDeleted, taskCounts }: BoardActionsProps
 
     setConfirmingDelete(false);
     onDeleted();
+  };
+
+  // Reads the board again, whatever the cache holds, which also brings the page
+  // behind the dialog to the columns the dialog is about to show.
+  const reloadColumns = async () => {
+    const fresh = await queryClient.fetchQuery({
+      queryKey: boardKeys.detail(board._id),
+      queryFn: () => BoardService.getById(board._id),
+      staleTime: 0,
+    });
+
+    void queryClient.invalidateQueries({ queryKey: boardKeys.list() });
+
+    return { columns: fresh.columns, columnsVersion: fresh.columnsVersion };
   };
 
   const edit = (onColumns: boolean) => {
@@ -137,6 +154,7 @@ export const BoardActions = ({ board, onDeleted, taskCounts }: BoardActionsProps
         onSave={async values => {
           await updateBoard.mutateAsync({ boardId: board._id, changes: values });
         }}
+        onReloadColumns={reloadColumns}
       />
     </>
   );

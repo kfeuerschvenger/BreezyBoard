@@ -1,25 +1,31 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useColors } from '@/features/colors';
 import type { Board, Color, Column } from '@/models';
-import { apiErrorMessageOf, httpStatusOf } from '@/shared/lib/httpStatus';
+import { apiErrorCodeOf, apiErrorMessageOf, httpStatusOf } from '@/shared/lib/httpStatus';
 import { Button, Modal } from '@/shared/ui';
 import { MIN_COLUMNS, columnsChanged, columnsRequest, rowsFromColumns } from '../boardColumns';
-import type { ColumnChange } from '../boardColumns';
+import type { ColumnChange, ColumnRow } from '../boardColumns';
 import { boardHueOptions } from '../boardHue';
 import { editBoardSchema } from '../boardForm';
 import type { BoardFieldValues, EditBoardValues } from '../boardForm';
 import { BoardFormFields } from './BoardFormFields';
 import { ColumnsEditor } from './ColumnsEditor';
 
-/** What Save hands over: the board's fields, and its columns when they were changed. */
-export type EditBoardSave = BoardFieldValues & { columns?: ColumnChange[] };
+/**
+ * What Save hands over: the board's fields, and its columns when they were
+ * changed, with the version of the columns the dialog was opened on.
+ */
+export type EditBoardSave = BoardFieldValues & { columns?: ColumnChange[]; columnsVersion?: number };
+
+/** The board's columns as the server holds them now, which is what a reload brings. */
+export type ReloadedColumns = Pick<Board, 'columns' | 'columnsVersion'>;
 
 export interface EditBoardModalProps {
   open: boolean;
   /** `columns` switches on the columns section, which a board page offers and nothing else does. */
-  board: Pick<Board, 'title' | 'description' | 'color'> & { columns?: Column[] };
+  board: Pick<Board, 'title' | 'description' | 'color' | 'columnsVersion'> & { columns?: Column[] };
   /** Live cards in each column by column id, which is what decides whether a column can be removed. */
   taskCounts?: Readonly<Record<string, number>>;
   /** Opens with the cursor in the name of the column to add. */
@@ -27,7 +33,11 @@ export interface EditBoardModalProps {
   onClose: () => void;
   /** Rejects when the save fails, so the dialog can say so and keep the edits. */
   onSave: (values: EditBoardSave) => Promise<void>;
+  /** Reads the columns again, for the person who is told that they changed. Rejects when it cannot. */
+  onReloadColumns?: () => Promise<ReloadedColumns>;
 }
+
+const STALE_COLUMNS_CODE = 'COLUMNS_STALE';
 
 const NO_COLORS: Color[] = [];
 const NO_COUNTS: Readonly<Record<string, number>> = {};
@@ -53,10 +63,28 @@ const colorIdOf = (color: Board['color']) => (typeof color === 'string' ? color 
  * save rejecting is the only signal, which is why `onSave` must not catch. A
  * 409 is the one failure whose text is shown as the server wrote it, because it
  * names the column that gained cards while the dialog was open.
+ *
+ * The columns a save carries are the ones the dialog was opened with, and so is
+ * the version it sends: a board that is refetched while the dialog is open does
+ * not move either, so a list built on one view is never saved against another.
+ * When the server answers that the columns changed in the meantime, nothing was
+ * saved, and the dialog says so and offers to read the columns again. Reloading
+ * replaces the list with the current one, and leaves the name, description and
+ * colour as typed.
  */
-export const EditBoardModal = ({ open, board, taskCounts = NO_COUNTS, focusColumns = false, onClose, onSave }: EditBoardModalProps) => {
+export const EditBoardModal = ({
+  open,
+  board,
+  taskCounts = NO_COUNTS,
+  focusColumns = false,
+  onClose,
+  onSave,
+  onReloadColumns,
+}: EditBoardModalProps) => {
   const colorsQuery = useColors('board');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [columnsStale, setColumnsStale] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
 
   const hasColumns = board.columns !== undefined;
 
@@ -80,8 +108,17 @@ export const EditBoardModal = ({ open, board, taskCounts = NO_COUNTS, focusColum
   const {
     handleSubmit,
     reset,
+    getValues,
     formState: { isValid, isSubmitting },
   } = form;
+
+  // The columns, and their version, that the form was last brought to. It
+  // follows the board while the dialog is closed and stands still while it is
+  // open, which is what makes it the view the person's edits are built on.
+  const opened = useRef<{ version: number | undefined; rows: ColumnRow[] | undefined }>({
+    version: board.columnsVersion,
+    rows: initial.columns,
+  });
 
   // The form is brought back to the board as it is now while the dialog is
   // closed, so every opening starts from it and an abandoned edit is never
@@ -95,18 +132,32 @@ export const EditBoardModal = ({ open, board, taskCounts = NO_COUNTS, focusColum
   useEffect(() => {
     if (open) return;
     reset(initial);
+    opened.current = { version: board.columnsVersion, rows: initial.columns };
     setSaveError(null);
-  }, [open, initial, reset]);
+    setColumnsStale(false);
+  }, [open, initial, board.columnsVersion, reset]);
 
   const submit = handleSubmit(async values => {
     setSaveError(null);
+    setColumnsStale(false);
 
     const { columns, ...fields } = values;
-    const changed = columns !== undefined && board.columns !== undefined && columnsChanged(rowsFromColumns(board.columns), columns);
+    const baseline = opened.current.rows;
+    const changed = columns !== undefined && baseline !== undefined && columnsChanged(baseline, columns);
 
     try {
-      await onSave(changed ? { ...fields, columns: columnsRequest(columns) } : fields);
+      await onSave(
+        changed ? { ...fields, columns: columnsRequest(columns), columnsVersion: opened.current.version ?? 0 } : fields
+      );
     } catch (error) {
+      if (httpStatusOf(error) === 409 && apiErrorCodeOf(error) === STALE_COLUMNS_CODE) {
+        setColumnsStale(true);
+        setSaveError(
+          'The columns of this board were changed by someone else while you were editing. Nothing was saved. Reload the columns to see the current list, then make your column changes again.'
+        );
+        return;
+      }
+
       setSaveError(
         httpStatusOf(error) === 409
           ? (apiErrorMessageOf(error) ?? 'A column still has cards. Move them first and try again.')
@@ -117,6 +168,28 @@ export const EditBoardModal = ({ open, board, taskCounts = NO_COUNTS, focusColum
 
     onClose();
   });
+
+  // Brings the columns of the form to what the server holds now and makes that
+  // the view the next save is built on. Everything else in the form stays.
+  const reloadColumns = async () => {
+    if (!onReloadColumns) return;
+
+    setIsReloading(true);
+
+    try {
+      const fresh = await onReloadColumns();
+      const rows = rowsFromColumns(fresh.columns);
+
+      opened.current = { version: fresh.columnsVersion, rows };
+      reset({ ...getValues(), columns: rows });
+      setColumnsStale(false);
+      setSaveError(null);
+    } catch {
+      setSaveError('The columns could not be reloaded. Try again.');
+    } finally {
+      setIsReloading(false);
+    }
+  };
 
   return (
     <Modal
@@ -147,6 +220,19 @@ export const EditBoardModal = ({ open, board, taskCounts = NO_COUNTS, focusColum
       {saveError && (
         <div role="alert" className="mb-6 rounded-control bg-danger-bg p-3 text-sm text-danger-strong">
           {saveError}
+          {columnsStale && onReloadColumns && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={() => void reloadColumns()}
+                disabled={isReloading}
+                className="focus-ring cursor-pointer rounded-chip font-semibold underline"
+              >
+                Reload columns
+              </button>
+            </>
+          )}
         </div>
       )}
 

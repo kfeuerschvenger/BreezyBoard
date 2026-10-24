@@ -17,7 +17,7 @@ import type { Board as BoardModel, Color, Task, User } from '@/models';
 // its open state. Every case below stubs ColorService/UserService too so
 // that side effect never reaches the real, unmocked axios client.
 vi.mock('@/services', () => ({
-  BoardService: { getById: vi.fn(), update: vi.fn(), delete: vi.fn(), restore: vi.fn() },
+  BoardService: { getById: vi.fn(), update: vi.fn(), renameColumn: vi.fn(), delete: vi.fn(), restore: vi.fn() },
   TaskService: {
     getByBoard: vi.fn(),
     move: vi.fn(),
@@ -657,12 +657,49 @@ describe('Board page owner actions', () => {
   });
 
   describe('columns and the title, in place', () => {
-    it('lets the owner rename a column from its header, sending the whole list with the one name changed', async () => {
+    it('lets the owner rename a column from its header, naming that column and sending nothing else', async () => {
       const user = userEvent.setup();
-      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
-      mockedBoardService.update.mockResolvedValue({
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner', columnsVersion: 3 });
+      mockedBoardService.renameColumn.mockResolvedValue({
         ...board,
+        columnsVersion: 4,
         columns: [{ ...board.columns[0], title: 'Inbox' }, board.columns[1]],
+      });
+      renderBoard();
+
+      const field = await screen.findByRole('textbox', { name: 'Name of column To Do' });
+      await user.clear(field);
+      await user.type(field, '  Inbox {Enter}');
+
+      await waitFor(() => expect(mockedBoardService.renameColumn).toHaveBeenCalledExactlyOnceWith(BOARD_ID, 'col-todo', 'Inbox'));
+      expect(mockedBoardService.update).not.toHaveBeenCalled();
+      expect(await screen.findByRole('textbox', { name: 'Name of column Inbox' })).toHaveValue('Inbox');
+    });
+
+    it('renames a column on a board that keeps fewer columns than a board should, which the whole list could not carry', async () => {
+      const user = userEvent.setup();
+      const single = { ...board, viewerRole: 'owner' as const, columns: [board.columns[0]] };
+      mockedBoardService.getById.mockResolvedValue(single);
+      mockedBoardService.renameColumn.mockResolvedValue({ ...single, columns: [{ ...board.columns[0], title: 'Inbox' }] });
+      renderBoard();
+
+      const field = await screen.findByRole('textbox', { name: 'Name of column To Do' });
+      await user.clear(field);
+      await user.type(field, 'Inbox{Enter}');
+
+      await waitFor(() => expect(mockedBoardService.renameColumn).toHaveBeenCalledExactlyOnceWith(BOARD_ID, 'col-todo', 'Inbox'));
+    });
+
+    it('puts the columns and the version the server answers into the board it shows, so a later save carries them', async () => {
+      const user = userEvent.setup();
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner', columnsVersion: 3 });
+      mockedBoardService.renameColumn.mockResolvedValue({
+        ...board,
+        columnsVersion: 4,
+        columns: [
+          { ...board.columns[0], title: 'Inbox' },
+          { ...board.columns[1], title: 'Added elsewhere', _id: 'col-new', order: 2 },
+        ],
       });
       renderBoard();
 
@@ -670,15 +707,21 @@ describe('Board page owner actions', () => {
       await user.clear(field);
       await user.type(field, 'Inbox{Enter}');
 
-      await waitFor(() =>
-        expect(mockedBoardService.update).toHaveBeenCalledExactlyOnceWith(BOARD_ID, {
-          columns: [
-            { _id: 'col-todo', title: 'Inbox', color: 'c1' },
-            { _id: 'col-done', title: 'Done', color: 'c2' },
-          ],
-        })
-      );
-      expect(await screen.findByRole('textbox', { name: 'Name of column Inbox' })).toHaveValue('Inbox');
+      expect(await screen.findByRole('textbox', { name: 'Name of column Added elsewhere' })).toBeInTheDocument();
+    });
+
+    it('says the column could not be renamed when the server refuses, and keeps the old name', async () => {
+      const user = userEvent.setup();
+      mockedBoardService.getById.mockResolvedValue({ ...board, viewerRole: 'owner' });
+      mockedBoardService.renameColumn.mockRejectedValue(new Error('offline'));
+      renderBoard();
+
+      const field = await screen.findByRole('textbox', { name: 'Name of column To Do' });
+      await user.clear(field);
+      await user.type(field, 'Inbox{Enter}');
+
+      expect(await screen.findByText('The column could not be renamed. Nothing was changed.')).toBeInTheDocument();
+      expect(field).toHaveValue('To Do');
     });
 
     it('refuses a name another column has and says so in a toast', async () => {

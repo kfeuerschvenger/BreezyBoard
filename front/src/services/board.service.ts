@@ -22,7 +22,8 @@ export const BoardService = {
   // `columns` is the complete ordered list of the board's columns as the
   // request carries them: an `_id` on each existing one, none on a new one, and
   // a colour that is the id of a palette entry, not the populated entry a read
-  // returns.
+  // returns. It travels with `columnsVersion`, the version of the columns the
+  // list was built on, which the server requires and checks.
   async update(
     id: string,
     boardData: Partial<Omit<Board, 'columns' | 'color'>> & {
@@ -31,6 +32,13 @@ export const BoardService = {
     }
   ): Promise<Board> {
     const response = await api.put(`/boards/${id}`, boardData);
+    return response.data.data;
+  },
+
+  // Changes the name of one column and nothing else, so it can never send, and
+  // so overwrite, the rest of the list.
+  async renameColumn(boardId: string, columnId: string, title: string): Promise<Board> {
+    const response = await api.patch(`/boards/${boardId}/columns/${columnId}`, { title });
     return response.data.data;
   },
 
