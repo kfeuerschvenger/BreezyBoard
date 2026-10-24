@@ -1,5 +1,6 @@
+import mongoose from 'mongoose';
 import request from 'supertest';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import app from '../src/app.js';
 import Board from '../src/models/Board.js';
 import ColorPalette from '../src/models/ColorPalette.js';
@@ -32,8 +33,12 @@ describe('board columns', () => {
       color: column.color.toString(),
     }));
 
-  const save = (columns, account = owner, extra = {}) =>
-    asUser('put', `/boards/${board._id}`, account).send({ columns, ...extra });
+  // The version of the columns as the board holds it now, which is what a
+  // client that has just read the board sends back.
+  const versionNow = async () => (await Board.findById(board._id).select('columnsVersion')).columnsVersion;
+
+  const save = async (columns, account = owner, extra = {}) =>
+    asUser('put', `/boards/${board._id}`, account).send({ columns, columnsVersion: await versionNow(), ...extra });
 
   const fresh = title => ({ title, color: hues.sand._id.toString() });
 
@@ -369,6 +374,247 @@ describe('board columns', () => {
       expect(res.body.data.status).toBe(last._id);
       expect(res.body.data.order).toBe(kept.order);
       expect(first._id).not.toBe(last._id);
+    });
+  });
+
+  describe('saving a list built on a stale view', () => {
+    test('applies a save that carries the current version, and moves the version on by one', async () => {
+      const before = await versionNow();
+
+      const res = await save([...(await stored()), fresh('Review')]);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.columnsVersion).toBe(before + 1);
+      expect(await versionNow()).toBe(before + 1);
+    });
+
+    test('refuses a save of the columns that carries no version', async () => {
+      const before = await stored();
+
+      const res = await asUser('put', `/boards/${board._id}`, owner).send({ columns: [...before, fresh('Review')] });
+
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body.errors)).toContain('columnsVersion');
+      expect(await stored()).toEqual(before);
+    });
+
+    test('does not need a version for a save that leaves the columns alone', async () => {
+      const res = await asUser('put', `/boards/${board._id}`, owner).send({ title: 'Only the title' });
+
+      expect(res.status).toBe(200);
+      expect(await versionNow()).toBe(0);
+    });
+
+    test('answers 409 COLUMNS_STALE and drops no column another session added', async () => {
+      const opened = await stored();
+      const openedVersion = await versionNow();
+      await save([...opened, fresh('Added elsewhere')]);
+
+      const res = await save([...opened.slice().reverse()], owner, { columnsVersion: openedVersion, title: 'Never saved' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('COLUMNS_STALE');
+      expect((await stored()).map(column => column.title)).toEqual(['Backlog', 'Done', 'Added elsewhere']);
+      expect((await Board.findById(board._id)).title).toBe('Columns');
+    });
+
+    test('answers stale rather than a validation error for a list that names a column removed since', async () => {
+      await save([...(await stored()), fresh('Review')]);
+      const opened = await stored();
+      const openedVersion = await versionNow();
+      await save(opened.filter(column => column.title !== 'Review'));
+
+      const res = await save(opened, owner, { columnsVersion: openedVersion });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('COLUMNS_STALE');
+    });
+
+    test('is stale after a rename too, because a rename is a change to the columns', async () => {
+      const opened = await stored();
+      const openedVersion = await versionNow();
+      await asUser('patch', `/boards/${board._id}/columns/${opened[0]._id}`, owner).send({ title: 'Renamed' });
+
+      const res = await save(opened, owner, { columnsVersion: openedVersion });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('COLUMNS_STALE');
+      expect((await stored())[0].title).toBe('Renamed');
+    });
+
+    test('the write itself refuses a list when the columns change after it was checked', async () => {
+      const before = await stored();
+      const original = ColorPalette.countDocuments.bind(ColorPalette);
+      // The colours are looked up after the version was compared and before the
+      // write, so a change made here lands exactly between the two.
+      const spy = vi.spyOn(ColorPalette, 'countDocuments').mockImplementationOnce((...args) => {
+        const result = original(...args);
+
+        return result.then(async count => {
+          await Board.updateOne({ _id: board._id }, { $inc: { columnsVersion: 1 } });
+          return count;
+        });
+      });
+
+      const res = await save([...before, fresh('Review')]);
+      spy.mockRestore();
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('COLUMNS_STALE');
+      expect(await stored()).toEqual(before);
+    });
+
+    test('of two saves built on the same version exactly one is applied', async () => {
+      const before = await stored();
+      const version = await versionNow();
+
+      const results = await Promise.all([
+        save([...before, fresh('One')], owner, { columnsVersion: version }),
+        save([...before, fresh('Two')], owner, { columnsVersion: version }),
+      ]);
+
+      expect(results.map(res => res.status).sort()).toEqual([200, 409]);
+      expect(await stored()).toHaveLength(3);
+      expect(await versionNow()).toBe(version + 1);
+    });
+
+    test('reads a board stored before the version existed as version 0', async () => {
+      await Board.collection.updateOne({ _id: board._id }, { $unset: { columnsVersion: '' } });
+      const before = await stored();
+
+      const read = await asUser('get', `/boards/${board._id}`, owner);
+      const res = await save([...before, fresh('Review')], owner, { columnsVersion: 0 });
+
+      expect(read.body.data.columnsVersion).toBe(0);
+      expect(res.status).toBe(200);
+      expect(res.body.data.columnsVersion).toBe(1);
+    });
+  });
+
+  describe('renaming one column', () => {
+    const rename = (columnId, title, account = owner, boardId = board._id) =>
+      asUser('patch', `/boards/${boardId}/columns/${columnId}`, account).send({ title });
+
+    test('changes that column and nothing else, and moves the version on', async () => {
+      const [first, last] = await stored();
+      const before = await versionNow();
+
+      const res = await rename(first._id, '  Ideas  ');
+
+      expect(res.status).toBe(200);
+      expect(await stored()).toEqual([{ ...first, title: 'Ideas' }, last]);
+      expect(res.body.data.columns.find(column => column._id === first._id).title).toBe('Ideas');
+      expect(res.body.data.columnsVersion).toBe(before + 1);
+    });
+
+    test('leaves a column another session added, which is what a whole list would drop', async () => {
+      const opened = await stored();
+      await save([...opened, fresh('Added elsewhere')]);
+
+      const res = await rename(opened[0]._id, 'Ideas');
+
+      expect(res.status).toBe(200);
+      expect((await stored()).map(column => column.title)).toEqual(['Ideas', 'Done', 'Added elsewhere']);
+    });
+
+    test.each([
+      ['an empty name', '   '],
+      ['a name over 40 characters', 'a'.repeat(41)],
+    ])('refuses %s', async (_label, title) => {
+      const [first] = await stored();
+      const before = await stored();
+
+      const res = await rename(first._id, title);
+
+      expect(res.status).toBe(400);
+      expect(await stored()).toEqual(before);
+    });
+
+    test('accepts a name of exactly 40 characters', async () => {
+      const [first] = await stored();
+
+      expect((await rename(first._id, 'a'.repeat(40))).status).toBe(200);
+    });
+
+    test('refuses the name of another column ignoring case, and nothing changes', async () => {
+      const [first, last] = await stored();
+      const before = await stored();
+
+      const res = await rename(first._id, last.title.toUpperCase());
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(await stored()).toEqual(before);
+      expect(await versionNow()).toBe(0);
+    });
+
+    test('lets a column change the case of its own name', async () => {
+      const [first] = await stored();
+
+      const res = await rename(first._id, first.title.toUpperCase());
+
+      expect(res.status).toBe(200);
+      expect((await stored())[0].title).toBe('BACKLOG');
+    });
+
+    test('of two renames to one name, exactly one is applied', async () => {
+      const [first, last] = await stored();
+
+      const results = await Promise.all([rename(first._id, 'Same'), rename(last._id, 'same')]);
+
+      expect(results.map(res => res.status).sort()).toEqual([200, 400]);
+      expect((await stored()).filter(column => column.title.toLowerCase() === 'same')).toHaveLength(1);
+    });
+
+    test('of renames of different columns made together, every one is applied', async () => {
+      await save([...(await stored()), fresh('Review')]);
+      const columns = await stored();
+      const before = await versionNow();
+
+      const results = await Promise.all(columns.map((column, index) => rename(column._id, `Renamed ${index}`)));
+
+      expect(results.map(res => res.status)).toEqual([200, 200, 200]);
+      expect((await stored()).map(column => column.title)).toEqual(['Renamed 0', 'Renamed 1', 'Renamed 2']);
+      expect(await versionNow()).toBe(before + 3);
+    });
+
+    test('answers 404 for a column the board does not have, and for one that belongs to another board', async () => {
+      const other = await createBoard(owner.token, colors.boardColor._id, { title: 'Other' });
+      const [otherFirst] = await boardColumns(other._id);
+
+      expect((await rename(new mongoose.Types.ObjectId().toString(), 'Ideas')).status).toBe(404);
+      expect((await rename(otherFirst._id.toString(), 'Ideas')).status).toBe(404);
+    });
+
+    test('answers 400 for a malformed column id', async () => {
+      expect((await rename('nope', 'Ideas')).status).toBe(400);
+    });
+
+    test('is for the owner only', async () => {
+      const [first] = await stored();
+      const member = await registerUser();
+      await asUser('patch', `/boards/${board._id}/members`, owner).send({ members: [idOf(member)] });
+      const stranger = await registerUser();
+
+      expect((await rename(first._id, 'Ideas', member)).status).toBe(403);
+      expect([403, 404]).toContain((await rename(first._id, 'Ideas', stranger)).status);
+      expect((await stored())[0].title).toBe('Backlog');
+    });
+
+    test('answers 404 for a deleted board', async () => {
+      const [first] = await stored();
+      await asUser('delete', `/boards/${board._id}`, owner);
+
+      expect((await rename(first._id, 'Ideas')).status).toBe(404);
+      expect((await stored())[0].title).toBe('Backlog');
+    });
+
+    test('rejects any other field in the body', async () => {
+      const [first] = await stored();
+
+      const res = await asUser('patch', `/boards/${board._id}/columns/${first._id}`, owner).send({ title: 'Ideas', color: hues.sand._id.toString() });
+
+      expect(res.status).toBe(400);
     });
   });
 

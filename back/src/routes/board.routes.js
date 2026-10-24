@@ -5,8 +5,10 @@ import { validate } from '../middleware/validate.middleware.js';
 import { paginationQuerySchema } from '../validation/common.validation.js';
 import {
   addBoardMembersSchema,
+  columnParamsSchema,
   createBoardSchema,
   idParamSchema,
+  renameColumnSchema,
   updateBoardSchema,
 } from '../validation/board.validation.js';
 
@@ -24,6 +26,14 @@ router.put(
   validate({ params: idParamSchema, body: updateBoardSchema }),
   requireBoardRole('owner'),
   BoardController.updateBoard
+);
+// Renames one column and touches nothing else, so the header's in-place rename
+// never has to send, and so never overwrites, the rest of the list.
+router.patch(
+  '/:id/columns/:columnId',
+  validate({ params: columnParamsSchema, body: renameColumnSchema }),
+  requireBoardRole('owner'),
+  BoardController.renameColumn
 );
 router.delete('/:id', validate({ params: idParamSchema }), requireBoardRole('owner'), BoardController.deleteBoard);
 // The one route that may see a soft-deleted board. The role is still resolved

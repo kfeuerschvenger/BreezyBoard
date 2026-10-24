@@ -24,6 +24,11 @@ export const ErrorCode = Object.freeze({
   INVALID_FILE_TYPE: 'INVALID_FILE_TYPE',
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   CONFLICT: 'CONFLICT',
+  // A save of a board's columns that was built on a list the board no longer
+  // has: another session changed the columns after the client loaded them. A
+  // 409 like CONFLICT, but the remedy is different (reload the columns, then
+  // redo the edit), so a client tells the two apart by this code.
+  COLUMNS_STALE: 'COLUMNS_STALE',
   INTERNAL: 'INTERNAL',
 });
 

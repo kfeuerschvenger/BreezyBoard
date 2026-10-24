@@ -301,7 +301,7 @@ export const buildOpenApiSpec = () => {
           { success: false, message: 'Board not found', code: ErrorCode.NOT_FOUND, errors: [] }
         ),
         Conflict: errorResponse(
-          'The request disagrees with the current state of the data. The client should reload and try again.',
+          'The request disagrees with the current state of the data. The client should reload and try again. Codes: CONFLICT, and COLUMNS_STALE for a save of the columns of a board built on a list that has since changed.',
           {
             success: false,
             message: 'A neighbouring task is no longer where the client expected it. Reload the board and try again.',

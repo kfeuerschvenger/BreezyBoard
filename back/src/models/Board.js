@@ -32,6 +32,16 @@ const boardSchema = new mongoose.Schema(
       type: [createColumnSchema()],
       default: [],
     },
+    // Counts the changes made to `columns`, and is what lets a save of the whole
+    // list tell that it was built on a list the board no longer has. Every
+    // write to the columns increments it in the same update that makes the
+    // change, and a save only applies while the board still holds the value the
+    // client read. A board stored before the field existed reads as 0.
+    columnsVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     // Required, with no exceptions and no null case. Every account gets a
     // personal workspace at registration, so a board always has one to
     // belong to and no query anywhere needs a branch for boards that belong

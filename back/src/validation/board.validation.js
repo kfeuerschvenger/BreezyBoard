@@ -35,13 +35,15 @@ export const MAX_COLUMNS = 8;
 // `_id`, which is how it keeps the id every task's `status` points at; a new
 // column has none and is given one by the server. There is no `order`: the
 // position of a column in the array is its position on the board.
+const columnTitleSchema = z
+  .string()
+  .trim()
+  .min(1, 'A column needs a name')
+  .max(COLUMN_NAME_MAX_LENGTH, `A column name is at most ${COLUMN_NAME_MAX_LENGTH} characters`);
+
 const boardColumnSchema = z.object({
   _id: objectIdSchema.optional(),
-  title: z
-    .string()
-    .trim()
-    .min(1, 'A column needs a name')
-    .max(COLUMN_NAME_MAX_LENGTH, `A column name is at most ${COLUMN_NAME_MAX_LENGTH} characters`),
+  title: columnTitleSchema,
   color: objectIdSchema,
 });
 
@@ -98,12 +100,40 @@ export const boardColumnsSchema = z
 // every column and every task status exactly where they were. A field whose
 // only remaining effect is cosmetic, and whose name promises something much
 // larger, is worse than no field.
-export const updateBoardSchema = z.object({
-  title: z.string().trim().min(1, 'Title is required').optional(),
-  description: z.string().trim().optional(),
-  color: objectIdSchema.optional(),
-  columns: boardColumnsSchema.optional(),
-});
+//
+// `columnsVersion` is the `columnsVersion` of the board as the client read it.
+// A save that replaces the columns must carry it, because the list is built on
+// what the client saw and the server applies it only while the board still has
+// that version. Without it the save would be last write wins.
+export const updateBoardSchema = z
+  .object({
+    title: z.string().trim().min(1, 'Title is required').optional(),
+    description: z.string().trim().optional(),
+    color: objectIdSchema.optional(),
+    columns: boardColumnsSchema.optional(),
+    columnsVersion: z.number().int().min(0).optional(),
+  })
+  .superRefine((body, context) => {
+    if (body.columns !== undefined && body.columnsVersion === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['columnsVersion'],
+        message: 'columnsVersion is required when columns are saved',
+      });
+    }
+  });
+
+export const columnParamsSchema = z
+  .object({
+    id: objectIdSchema,
+    columnId: objectIdSchema,
+  })
+  .strict();
+
+// The one change the narrow rename route makes. The name follows the rules of a
+// name in the whole list; uniqueness needs the other columns, so the service
+// checks it.
+export const renameColumnSchema = z.object({ title: columnTitleSchema }).strict();
 
 export const addBoardMembersSchema = z
   .object({
