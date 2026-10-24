@@ -63,6 +63,83 @@ const keyAtEndOfColumn = async (boardId, status) => {
   return generateKeyBetween(last?.order ?? null, null);
 };
 
+const REHOME_ATTEMPTS = 5;
+
+/**
+ * Puts every live task that names a column the board no longer has into the
+ * board's first column, at the foot of it, and answers how many it moved.
+ *
+ * A task and the board's columns are two documents, so a write that puts a
+ * task in a column cannot be made conditional on the column still existing: a
+ * column removed between the check and the write would keep a task that no
+ * board shows and every total counts. Both sides close that gap the same way
+ * instead. The side that writes a task (create, move, restore) calls this after
+ * its write, and so does the removal of a column after its own. Whichever write
+ * lands second finds the other already in place and moves the task, so the
+ * order of the two cannot leave one behind. The move is conditional on the
+ * task still holding the missing column, so two callers moving the same task
+ * agree.
+ *
+ * It repeats until a pass finds nothing to move, because the first column can
+ * itself be removed while a task is being moved into it.
+ *
+ * `scope` narrows what is looked at: `taskId` to one task, `statuses` to tasks
+ * that name one of those columns.
+ *
+ * @param {string} boardId
+ * @param {{ taskId?: string, statuses?: string[] }} [scope]
+ * @returns {Promise<number>}
+ */
+export const rehomeStrandedTasks = async (boardId, { taskId, statuses } = {}) => {
+  let moved = 0;
+
+  for (let attempt = 0; attempt < REHOME_ATTEMPTS; attempt += 1) {
+    const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns');
+
+    if (!board || board.columns.length === 0) {
+      return moved;
+    }
+
+    const ordered = [...board.columns].sort((a, b) => a.order - b.order).map(column => column._id.toString());
+    const stranded = await Task.find({
+      boardId,
+      deletedAt: null,
+      ...(taskId && { _id: taskId }),
+      status: { $nin: ordered, ...(statuses && { $in: statuses }) },
+    }).select('status');
+
+    if (stranded.length === 0) {
+      return moved;
+    }
+
+    for (const task of stranded) {
+      const result = await Task.updateOne(
+        { _id: task._id, status: task.status, deletedAt: null },
+        { status: ordered[0], order: await keyAtEndOfColumn(boardId, ordered[0]) }
+      );
+
+      moved += result.modifiedCount;
+    }
+  }
+
+  return moved;
+};
+
+// Runs `rehomeStrandedTasks` for one task that has just been written, and
+// answers with the task as it is stored now, which is the one the response has
+// to show when it was moved.
+const settleColumn = async (task, boardId) => {
+  if ((await rehomeStrandedTasks(boardId, { taskId: task._id })) === 0) {
+    return task;
+  }
+
+  return (
+    (await Task.findById(task._id)
+      .populate('owner', 'firstName lastName avatar')
+      .populate('color', 'name value')) ?? task
+  );
+};
+
 /**
  * The key for a task dropped between two neighbours.
  *
@@ -128,10 +205,15 @@ export const createTask = async taskData => {
   // A new task lands at the bottom of its column. The key is minted here and
   // never accepted from the client, which is why `order` is not in the
   // create schema.
-  const task = await Task.create({
+  let task = await Task.create({
     ...taskData,
     order: await keyAtEndOfColumn(taskData.boardId, taskData.status),
   });
+
+  // The column can have been removed between the check above and the write.
+  // The removal checks for tasks after its own write, and this checks the
+  // column after this one, so one of the two moves the task.
+  task = await settleColumn(task, taskData.boardId);
 
   await task.populate([
     { path: 'owner', select: 'firstName lastName avatar' },
@@ -150,6 +232,8 @@ export const getTaskById = async id => {
 };
 
 export const updateTask = async (id, updateData) => {
+  let boardId;
+
   // Only pay for the lookup when the caller is actually changing the column.
   if (updateData.status !== undefined) {
     const existing = await Task.findOne({ _id: id, deletedAt: null }).select('boardId');
@@ -158,7 +242,8 @@ export const updateTask = async (id, updateData) => {
       throw new ApiError(404, 'Task not found');
     }
 
-    await assertStatusNamesAColumnOfThisBoard(existing.boardId, updateData.status);
+    boardId = existing.boardId;
+    await assertStatusNamesAColumnOfThisBoard(boardId, updateData.status);
   }
 
   // The authorization middleware has already read the task, and a delete can
@@ -174,7 +259,7 @@ export const updateTask = async (id, updateData) => {
     throw new ApiError(404, 'Task not found');
   }
 
-  return task;
+  return boardId ? settleColumn(task, boardId) : task;
 };
 
 /**
@@ -217,7 +302,9 @@ export const deleteTask = async id => {
  * to sit immediately above the card that took its place.
  *
  * A task whose column has been removed since it was deleted is restored into
- * the board's first column, at the bottom of it.
+ * the board's first column, at the bottom of it. That also holds when the
+ * column is removed while the restore is running: the restore looks again once
+ * its write is done.
  *
  * @param {string} id
  * @param {{ retentionMs?: number, now?: Date }} [options]
@@ -270,7 +357,7 @@ export const restoreTask = async (id, { retentionMs = env.BOARD_RETENTION_MS, no
     throw new ApiError(404, 'Task not found');
   }
 
-  return task;
+  return settleColumn(task, task.boardId);
 };
 
 /**
@@ -324,7 +411,7 @@ export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = n
     throw new ApiError(404, 'Task not found');
   }
 
-  return task;
+  return settleColumn(task, existing.boardId);
 };
 
 // Pagination is opt-in: `limit` undefined means "return everything", exactly

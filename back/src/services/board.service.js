@@ -12,6 +12,7 @@ import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 import { BOARD_HUES } from '../constants/boardHues.js';
+import { rehomeStrandedTasks } from './task.service.js';
 
 // Columns are copied out of the template rather than referenced, so that the
 // board owns its column ids. Mongoose assigns fresh subdocument ids on the
@@ -103,7 +104,8 @@ const atColumnsVersion = version => ({ columnsVersion: version === 0 ? { $in: [0
  * must not be overwritten either.
  *
  * The emptiness check and the write that follows are two operations, so a card
- * created in the column in the gap between them is not excluded.
+ * created in the column in the gap between them is not excluded here. The
+ * caller moves any such card once the write is done (`rehomeStrandedTasks`).
  *
  * @param {string} boardId
  * @param {Array<{ _id?: string, title: string, color: string }>} requested
@@ -306,6 +308,13 @@ export const updateBoard = async (id, { columns, columnsVersion, ...fields }) =>
     }
 
     throw new ApiError(404, 'Board not found');
+  }
+
+  // A card can have been created in a removed column after the plan checked
+  // that it was empty. Moving it now means it is never left in a column that no
+  // board shows.
+  if (plan?.removedIds.length) {
+    await rehomeStrandedTasks(id, { statuses: plan.removedIds });
   }
 
   return board;
