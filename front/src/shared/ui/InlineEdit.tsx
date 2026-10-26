@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ChangeEvent, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { IconPencil } from '@tabler/icons-react';
+import { Icon } from './Icon';
 
 export interface InlineEditProps {
   value: string;
@@ -16,18 +19,28 @@ export interface InlineEditProps {
   emptyMessage?: string;
   /** What a failed save is reported with. */
   failureMessage?: string;
+  /**
+   * Lets a long text wrap onto as many lines as it needs, so it reads in full
+   * where it is edited. Without it the text stays on one line and is cut short
+   * with an ellipsis when it does not fit.
+   */
+  wrap?: boolean;
   className?: string;
 }
 
 // The text takes its size, weight and colour from the heading or title it sits
 // in, so the field reads as that text until it is hovered or focused. Hover
 // reveals a soft backdrop, focus a solid one with the focus outline: the outline
-// is what makes focus visible, the backdrop alone is not enough contrast.
+// is what makes focus visible, the backdrop alone is not enough contrast. The
+// right padding leaves room for the pencil that marks the text as editable.
 const FIELD_CLASSES =
-  'block h-auto min-h-6 w-[calc(100%+1rem)] min-w-0 max-w-none -mx-2 truncate rounded-control border-0 bg-transparent px-2 py-0.5 text-ink ' +
+  'peer block h-auto min-h-6 w-[calc(100%+1rem)] min-w-0 max-w-none -mx-2 rounded-control border-0 bg-transparent py-0.5 pl-2 pr-7 text-ink ' +
   'font-[inherit] text-[length:inherit] leading-[inherit] tracking-[inherit] ' +
   'transition-[background-color] duration-200 enabled:hover:bg-glass-strong ' +
   'focus:bg-surface read-only:cursor-progress focus-ring';
+
+const ONE_LINE_CLASSES = 'truncate';
+const WRAPPED_CLASSES = 'resize-none overflow-hidden whitespace-normal break-words';
 
 /**
  * Text that is edited where it is read.
@@ -40,6 +53,12 @@ const FIELD_CLASSES =
  * The field is read only while a save is in flight, so a second blur cannot
  * send the same text twice. It follows `value` whenever it is not being
  * edited, so a title changed from another place appears here as well.
+ *
+ * A pencil beside the text says that it can be edited without a hover, which a
+ * touch screen does not have. A successful save is announced through a polite
+ * live region of its own. The region is rendered into the page body and not
+ * beside the field: the field sits inside a heading, and text inside a heading
+ * becomes part of its accessible name.
  */
 export const InlineEdit = ({
   value,
@@ -50,17 +69,46 @@ export const InlineEdit = ({
   maxLength,
   emptyMessage = 'This cannot be empty.',
   failureMessage = 'This could not be saved.',
+  wrap = false,
   className = '',
 }: InlineEditProps) => {
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
   const editing = useRef(false);
   // Escape reverts and then blurs, and the blur must not save what was reverted.
   const abandoned = useRef(false);
+  const field = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!editing.current) setDraft(value);
   }, [value]);
+
+  // A wrapped field is as tall as its text: the height is set from the content
+  // after every change of the text, and again when the field's width changes
+  // and the text wraps differently.
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (!wrap || !(element instanceof HTMLTextAreaElement)) return;
+
+    const fit = () => {
+      element.style.height = 'auto';
+      element.style.height = `${element.scrollHeight}px`;
+    };
+
+    fit();
+
+    if (typeof ResizeObserver === 'undefined') return;
+    let width = element.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth === width) return;
+      width = element.clientWidth;
+      fit();
+    });
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [wrap, draft]);
 
   const commit = async () => {
     editing.current = false;
@@ -89,6 +137,7 @@ export const InlineEdit = ({
     try {
       await onSave(next);
       setDraft(next);
+      setAnnouncement(`${label} saved.`);
     } catch {
       setDraft(value);
       onError?.(failureMessage);
@@ -97,7 +146,7 @@ export const InlineEdit = ({
     }
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       event.currentTarget.blur();
@@ -108,22 +157,43 @@ export const InlineEdit = ({
     }
   };
 
+  const shared = {
+    'aria-label': label,
+    'aria-busy': saving || undefined,
+    value: draft,
+    maxLength,
+    readOnly: saving,
+    onFocus: () => {
+      editing.current = true;
+      setAnnouncement('');
+    },
+    // A pasted line break would put a second line in a name that has one.
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setDraft(event.target.value.replace(/\s*[\r\n]+\s*/g, ' ')),
+    onBlur: () => void commit(),
+    onKeyDown,
+    className: `${FIELD_CLASSES} ${wrap ? WRAPPED_CLASSES : ONE_LINE_CLASSES} ${className}`,
+  };
+
   return (
-    <input
-      type="text"
-      aria-label={label}
-      aria-busy={saving || undefined}
-      value={draft}
-      maxLength={maxLength}
-      readOnly={saving}
-      onFocus={() => {
-        editing.current = true;
-      }}
-      onChange={event => setDraft(event.target.value)}
-      onBlur={() => void commit()}
-      onKeyDown={onKeyDown}
-      className={`${FIELD_CLASSES} ${className}`}
-    />
+    <span className="relative block">
+      {wrap ? (
+        <textarea ref={element => void (field.current = element)} rows={1} {...shared} />
+      ) : (
+        <input ref={element => void (field.current = element)} type="text" {...shared} />
+      )}
+      <Icon
+        as={IconPencil}
+        size={16}
+        className={`pointer-events-none absolute right-0 text-ink-tertiary peer-focus:hidden ${wrap ? 'top-2' : 'top-1/2 -translate-y-1/2'}`}
+      />
+      {createPortal(
+        <span role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </span>,
+        document.body
+      )}
+    </span>
   );
 };
 

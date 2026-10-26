@@ -769,7 +769,7 @@ describe('Board page owner actions', () => {
 
       const dialog = await screen.findByRole('dialog', { name: 'Edit board' });
       const remove = within(dialog).getByRole('button', { name: 'Remove To Do' });
-      expect(remove).toBeDisabled();
+      expect(remove).toHaveAttribute('aria-disabled', 'true');
       expect(remove).toHaveAccessibleDescription(/^To Do has 2 cards\./);
       expect(within(dialog).getByRole('button', { name: 'Remove Doing' })).toBeEnabled();
     });

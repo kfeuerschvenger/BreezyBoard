@@ -204,6 +204,18 @@ describe('EditBoardModal, columns', () => {
       expect(within(addSection()).getByRole('textbox', { name: 'New column name' })).toBeDisabled();
       expect(screen.getByText('A board has at most 8 columns.')).toBeInTheDocument();
     });
+
+    it('puts focus in the name of the new row when adding reaches 8, instead of dropping it to the page', async () => {
+      const seven = Array.from({ length: 7 }, (_, index) => column(`c${index}`, `Column ${index}`, 'sky', index));
+      renderModal({ columns: seven });
+      await ready();
+
+      await addColumn('Review');
+
+      expect(within(addSection()).getByRole('textbox', { name: 'New column name' })).toBeDisabled();
+      await waitFor(() => expect(nameOf(7)).toHaveFocus());
+      expect(nameOf(7)).toHaveValue('Review');
+    });
   });
 
   describe('renaming and recolouring', () => {
@@ -291,9 +303,42 @@ describe('EditBoardModal, columns', () => {
       renderModal();
       await ready();
 
-      expect(screen.getByRole('button', { name: 'Move Backlog up' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Move Done down' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: 'Move Doing up' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Move Backlog up' })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('button', { name: 'Move Done down' })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('button', { name: 'Move Doing up' })).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('leaves a column where it is when a blocked move button is pressed', async () => {
+      renderModal();
+      await ready();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Move Backlog up' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Move Done down' }));
+
+      expect(names()).toEqual(['Backlog', 'Doing', 'Done']);
+    });
+
+    it('forgets the slot chosen for a new column when a row moves, so it cannot mean another slot', async () => {
+      renderModal();
+      await ready();
+      const position = within(addSection()).getByRole('combobox', { name: 'Position' });
+
+      await userEvent.selectOptions(position, 'Between Backlog and Doing');
+      expect(position).toHaveDisplayValue('Between Backlog and Doing');
+      await userEvent.click(screen.getByRole('button', { name: 'Move Doing up' }));
+
+      expect(position).toHaveDisplayValue('Between Backlog and Done');
+    });
+
+    it('forgets the slot chosen for a new column when a row is removed', async () => {
+      renderModal({ counts: {} });
+      await ready();
+      const position = within(addSection()).getByRole('combobox', { name: 'Position' });
+
+      await userEvent.selectOptions(position, 'First, before Backlog');
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Doing' }));
+
+      expect(position).toHaveDisplayValue('Between Backlog and Done');
     });
 
     it('moves the landed line with the column that becomes last', async () => {
@@ -328,9 +373,22 @@ describe('EditBoardModal, columns', () => {
 
       const remove = screen.getByRole('button', { name: 'Remove Doing' });
 
-      expect(remove).toBeDisabled();
+      expect(remove).toHaveAttribute('aria-disabled', 'true');
       expect(remove).toHaveAccessibleDescription('Doing has 3 cards. Move them to another column to remove this column.');
-      expect(screen.getByRole('button', { name: 'Remove Backlog' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Remove Backlog' })).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('keeps a blocked removal focusable so its reason is read out, and ignores the press', async () => {
+      renderModal({ counts: { 'col-doing': 3 } });
+      await ready();
+
+      const remove = screen.getByRole('button', { name: 'Remove Doing' });
+      remove.focus();
+
+      expect(remove).toHaveFocus();
+      expect(remove).toBeEnabled();
+      await userEvent.click(remove);
+      expect(names()).toEqual(['Backlog', 'Doing', 'Done']);
     });
 
     it('says "card" for one', async () => {
@@ -348,7 +406,7 @@ describe('EditBoardModal, columns', () => {
 
       for (const title of ['Backlog', 'Doing']) {
         const remove = screen.getByRole('button', { name: `Remove ${title}` });
-        expect(remove).toBeDisabled();
+        expect(remove).toHaveAttribute('aria-disabled', 'true');
         expect(remove).toHaveAccessibleDescription('A board keeps at least 2 columns.');
       }
     });
@@ -433,6 +491,52 @@ describe('EditBoardModal, columns', () => {
     await userEvent.click(saveButton());
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(lastPayload(onSave)).not.toHaveProperty('columns');
+  });
+
+  describe('a board with fewer than two columns', () => {
+    it('says what is missing, and sends nothing, when its columns change and are still too few', async () => {
+      const { onSave } = renderModal({ columns: [] });
+      await screen.findByRole('textbox', { name: 'New column name' });
+
+      await userEvent.type(within(addSection()).getByRole('textbox', { name: 'New column name' }), 'Solo');
+      await userEvent.click(within(addSection()).getByRole('button', { name: 'Add column' }));
+      await userEvent.click(saveButton());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('A board needs at least 2 columns; add one before saving.');
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('saves once the list has two columns', async () => {
+      const { onSave } = renderModal({ columns: [] });
+      await screen.findByRole('textbox', { name: 'New column name' });
+
+      for (const title of ['One', 'Two']) {
+        await userEvent.type(within(addSection()).getByRole('textbox', { name: 'New column name' }), title);
+        await userEvent.click(within(addSection()).getByRole('button', { name: 'Add column' }));
+      }
+      await userEvent.click(saveButton());
+
+      await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(lastPayload(onSave).columns).toHaveLength(2);
+    });
+
+    it('words a refusal of the list by the server the same way, not as a generic failure', async () => {
+      const refused = new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+        status: 400,
+        statusText: '',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+        data: { message: 'Validation error', code: 'VALIDATION_ERROR', errors: [{ field: 'columns', message: 'A board keeps at least 2 columns' }] },
+      });
+      renderModal({ columns: [], onSave: vi.fn().mockRejectedValue(refused) });
+      await screen.findByRole('textbox', { name: 'New column name' });
+
+      await userEvent.clear(screen.getByRole('textbox', { name: /board name/i }));
+      await userEvent.type(screen.getByRole('textbox', { name: /board name/i }), 'Renamed');
+      await userEvent.click(saveButton());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('A board needs at least 2 columns; add one before saving.');
+    });
   });
 
   it('puts the cursor in the name of the column to add when it is opened from "Add column"', async () => {

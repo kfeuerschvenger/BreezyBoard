@@ -36,8 +36,9 @@ const ERROR_CLASSES = 'mt-1.5 text-[13px] font-medium text-danger-strong';
  * says so and why a column moved into last place changes which cards count as
  * complete.
  *
- * A column that holds live cards has its removal disabled and says why on the
- * row. The count is what the board page held when the dialog opened, and the
+ * A column that holds live cards has its removal blocked and says why on the
+ * row. A blocked control is marked `aria-disabled` and not `disabled`, so it can
+ * still be reached and its reason is read out from `aria-describedby`. The count is what the board page held when the dialog opened, and the
  * server checks again on Save.
  */
 export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsEditorProps) => {
@@ -51,11 +52,12 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
 
   const [name, setName] = useState('');
   const [nameProblem, setNameProblem] = useState<string | null>(null);
-  const [position, setPosition] = useState<number | null>(null);
+  const [position, setPosition] = useState<{ index: number; rowsKey: string } | null>(null);
   const [colorChoice, setColorChoice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [moved, setMoved] = useState<{ key: string; direction: MoveDirection } | null>(null);
   const [removedOne, setRemovedOne] = useState(false);
+  const [addedAt, setAddedAt] = useState<number | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
   const container = useRef<HTMLElement | null>(null);
 
@@ -63,7 +65,12 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
   // New columns go before the last one unless the person says otherwise, so the
   // column where work lands stays last.
   const defaultPosition = Math.max(rows.length - 1, 0);
-  const chosenPosition = Math.min(position ?? defaultPosition, rows.length);
+  // A chosen slot is "between X and Y", which means another slot as soon as a
+  // row is moved, removed, added or reloaded. It is remembered with the rows it
+  // was chosen among and counts only while they are the rows on screen.
+  const rowsKey = fields.map(field => field.id).join('|');
+  const chosenIndex = position?.rowsKey === rowsKey ? position.index : null;
+  const chosenPosition = Math.min(chosenIndex ?? defaultPosition, rows.length);
   const defaultColor = options.find(option => option.hue === nextColumnHue(rows.length))?.id ?? options[0]?.id ?? '';
   const chosenColor = colorChoice ?? defaultColor;
 
@@ -84,9 +91,18 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
     const row = container.current?.querySelector<HTMLElement>(`[data-row-key="${moved.key}"]`);
     const wanted = row?.querySelector<HTMLButtonElement>(`[data-move="${moved.direction}"]`);
     const other = row?.querySelector<HTMLButtonElement>(`[data-move="${moved.direction === 'up' ? 'down' : 'up'}"]`);
-    (wanted && !wanted.disabled ? wanted : other)?.focus();
+    (wanted && wanted.getAttribute('aria-disabled') !== 'true' ? wanted : other)?.focus();
     setMoved(null);
   }, [moved]);
+
+  // When adding reaches the most a board has, the field that adds a column is
+  // switched off, and focus would fall to the page. It goes to the name of the
+  // new row instead, which is always there.
+  useEffect(() => {
+    if (addedAt === null) return;
+    container.current?.querySelectorAll('li')[addedAt]?.querySelector<HTMLInputElement>('input')?.focus();
+    setAddedAt(null);
+  }, [addedAt]);
 
   // A removed row takes the focused button with it, so focus goes to the field
   // that adds a column, which is always there.
@@ -137,7 +153,12 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
     setNameProblem(null);
     setPosition(null);
     setColorChoice(null);
-    nameRef.current?.focus();
+
+    if (fields.length + 1 >= MAX_COLUMNS) {
+      setAddedAt(chosenPosition);
+    } else {
+      nameRef.current?.focus();
+    }
   };
 
   // Enter in the name of a new column adds it. Left alone it would submit the
@@ -203,7 +224,7 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
                     type="button"
                     data-move="up"
                     aria-label={`Move ${title} up`}
-                    disabled={index === 0}
+                    aria-disabled={index === 0 || undefined}
                     onClick={() => shift(index, 'up')}
                   >
                     <Icon as={IconArrowUp} size={18} aria-hidden="true" />
@@ -212,7 +233,7 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
                     type="button"
                     data-move="down"
                     aria-label={`Move ${title} down`}
-                    disabled={last}
+                    aria-disabled={last || undefined}
                     onClick={() => shift(index, 'down')}
                   >
                     <Icon as={IconArrowDown} size={18} aria-hidden="true" />
@@ -221,8 +242,10 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
                     type="button"
                     aria-label={`Remove ${title}`}
                     aria-describedby={blocked ? blockedId : undefined}
-                    disabled={Boolean(blocked)}
-                    onClick={() => take(index)}
+                    aria-disabled={blocked ? true : undefined}
+                    onClick={() => {
+                      if (!blocked) take(index);
+                    }}
                   >
                     <Icon as={IconTrash} size={18} aria-hidden="true" />
                   </IconButton>
@@ -295,7 +318,7 @@ export const ColumnsEditor = ({ colors, taskCounts, focusAdd = false }: ColumnsE
               {...props}
               value={chosenPosition}
               disabled={atMost}
-              onChange={event => setPosition(Number(event.target.value))}
+              onChange={event => setPosition({ index: Number(event.target.value), rowsKey })}
             >
               {columnPositions(rows.map(row => row.title)).map(option => (
                 <option key={option.index} value={option.index}>

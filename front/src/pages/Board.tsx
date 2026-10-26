@@ -207,6 +207,7 @@ const Board = () => {
         total={tasks.length}
         onDeleted={() => navigate('/')}
         taskCounts={taskCounts}
+        onRefreshTasks={cache.refetch}
       />
 
       <ShellAction>

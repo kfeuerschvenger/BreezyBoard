@@ -150,6 +150,15 @@ describe('BoardHeader title in place', () => {
     expect(titleField()).toHaveValue('Launch Plan');
   });
 
+  it('shows the owner a long name in full, wrapped, as a member reads it', () => {
+    const long = 'A launch plan for the whole of the second half of the year, with every team and every deadline in it';
+    renderHeader(makeBoard({ title: long }));
+
+    expect(titleField().tagName).toBe('TEXTAREA');
+    expect(titleField()).toHaveValue(long);
+    expect(titleField()).not.toHaveClass('truncate');
+  });
+
   it('gives a member the name as text', () => {
     renderHeader(makeBoard({ viewerRole: 'member' }));
 

@@ -274,6 +274,46 @@ describe('BoardActions managing columns', () => {
       );
     });
 
+    it('reads the cards again together with the columns, so the counts are current', async () => {
+      mockedBoardService.update.mockRejectedValue(staleAnswer());
+      mockedBoardService.getById.mockResolvedValue(makeBoard({ columns, columnsVersion: 9 }));
+      const refreshTasks = vi.fn().mockResolvedValue(undefined);
+      renderWithQuery(
+        <BoardActions board={makeBoard({ columns, columnsVersion: 5 })} onDeleted={vi.fn()} taskCounts={{}} onRefreshTasks={refreshTasks} />
+      );
+
+      await openEditor();
+      await renameFirstColumn('Inbox');
+      expect(refreshTasks).not.toHaveBeenCalled();
+      await userEvent.click(await screen.findByRole('button', { name: 'Reload columns' }));
+
+      await waitFor(() => expect(refreshTasks).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    });
+
+    it('reads the cards again when a save finds a column that now holds cards, and keeps the dialog open', async () => {
+      mockedBoardService.update.mockRejectedValue(
+        new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
+          status: 409,
+          statusText: '',
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+          data: { success: false, message: 'The column "Done" still has tasks.', code: 'CONFLICT', errors: [{ columnId: 'col-b', title: 'Done' }] },
+        })
+      );
+      const refreshTasks = vi.fn().mockResolvedValue(undefined);
+      renderWithQuery(
+        <BoardActions board={makeBoard({ columns, columnsVersion: 5 })} onDeleted={vi.fn()} taskCounts={{}} onRefreshTasks={refreshTasks} />
+      );
+
+      await openEditor();
+      await renameFirstColumn('Inbox');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('The column "Done" still has tasks.');
+      expect(refreshTasks).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
     it('says so when the columns could not be reloaded, and keeps the offer', async () => {
       mockedBoardService.update.mockRejectedValue(staleAnswer());
       mockedBoardService.getById.mockRejectedValue(new Error('offline'));

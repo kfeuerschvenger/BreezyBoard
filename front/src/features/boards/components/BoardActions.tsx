@@ -22,6 +22,8 @@ export interface BoardActionsProps {
    * which needs the counts to know which columns can be removed.
    */
   taskCounts?: Readonly<Record<string, number>>;
+  /** Reads the board's cards again, so `taskCounts` is current when the dialog finds it is not. */
+  onRefreshTasks?: () => Promise<unknown>;
 }
 
 /**
@@ -33,7 +35,7 @@ export interface BoardActionsProps {
  * board read, so a workspace admin, who the server treats as an owner, sees
  * the menu too.
  */
-export const BoardActions = ({ board, onDeleted, taskCounts }: BoardActionsProps) => {
+export const BoardActions = ({ board, onDeleted, taskCounts, onRefreshTasks }: BoardActionsProps) => {
   const [editing, setEditing] = useState(false);
   // The edit dialog opens on the columns section from "Add column", and on the
   // top of the form from the menu.
@@ -155,6 +157,7 @@ export const BoardActions = ({ board, onDeleted, taskCounts }: BoardActionsProps
           await updateBoard.mutateAsync({ boardId: board._id, changes: values });
         }}
         onReloadColumns={reloadColumns}
+        onRefreshTasks={onRefreshTasks}
       />
     </>
   );

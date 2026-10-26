@@ -3,9 +3,9 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useColors } from '@/features/colors';
 import type { Board, Color, Column } from '@/models';
-import { apiErrorCodeOf, apiErrorMessageOf, httpStatusOf } from '@/shared/lib/httpStatus';
+import { apiErrorCodeOf, apiErrorFieldsOf, apiErrorMessageOf, httpStatusOf } from '@/shared/lib/httpStatus';
 import { Button, Modal } from '@/shared/ui';
-import { MIN_COLUMNS, columnsChanged, columnsRequest, rowsFromColumns } from '../boardColumns';
+import { MIN_COLUMNS, MIN_COLUMNS_MESSAGE, columnsChanged, columnsRequest, rowsFromColumns } from '../boardColumns';
 import type { ColumnChange, ColumnRow } from '../boardColumns';
 import { boardHueOptions } from '../boardHue';
 import { editBoardSchema } from '../boardForm';
@@ -35,6 +35,8 @@ export interface EditBoardModalProps {
   onSave: (values: EditBoardSave) => Promise<void>;
   /** Reads the columns again, for the person who is told that they changed. Rejects when it cannot. */
   onReloadColumns?: () => Promise<ReloadedColumns>;
+  /** Reads the board's cards again, which is what `taskCounts` is counted from. Asked for when the columns are reloaded and when a save finds a column that holds cards. */
+  onRefreshTasks?: () => Promise<unknown>;
 }
 
 const STALE_COLUMNS_CODE = 'COLUMNS_STALE';
@@ -80,6 +82,7 @@ export const EditBoardModal = ({
   onClose,
   onSave,
   onReloadColumns,
+  onRefreshTasks,
 }: EditBoardModalProps) => {
   const colorsQuery = useColors('board');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -145,6 +148,14 @@ export const EditBoardModal = ({
     const baseline = opened.current.rows;
     const changed = columns !== undefined && baseline !== undefined && columnsChanged(baseline, columns);
 
+    // A board that was created with fewer columns than a board keeps may save
+    // its other fields as they are, and may not save a changed list that is
+    // still too short: the server refuses it, so it is not sent.
+    if (changed && columns.length < MIN_COLUMNS) {
+      setSaveError(MIN_COLUMNS_MESSAGE);
+      return;
+    }
+
     try {
       await onSave(
         changed ? { ...fields, columns: columnsRequest(columns), columnsVersion: opened.current.version ?? 0 } : fields
@@ -158,10 +169,20 @@ export const EditBoardModal = ({
         return;
       }
 
+      const status = httpStatusOf(error);
+
+      if (status === 409) {
+        // A column gained cards since the counts were read, so the counts are
+        // read again and the row that holds them stops offering its removal.
+        void onRefreshTasks?.().catch(() => undefined);
+      }
+
       setSaveError(
-        httpStatusOf(error) === 409
+        status === 409
           ? (apiErrorMessageOf(error) ?? 'A column still has cards. Move them first and try again.')
-          : 'The board could not be saved. Your changes are still here, so you can try again.'
+          : status === 400 && apiErrorFieldsOf(error).includes('columns') && (columns?.length ?? 0) < MIN_COLUMNS
+            ? MIN_COLUMNS_MESSAGE
+            : 'The board could not be saved. Your changes are still here, so you can try again.'
       );
       return;
     }
@@ -177,7 +198,11 @@ export const EditBoardModal = ({
     setIsReloading(true);
 
     try {
-      const fresh = await onReloadColumns();
+      // The cards are read with the columns: the counts decide which rows can
+      // be removed, and columns that are current beside counts that are not
+      // would offer a removal the server then refuses. A failed read of the
+      // cards leaves the counts as they were, and the server checks on Save.
+      const [fresh] = await Promise.all([onReloadColumns(), onRefreshTasks?.().catch(() => undefined)]);
       const rows = rowsFromColumns(fresh.columns);
 
       opened.current = { version: fresh.columnsVersion, rows };

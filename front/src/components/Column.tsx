@@ -61,6 +61,8 @@ export interface ColumnRename {
   save: (title: string) => Promise<void>;
   /** The reason a name may not be used, or null. */
   problem: (title: string) => string | null;
+  /** The most characters a name may have. */
+  maxLength?: number;
   /** Tells the person why the name was not saved. */
   onError: (message: string) => void;
 }
@@ -226,6 +228,7 @@ const Column: React.FC<ColumnProps> = ({
               emptyMessage="A column needs a name."
               failureMessage="The column could not be renamed. Nothing was changed."
               validate={rename.problem}
+              maxLength={rename.maxLength}
               onError={rename.onError}
               onSave={rename.save}
             />

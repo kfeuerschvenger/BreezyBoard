@@ -16,6 +16,8 @@ export interface BoardHeaderProps {
   onDeleted: () => void;
   /** Live cards in each column, by column id. With it the owner can manage the board's columns from the header. */
   taskCounts?: Readonly<Record<string, number>>;
+  /** Reads the board's cards again, for the dialog that manages the columns. */
+  onRefreshTasks?: () => Promise<unknown>;
 }
 
 /**
@@ -52,9 +54,18 @@ const CoverMark: React.FC = () => (
  * product offers.
  *
  * The owner edits the name where it is read, and it saves when the field loses
- * focus. Anybody else reads it as text.
+ * focus. The field wraps a long name onto as many lines as it needs, so the
+ * owner reads all of it just as anybody else does. Anybody else reads it as
+ * text.
  */
-export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, onDeleted, taskCounts }) => {
+export const BoardHeader: React.FC<BoardHeaderProps> = ({
+  board,
+  landed,
+  total,
+  onDeleted,
+  taskCounts,
+  onRefreshTasks,
+}) => {
   const updateBoard = useUpdateBoard();
   const toast = useToast();
   const hue = boardHueOf(board.color);
@@ -75,12 +86,13 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, 
           <CoverMark />
         </Cover>
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="break-words font-heading text-[28px] font-bold leading-tight tracking-tight text-ink sm:text-4xl">
             {isOwner ? (
               <InlineEdit
                 value={title}
                 label="Board name"
+                wrap
                 emptyMessage="A board needs a name."
                 failureMessage="The board could not be renamed. Nothing was changed."
                 onError={message => toast.show({ message })}
@@ -124,7 +136,7 @@ export const BoardHeader: React.FC<BoardHeaderProps> = ({ board, landed, total, 
           </span>
         )}
 
-        <BoardActions board={board} onDeleted={onDeleted} taskCounts={taskCounts} />
+        <BoardActions board={board} onDeleted={onDeleted} taskCounts={taskCounts} onRefreshTasks={onRefreshTasks} />
       </div>
     </header>
   );

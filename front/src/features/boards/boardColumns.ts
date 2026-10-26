@@ -8,6 +8,9 @@ export const MAX_COLUMNS = 8;
 export const MIN_COLUMNS = 2;
 export const COLUMN_NAME_MAX_LENGTH = 40;
 
+/** What the dialog says when a changed list has fewer columns than a board keeps. */
+export const MIN_COLUMNS_MESSAGE = `A board needs at least ${MIN_COLUMNS} columns; add one before saving.`;
+
 /**
  * The hue angles of the reference design's column cycle, in its order. They are
  * turned into hues through the token layer's own angles, so the cycle is a

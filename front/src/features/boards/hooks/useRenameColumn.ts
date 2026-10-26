@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Board } from '@/models';
 import { useToast } from '@/shared/hooks/useToast';
-import { columnNameProblem, rowsFromColumns } from '../boardColumns';
+import { COLUMN_NAME_MAX_LENGTH, columnNameProblem, rowsFromColumns } from '../boardColumns';
 import { useRenameBoardColumn } from '../queries';
 
 /** What a column header needs to rename its column in place. */
@@ -10,6 +10,8 @@ export interface ColumnRenamer {
   save: (title: string) => Promise<void>;
   /** The reason the name may not be used, or null. */
   problem: (title: string) => string | null;
+  /** The most characters a name may have. */
+  maxLength: number;
   /** Tells the person why nothing was saved. */
   onError: (message: string) => void;
 }
@@ -43,6 +45,7 @@ export const useRenameColumn = (board: Board | null | undefined): ((columnId: st
           title,
           rows.filter(row => row.columnId !== columnId).map(row => row.title)
         ),
+      maxLength: COLUMN_NAME_MAX_LENGTH,
       onError: message => toast.show({ message }),
     });
   }, [board, mutateAsync, toast]);

@@ -144,6 +144,91 @@ describe('InlineEdit', () => {
     expect(field()).toHaveAttribute('maxlength', '40');
   });
 
+  it('shows a pencil beside the text without a hover, hidden from assistive technology', () => {
+    renderField();
+
+    const pencil = field().parentElement?.querySelector('svg');
+
+    expect(pencil).toBeInTheDocument();
+    expect(pencil).toHaveAttribute('aria-hidden', 'true');
+    expect(pencil).not.toHaveClass('hidden');
+  });
+
+  it('announces a successful save through a polite live region, and nothing for a refused one', async () => {
+    const user = userEvent.setup();
+    renderField({ validate: next => (next === 'Done' ? 'Taken.' : null) });
+    const status = screen.getByRole('status');
+
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toBeEmptyDOMElement();
+
+    await user.clear(field());
+    await user.type(field(), 'Done');
+    await user.tab();
+    expect(status).toBeEmptyDOMElement();
+
+    await user.clear(field());
+    await user.type(field(), 'Inbox');
+    await user.tab();
+
+    await waitFor(() => expect(status).toHaveTextContent('Column name saved.'));
+
+    await user.click(field());
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it('keeps its live region out of the heading it sits in, so the heading keeps its name', async () => {
+    const user = userEvent.setup();
+    render(
+      <h2>
+        <InlineEdit value="Backlog" label="Column name" onSave={vi.fn().mockResolvedValue(undefined)} />
+      </h2>
+    );
+
+    await user.clear(field());
+    await user.type(field(), 'Inbox');
+    await user.tab();
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Column name saved.'));
+    expect(screen.getByRole('heading')).not.toHaveTextContent('saved');
+  });
+
+  describe('wrapping', () => {
+    const LONG = 'A board with a name so long that it cannot fit on one line of the header of its page';
+
+    it('shows a long text in full in a field that wraps, and saves it on Enter', async () => {
+      const user = userEvent.setup();
+      const { onSave } = renderField({ wrap: true, value: LONG });
+
+      expect(field().tagName).toBe('TEXTAREA');
+      expect(field()).toHaveValue(LONG);
+      expect(field()).not.toHaveClass('truncate');
+
+      await user.type(field(), '!{Enter}');
+
+      expect(onSave).toHaveBeenCalledExactlyOnceWith(`${LONG}!`);
+    });
+
+    it('keeps one line, cut short with an ellipsis, when it does not wrap', () => {
+      renderField({ value: LONG });
+
+      expect(field().tagName).toBe('INPUT');
+      expect(field()).toHaveClass('truncate');
+    });
+
+    it('turns a pasted line break into a space', async () => {
+      const user = userEvent.setup();
+      const { onSave } = renderField({ wrap: true });
+
+      await user.clear(field());
+      await user.click(field());
+      await user.paste('First\nSecond');
+      await user.tab();
+
+      expect(onSave).toHaveBeenCalledExactlyOnceWith('First Second');
+    });
+  });
+
   it('has no accessibility violations inside a heading', async () => {
     const { container } = render(
       <h2>
