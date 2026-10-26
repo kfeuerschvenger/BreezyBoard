@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { InlineEdit } from './InlineEdit';
+import { announce } from './liveAnnouncer';
 
 const renderField = (props: Partial<React.ComponentProps<typeof InlineEdit>> = {}) => {
   const onSave = vi.fn().mockResolvedValue(undefined);
@@ -14,6 +15,9 @@ const renderField = (props: Partial<React.ComponentProps<typeof InlineEdit>> = {
 const field = () => screen.getByRole('textbox', { name: 'Column name' });
 
 describe('InlineEdit', () => {
+  // The region lasts for the life of the page, so each test starts from a page without it.
+  afterEach(() => document.querySelector('[role="status"]')?.remove());
+
   it('shows the saved text in a named field', () => {
     renderField();
 
@@ -124,43 +128,104 @@ describe('InlineEdit', () => {
     expect(field()).toHaveValue('Backlog');
   });
 
-  it('returns focus to the field after a refusal and keeps the reason on it until the next edit', async () => {
-    const user = userEvent.setup();
-    renderField({ validate: next => (next === 'Done' ? 'Taken.' : null) });
+  describe('after a refusal', () => {
+    const refuse = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.clear(field());
+      await user.type(field(), 'Done');
+      await user.tab();
+    };
+    const validate = (next: string) => (next === 'Done' ? 'Taken.' : null);
 
-    expect(field()).not.toHaveAttribute('aria-invalid');
-    expect(field()).not.toHaveAttribute('aria-describedby');
+    it('leaves focus where the person moved it, announces the reason and keeps it on the field until the next edit', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <InlineEdit value="Backlog" label="Column name" onSave={vi.fn()} validate={validate} />
+          <button type="button">Elsewhere</button>
+        </>
+      );
 
-    await user.clear(field());
-    await user.type(field(), 'Done');
-    await user.tab();
+      expect(field()).not.toHaveAttribute('aria-invalid');
+      expect(field()).not.toHaveAttribute('aria-describedby');
 
-    await waitFor(() => expect(field()).toHaveFocus());
-    expect(field()).toHaveValue('Backlog');
-    expect(field()).toHaveAttribute('aria-invalid', 'true');
-    expect(field()).toHaveAccessibleDescription('Taken.');
+      await user.clear(field());
+      await user.type(field(), 'Done');
+      await user.tab();
+      await new Promise(resolve => setTimeout(resolve, 20));
 
-    await user.type(field(), '!');
+      expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
+      expect(screen.getByRole('status')).toHaveTextContent('Taken.');
+      expect(field()).toHaveValue('Backlog');
+      expect(field()).toHaveAttribute('aria-invalid', 'true');
+      expect(field()).toHaveAccessibleDescription('Taken.');
 
-    expect(field()).not.toHaveAttribute('aria-invalid');
-    expect(field()).not.toHaveAttribute('aria-describedby');
+      await user.type(field(), '!');
+
+      expect(field()).not.toHaveAttribute('aria-invalid');
+      expect(field()).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('leaves focus alone and announces the reason after a failed save', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <InlineEdit
+            value="Backlog"
+            label="Column name"
+            onSave={vi.fn().mockRejectedValue(new Error('offline'))}
+            failureMessage="Could not rename."
+          />
+          <button type="button">Elsewhere</button>
+        </>
+      );
+
+      await user.clear(field());
+      await user.type(field(), 'Inbox');
+      await user.tab();
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not rename.'));
+      expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
+      expect(field()).toHaveValue('Backlog');
+      expect(field()).toHaveAccessibleDescription('Could not rename.');
+    });
+
+    it('drops the reason on Escape', async () => {
+      const user = userEvent.setup();
+      renderField({ validate });
+      await refuse(user);
+
+      await user.click(field());
+      await user.keyboard('{Escape}');
+
+      expect(field()).not.toHaveAttribute('aria-invalid');
+      expect(field()).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('drops the reason on a blur that changes nothing', async () => {
+      const user = userEvent.setup();
+      renderField({ validate });
+      await refuse(user);
+
+      await user.click(field());
+      await user.tab();
+
+      expect(field()).not.toHaveAttribute('aria-invalid');
+      expect(field()).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('drops the reason when the value changes from outside', async () => {
+      const user = userEvent.setup();
+      const { rerender, onSave } = renderField({ validate });
+      await refuse(user);
+
+      rerender(<InlineEdit value="Renamed elsewhere" label="Column name" onSave={onSave} validate={validate} />);
+
+      expect(field()).not.toHaveAttribute('aria-invalid');
+      expect(field()).not.toHaveAttribute('aria-describedby');
+    });
   });
 
-  it('returns focus to the field after a failed save and keeps the reason on it', async () => {
-    const user = userEvent.setup();
-    renderField({ onSave: vi.fn().mockRejectedValue(new Error('offline')), failureMessage: 'Could not rename.' });
-
-    await user.clear(field());
-    await user.type(field(), 'Inbox');
-    await user.tab();
-
-    await waitFor(() => expect(field()).toHaveFocus());
-    expect(field()).toHaveValue('Backlog');
-    expect(field()).toHaveAttribute('aria-invalid', 'true');
-    expect(field()).toHaveAccessibleDescription('Could not rename.');
-  });
-
-  it('shares one polite live region between every field on the page, and removes it with the last one', () => {
+  it('shares one polite live region between every field on the page, and keeps it when they are gone', () => {
     const save = vi.fn().mockResolvedValue(undefined);
     const { unmount } = render(
       <>
@@ -174,7 +239,16 @@ describe('InlineEdit', () => {
 
     unmount();
 
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('still speaks a message said after the last field is gone', () => {
+    const { unmount } = render(<InlineEdit value="One" label="First" onSave={vi.fn()} />);
+    unmount();
+
+    announce('Said late.');
+
+    expect(screen.getByRole('status')).toHaveTextContent('Said late.');
   });
 
   it('is read only while the save is in flight, so one blur cannot send the text twice', async () => {
@@ -228,7 +302,7 @@ describe('InlineEdit', () => {
     expect(pencil).not.toHaveClass('hidden');
   });
 
-  it('announces a successful save through a polite live region, and nothing for a refused one', async () => {
+  it('announces a successful save through a polite live region, and the reason for a refused one', async () => {
     const user = userEvent.setup();
     renderField({ validate: next => (next === 'Done' ? 'Taken.' : null) });
     const status = screen.getByRole('status');
@@ -239,7 +313,7 @@ describe('InlineEdit', () => {
     await user.clear(field());
     await user.type(field(), 'Done');
     await user.tab();
-    expect(status).toBeEmptyDOMElement();
+    expect(status).toHaveTextContent('Taken.');
 
     await user.clear(field());
     await user.type(field(), 'Inbox');

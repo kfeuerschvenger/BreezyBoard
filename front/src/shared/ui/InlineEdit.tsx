@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { IconPencil } from '@tabler/icons-react';
 import { Icon } from './Icon';
-import { acquireAnnouncer, announce } from './liveAnnouncer';
+import { announce, prepareAnnouncer } from './liveAnnouncer';
 
 export interface InlineEditProps {
   value: string;
@@ -61,16 +61,17 @@ const WRAPPED_CLASSES = 'resize-none overflow-hidden whitespace-normal break-wor
  * and the heading's text is measured against the darkest pixel of that box, so
  * a darker pencil would take the text below 4.5:1.
  *
- * A successful save is announced through one polite live region that every
- * field on the page shares. It lives in the page body and not beside the field:
- * the field sits inside a heading, and text inside a heading becomes part of its
- * accessible name.
+ * A successful save, and the reason a text was not saved, are announced through
+ * one polite live region that every field on the page shares. It lives in the
+ * page body and not beside the field: the field sits inside a heading, and text
+ * inside a heading becomes part of its accessible name.
  *
  * A text that is refused, or a save that fails, puts the saved text back and
- * returns focus to the field. The reason stays on the field through
- * `aria-invalid` and `aria-describedby` until the next edit, so it is read
- * with the field and not only shown for a moment in a toast. It is rendered in
- * the page body for the same reason the live region is.
+ * leaves focus where the person put it. The reason stays on the field through
+ * `aria-invalid` and `aria-describedby` until the next interaction with it (a
+ * change, Escape, a blur that changes nothing, a save, or a new `value`), so it
+ * is read with the field and not only shown for a moment in a toast. It is
+ * rendered in the page body for the same reason the live region is.
  */
 export const InlineEdit = ({
   value,
@@ -94,9 +95,12 @@ export const InlineEdit = ({
   const abandoned = useRef(false);
   const field = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
-  useEffect(() => acquireAnnouncer(), []);
+  useEffect(() => prepareAnnouncer(), []);
 
+  // A value that changes from outside is a new text, and what was said about the
+  // last one no longer applies.
   useEffect(() => {
+    setProblem(null);
     if (!editing.current) setDraft(value);
   }, [value]);
 
@@ -137,20 +141,18 @@ export const InlineEdit = ({
     const next = draft.trim();
 
     if (next === value) {
+      setProblem(null);
       setDraft(value);
       return;
     }
 
     const refusal = next === '' ? emptyMessage : (validate?.(next) ?? null);
 
-    // Focus is returned on the next turn: this runs inside the blur, and the
-    // browser is about to move focus to whatever was chosen, which would
-    // otherwise win over a focus call made here.
     const refuse = (message: string) => {
       setDraft(value);
       setProblem(message);
+      announce(message);
       onError?.(message);
-      setTimeout(() => field.current?.focus(), 0);
     };
 
     if (refusal) {
@@ -161,6 +163,7 @@ export const InlineEdit = ({
     setSaving(true);
     try {
       await onSave(next);
+      setProblem(null);
       setDraft(next);
       announce(`${label} saved.`);
     } catch {

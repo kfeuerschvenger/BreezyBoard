@@ -1,35 +1,33 @@
-// One polite live region for every field that announces a saved change. It is
-// created in the page body when the first user appears and removed when the
-// last one goes, so a page with nine editable names carries one region and not
-// nine, and nothing is left behind once none is on the page. It does not depend
-// on a provider: a component that announces through it works wherever it is
-// rendered.
+// One polite live region for every field that announces a message. It is
+// created in the page body the first time it is needed and stays there for the
+// life of the page, so a page with nine editable names carries one region and
+// not nine, and a message said after the last field has gone is still spoken
+// and not dropped. It does not depend on a provider: a component that announces
+// through it works wherever it is rendered.
 let region: HTMLElement | null = null;
-let users = 0;
 
-/** Starts using the shared region and answers the function that stops using it. */
-export const acquireAnnouncer = (): (() => void) => {
-  if (users === 0) {
-    region = document.createElement('span');
-    region.setAttribute('role', 'status');
-    region.setAttribute('aria-live', 'polite');
-    region.className = 'sr-only';
-    document.body.appendChild(region);
-  }
+const ensureRegion = (): HTMLElement => {
+  if (region?.isConnected) return region;
 
-  users += 1;
+  region = document.createElement('span');
+  region.setAttribute('role', 'status');
+  region.setAttribute('aria-live', 'polite');
+  region.className = 'sr-only';
+  document.body.appendChild(region);
 
-  return () => {
-    users -= 1;
+  return region;
+};
 
-    if (users === 0) {
-      region?.remove();
-      region = null;
-    }
-  };
+/**
+ * Puts the region in the page, empty. A live region that appears together with
+ * its first message is announced by few screen readers, so a field calls this
+ * when it mounts and the region is there before anything is said.
+ */
+export const prepareAnnouncer = () => {
+  ensureRegion();
 };
 
 /** Replaces what the region says. An empty message clears it. */
 export const announce = (message: string) => {
-  if (region) region.textContent = message;
+  ensureRegion().textContent = message;
 };
