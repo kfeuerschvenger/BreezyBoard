@@ -54,6 +54,8 @@ Every failure leaves through `error.middleware.js` as `{ success: false, message
 
 `startServer.js` connects the database, listens, starts the purge job and, on `SIGINT` or `SIGTERM`, stops the job, lets the server drain and closes the connection.
 
+The backend is meant to run as a single Node process: the queue that serialises the repairs of one board's stranded cards, and the record that throttles the check for them, live in that process's memory, so a second instance would run its own queue and the repairs of one board could overlap.
+
 ### Access control
 
 Access has two levels, resolved in `auth.middleware.js` and never in a route.

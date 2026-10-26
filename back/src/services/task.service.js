@@ -468,20 +468,60 @@ export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = n
 // board does not have, and only then is the repair paid for. A failure here is
 // logged and the read goes on, so a repair that cannot run never takes the
 // board page down with it.
-const repairStrandedTasks = async boardId => {
+//
+// The columns come from the board the request has already loaded, so the check
+// reads no board of its own. The existence query is also not repeated on every
+// read: a board checked within the last `STRANDED_CHECK_WINDOW_MS` is not
+// checked again, and a column removal forgets the board so the first read after
+// it does check. Only the check is throttled, a repair that is needed always runs.
+const STRANDED_CHECK_WINDOW_MS = 30_000;
+// The most boards remembered at once, so the record cannot grow without limit.
+const STRANDED_CHECK_CAP = 1000;
+// When each board was last checked, oldest first, within this server process.
+const lastStrandedCheck = new Map();
+
+// Answers whether a check is due for the board, and records it as made.
+const claimStrandedCheck = boardId => {
+  const key = String(boardId);
+  const now = Date.now();
+  const last = lastStrandedCheck.get(key);
+
+  if (last !== undefined && now - last < STRANDED_CHECK_WINDOW_MS) {
+    return false;
+  }
+
+  // Re-inserting keeps the map ordered by time, so expired entries are at the front.
+  lastStrandedCheck.delete(key);
+  lastStrandedCheck.set(key, now);
+
+  for (const [oldKey, checkedAt] of lastStrandedCheck) {
+    if (now - checkedAt < STRANDED_CHECK_WINDOW_MS && lastStrandedCheck.size <= STRANDED_CHECK_CAP) break;
+    lastStrandedCheck.delete(oldKey);
+  }
+
+  return true;
+};
+
+/** Makes the next read of the board's tasks check for stranded ones. */
+export const forgetStrandedCheck = boardId => {
+  lastStrandedCheck.delete(String(boardId));
+};
+
+/** How many boards have a check on record. */
+export const strandedChecksRecorded = () => lastStrandedCheck.size;
+
+const repairStrandedTasks = async (boardId, columnIds) => {
+  if (columnIds.length === 0 || !claimStrandedCheck(boardId)) {
+    return;
+  }
+
   try {
-    const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns');
-
-    if (!board || board.columns.length === 0) {
-      return;
-    }
-
-    const columnIds = board.columns.map(column => column._id.toString());
-
     if (await Task.exists({ boardId, deletedAt: null, status: { $nin: columnIds } })) {
       await rehomeStrandedTasks(boardId);
     }
   } catch (err) {
+    // A check that did not complete is not on record, so the next read tries again.
+    forgetStrandedCheck(boardId);
     logger.error({ err, boardId: String(boardId) }, 'Could not move the cards left in a removed column');
   }
 };
@@ -490,8 +530,11 @@ const repairStrandedTasks = async boardId => {
 // as before this parameter existed. `pagination` is always returned
 // alongside the tasks so a client can discover `total` either way; only
 // whether `tasks` itself is truncated depends on `limit` being present.
-export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
-  await repairStrandedTasks(boardId);
+//
+// `columnIds` are the ids of the board's columns, taken from the board the
+// request has already loaded.
+export const getTasksByBoard = async (boardId, { limit, offset, columnIds } = {}) => {
+  await repairStrandedTasks(boardId, columnIds ?? []);
 
   const filter = { boardId, deletedAt: null };
 

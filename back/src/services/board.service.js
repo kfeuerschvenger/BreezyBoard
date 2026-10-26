@@ -13,7 +13,7 @@ import ApiError from '../utils/apiError.js';
 import logger from '../utils/logger.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 import { BOARD_HUES } from '../constants/boardHues.js';
-import { rehomeStrandedTasks } from './task.service.js';
+import { forgetStrandedCheck, rehomeStrandedTasks } from './task.service.js';
 
 // Columns are copied out of the template rather than referenced, so that the
 // board owns its column ids. Mongoose assigns fresh subdocument ids on the
@@ -347,6 +347,9 @@ export const updateBoard = async (id, { columns, columnsVersion, ...fields }) =>
   // that it was empty. Moving it now means it is never left in a column that no
   // board shows.
   if (plan?.removedIds.length) {
+    // The next read of the board's tasks checks for stranded cards again.
+    forgetStrandedCheck(id);
+
     try {
       await rehomeStrandedTasks(id, { statuses: plan.removedIds });
     } catch (err) {

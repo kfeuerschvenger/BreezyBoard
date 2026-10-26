@@ -1,10 +1,11 @@
+import mongoose from 'mongoose';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import app from '../src/app.js';
 import Board from '../src/models/Board.js';
 import ColorPalette from '../src/models/ColorPalette.js';
 import Task from '../src/models/Task.js';
-import { rehomeStrandedTasks } from '../src/services/task.service.js';
+import { getTasksByBoard, rehomeStrandedTasks, strandedChecksRecorded } from '../src/services/task.service.js';
 import logger from '../src/utils/logger.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
@@ -272,6 +273,80 @@ describe('a task and the removal of its column racing', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.data.status).toBe(first);
+    });
+  });
+
+  describe('reading the tasks of a board', () => {
+    test('reads no board beyond the one the route has already loaded', async () => {
+      const read = vi.spyOn(Board, 'findOne');
+
+      const res = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(res.status).toBe(200);
+      // The one call is the authorization middleware's own read of the board.
+      expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    test('checks for stranded tasks once within the window, not on every read', async () => {
+      const check = vi.spyOn(Task, 'exists');
+
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(1);
+    });
+
+    test('checks again once the window has passed', async () => {
+      const check = vi.spyOn(Task, 'exists');
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      clock.mockReturnValue(now + 31_000);
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(2);
+    });
+
+    test('checks and repairs right after a column was removed, inside the window', async () => {
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      const original = Task.distinct.bind(Task);
+      vi.spyOn(Task, 'distinct').mockImplementationOnce((...args) =>
+        original(...args).then(async result => {
+          await createTask(owner.token, board._id, colors.taskColor._id, { title: 'In the gap', status: extra });
+          return result;
+        })
+      );
+      // The removal's own repair fails, which leaves the card behind.
+      vi.spyOn(Task, 'find').mockImplementationOnce(() => ({ select: () => Promise.reject(new Error('connection lost')) }));
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      await removeExtra();
+      expect(await strandedCount()).toBe(1);
+      const check = vi.spyOn(Task, 'exists');
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(onBoard.body.data[0].status).toBe(first);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('keeps no more boards on record than its cap, and lets expired ones go', async () => {
+      vi.spyOn(Task, 'exists').mockResolvedValue(null);
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+      const read = id => getTasksByBoard(id, { columnIds: ['column'], limit: 1 });
+
+      for (let count = 0; count < 1005; count += 1) {
+        await read(new mongoose.Types.ObjectId());
+      }
+
+      expect(strandedChecksRecorded()).toBeLessThanOrEqual(1000);
+
+      clock.mockReturnValue(now + 31_000);
+      await read(new mongoose.Types.ObjectId());
+
+      expect(strandedChecksRecorded()).toBe(1);
     });
   });
 
