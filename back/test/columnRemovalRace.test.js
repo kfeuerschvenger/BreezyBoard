@@ -5,6 +5,7 @@ import Board from '../src/models/Board.js';
 import ColorPalette from '../src/models/ColorPalette.js';
 import Task from '../src/models/Task.js';
 import { rehomeStrandedTasks } from '../src/services/task.service.js';
+import logger from '../src/utils/logger.js';
 import { createBoard } from './helpers/board.factory.js';
 import { seedColorsAndTemplates } from './helpers/seed.js';
 import { boardColumns, createTask } from './helpers/task.factory.js';
@@ -37,31 +38,30 @@ describe('a task and the removal of its column racing', () => {
 
   // Runs `action` once, right after the next read of the board's columns that
   // a task write makes to check its column, and before that write goes ahead.
-  // The authorization middleware reads the board too, without a projection, so
-  // only a read that selects fields counts.
+  // That read is the one call site that asks for the `columns` projection and
+  // nothing else: every other read of the board, and every query that is not
+  // that call, is returned exactly as the model built it.
   const afterNextColumnCheck = action => {
     const original = Board.findOne.bind(Board);
     let armed = true;
 
     vi.spyOn(Board, 'findOne').mockImplementation((...args) => {
       const query = original(...args);
-
-      // Once it has fired, reads are left as they are: the wrapped `select`
-      // below answers a promise, which a caller that goes on to chain query
-      // methods after it (`exists` does) cannot use.
-      if (!armed) return query;
-
       const select = query.select.bind(query);
 
-      query.select = (...fields) =>
-        select(...fields).then(async result => {
-          if (armed) {
-            armed = false;
-            await action();
-          }
+      query.select = (...fields) => {
+        const selected = select(...fields);
+
+        if (!armed || fields.length !== 1 || fields[0] !== 'columns') return selected;
+
+        armed = false;
+
+        return selected.then(async result => {
+          await action();
 
           return result;
         });
+      };
 
       return query;
     });
@@ -215,11 +215,63 @@ describe('a task and the removal of its column racing', () => {
 
     test('a column removal is answered as saved', async () => {
       await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
-      vi.spyOn(Task, 'find').mockRejectedValueOnce(new Error('connection lost'));
+      const failure = new Error('connection lost');
+      // The repair reads the stranded tasks as `find(...).select(...)`, so it is
+      // the `select` that rejects, as it does when the connection drops.
+      vi.spyOn(Task, 'find').mockImplementationOnce(() => ({ select: () => Promise.reject(failure) }));
+      const logged = vi.spyOn(logger, 'error');
 
       await removeExtra();
 
       expect(await columnIds()).not.toContain(extra);
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ err: failure }),
+        'Could not move the cards left in a removed column'
+      );
+    });
+
+    test('a card the failed repair left behind is moved when the tasks of the board are next read', async () => {
+      const task = await Task.create({ title: 'Left behind', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      expect(await strandedCount()).toBe(1);
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(onBoard.status).toBe(200);
+      expect(onBoard.body.data.map(listed => listed.title)).toEqual(['Left behind']);
+      expect(onBoard.body.data[0].status).toBe(first);
+      expect(onBoard.body.pagination.total).toBe(1);
+      expect((await Task.findById(task._id)).status).toBe(first);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('reading the tasks of the board still answers when the repair cannot run', async () => {
+      await Task.create({ title: 'Left behind', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      vi.spyOn(Task, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+      const logged = vi.spyOn(logger, 'error');
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(onBoard.status).toBe(200);
+      expect(logged).toHaveBeenCalled();
+    });
+
+    test('a task another repair has already moved is answered where it is now', async () => {
+      const original = Board.exists.bind(Board);
+      // Between the write and the column check, the column goes and another
+      // repair moves the task, so this call's own repair finds nothing to move.
+      vi.spyOn(Board, 'exists').mockImplementationOnce(async (...args) => {
+        await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+        await rehomeStrandedTasks(board._id);
+
+        return original(...args);
+      });
+
+      const res = await asUser('post', `/tasks/board/${board._id}`, owner).send({ title: 'Late', status: extra, color: colors.taskColor._id.toString() });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.status).toBe(first);
     });
   });
 
@@ -247,6 +299,31 @@ describe('a task and the removal of its column racing', () => {
 
       expect((await Task.findById(a._id)).status).toBe(first);
       expect((await Task.findById(b._id)).status).toBe(extra);
+    });
+
+    test('two repairs running together give the tasks they move different positions', async () => {
+      const a = await Task.create({ title: 'A', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      const b = await Task.create({ title: 'B', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a1' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+
+      const moved = await Promise.all([rehomeStrandedTasks(board._id, { taskId: a._id }), rehomeStrandedTasks(board._id, { taskId: b._id })]);
+
+      expect(moved).toEqual([1, 1]);
+      const orders = (await Task.find({ boardId: board._id }).select('order status')).map(task => task.order);
+      expect(new Set(orders).size).toBe(2);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('a repair that fails does not stop the one queued behind it', async () => {
+      const task = await Task.create({ title: 'A', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      vi.spyOn(Task, 'find').mockImplementationOnce(() => ({ select: () => Promise.reject(new Error('connection lost')) }));
+
+      const [failed, next] = await Promise.allSettled([rehomeStrandedTasks(board._id), rehomeStrandedTasks(board._id)]);
+
+      expect(failed.status).toBe('rejected');
+      expect(next).toEqual({ status: 'fulfilled', value: 1 });
+      expect((await Task.findById(task._id)).status).toBe(first);
     });
 
     test('does nothing for a deleted board', async () => {

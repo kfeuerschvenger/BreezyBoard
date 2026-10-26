@@ -91,7 +91,28 @@ const REHOME_ATTEMPTS = 5;
  * @param {{ taskId?: string, statuses?: string[] }} [scope]
  * @returns {Promise<number>}
  */
-export const rehomeStrandedTasks = async (boardId, { taskId, statuses } = {}) => {
+export const rehomeStrandedTasks = (boardId, scope = {}) => serialisedPerBoard(boardId, () => rehomeNow(boardId, scope));
+
+// Repairs of one board run one after the other within this server process. Each
+// task is keyed at the foot of the first column from a read of that column, so
+// two repairs running together would read the same last key and give two tasks
+// the same position.
+const repairQueues = new Map();
+
+const serialisedPerBoard = (boardId, work) => {
+  const key = String(boardId);
+  const run = (repairQueues.get(key) ?? Promise.resolve()).then(work);
+  const tail = run.catch(() => undefined);
+
+  repairQueues.set(key, tail);
+  void tail.then(() => {
+    if (repairQueues.get(key) === tail) repairQueues.delete(key);
+  });
+
+  return run;
+};
+
+const rehomeNow = async (boardId, { taskId, statuses }) => {
   let moved = 0;
 
   for (let attempt = 0; attempt < REHOME_ATTEMPTS; attempt += 1) {
@@ -137,15 +158,21 @@ export const rehomeStrandedTasks = async (boardId, { taskId, statuses } = {}) =>
 // The write has already been committed when this runs, so a failure here is
 // logged and the committed task is answered as it was written: reporting it
 // as an error would tell the person that a write that happened did not. A
-// task left in a missing column by such a failure is moved the next time it is
-// written.
+// task left in a missing column by such a failure is hidden from the board
+// until its tasks are next read, and `getTasksByBoard` moves it then.
+//
+// Whenever the column was gone, the task is read again, whether this call moved
+// it or another repair got there first: the task in hand holds the status it
+// was written with, which is no longer the stored one.
 const settleColumn = async (task, boardId) => {
   try {
     const columnStands = await Board.exists({ _id: boardId, deletedAt: null, 'columns._id': task.status });
 
-    if (columnStands || (await rehomeStrandedTasks(boardId, { taskId: task._id })) === 0) {
+    if (columnStands) {
       return task;
     }
+
+    await rehomeStrandedTasks(boardId, { taskId: task._id });
 
     return (
       (await Task.findById(task._id)
@@ -433,11 +460,39 @@ export const moveTask = async (taskId, newStatus, { afterId = null, beforeId = n
   return settleColumn(task, existing.boardId);
 };
 
+// A task whose column is gone is on no column of the board, so no board shows
+// it while every count includes it. The writes that remove a column or place a
+// task repair that themselves, and one whose repair failed leaves the task
+// behind. Reading a board's tasks is the place that catches it: the board's
+// columns and one existence query tell whether any live task names a column the
+// board does not have, and only then is the repair paid for. A failure here is
+// logged and the read goes on, so a repair that cannot run never takes the
+// board page down with it.
+const repairStrandedTasks = async boardId => {
+  try {
+    const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns');
+
+    if (!board || board.columns.length === 0) {
+      return;
+    }
+
+    const columnIds = board.columns.map(column => column._id.toString());
+
+    if (await Task.exists({ boardId, deletedAt: null, status: { $nin: columnIds } })) {
+      await rehomeStrandedTasks(boardId);
+    }
+  } catch (err) {
+    logger.error({ err, boardId: String(boardId) }, 'Could not move the cards left in a removed column');
+  }
+};
+
 // Pagination is opt-in: `limit` undefined means "return everything", exactly
 // as before this parameter existed. `pagination` is always returned
 // alongside the tasks so a client can discover `total` either way; only
 // whether `tasks` itself is truncated depends on `limit` being present.
 export const getTasksByBoard = async (boardId, { limit, offset } = {}) => {
+  await repairStrandedTasks(boardId);
+
   const filter = { boardId, deletedAt: null };
 
   const total = await Task.countDocuments(filter);

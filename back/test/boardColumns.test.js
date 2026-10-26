@@ -388,6 +388,40 @@ describe('board columns', () => {
       expect(await versionNow()).toBe(before + 1);
     });
 
+    test('a list identical to the stored one changes nothing and keeps the version', async () => {
+      const before = await versionNow();
+      const { updatedAt } = await Board.findById(board._id).select('updatedAt');
+
+      const res = await save(await stored());
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.columnsVersion).toBe(before);
+      expect(res.body.data.columns).toHaveLength(2);
+      expect(await versionNow()).toBe(before);
+      expect((await Board.findById(board._id).select('updatedAt')).updatedAt).toEqual(updatedAt);
+    });
+
+    test('an identical list saved with a board field still saves the field and keeps the version', async () => {
+      const before = await versionNow();
+
+      const res = await save(await stored(), owner, { title: 'Only the title' });
+
+      expect(res.status).toBe(200);
+      expect((await Board.findById(board._id)).title).toBe('Only the title');
+      expect(await versionNow()).toBe(before);
+    });
+
+    test('an identical list built on an older version is still refused as stale', async () => {
+      const old = await versionNow();
+      const list = await stored();
+      await save([...list, fresh('Review')]);
+
+      const res = await asUser('put', `/boards/${board._id}`, owner).send({ columns: await stored(), columnsVersion: old });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('COLUMNS_STALE');
+    });
+
     test('refuses a save of the columns that carries no version', async () => {
       const before = await stored();
 

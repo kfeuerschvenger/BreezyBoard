@@ -16,13 +16,16 @@ describe('the limits on a board columns', () => {
 
   const frontLimit = name => {
     const source = read('../../front/src/features/boards/boardColumns.ts');
-    const match = source.match(new RegExp(`export const ${name} = (\\d+);`));
+    // Tolerates a type annotation, numeric separators, `as const`, and a missing
+    // semicolon, so a harmless reformatting of the declaration is not read as the
+    // limit having gone.
+    const match = source.match(new RegExp(`export\\s+const\\s+${name}\\s*(?::\\s*[^=]+?)?=\\s*(\\d[\\d_]*)(?:\\s+as\\s+const)?\\s*;?`));
 
     if (!match) {
       throw new Error(`front/src/features/boards/boardColumns.ts no longer declares ${name} as a number`);
     }
 
-    return Number(match[1]);
+    return Number(match[1].replaceAll('_', ''));
   };
 
   test('the API document carries the limits of the schemas', () => {

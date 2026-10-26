@@ -108,10 +108,15 @@ const atColumnsVersion = version => ({ columnsVersion: version === 0 ? { $in: [0
  * created in the column in the gap between them is not excluded here. The
  * caller moves any such card once the write is done (`rehomeStrandedTasks`).
  *
+ * A list that is the stored one, with the same ids, names, colours and order, is
+ * a save of nothing: `unchanged` says so, and the caller writes no columns and
+ * does not move the version. The version check comes first, so a stale list is
+ * still refused.
+ *
  * @param {string} boardId
  * @param {Array<{ _id?: string, title: string, color: string }>} requested
  * @param {number} columnsVersion the version the list was built on
- * @returns {Promise<{ columns: Array<{ _id: mongoose.Types.ObjectId, title: string, color: string, order: number }>, removedIds: string[] }>}
+ * @returns {Promise<{ columns: Array<{ _id: mongoose.Types.ObjectId, title: string, color: string, order: number }>, removedIds: string[], unchanged: boolean }>}
  */
 const planColumns = async (boardId, requested, columnsVersion) => {
   const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns columnsVersion');
@@ -162,15 +167,28 @@ const planColumns = async (boardId, requested, columnsVersion) => {
     }
   }
 
-  return {
-    columns: requested.map((column, order) => ({
-      _id: column._id ? new mongoose.Types.ObjectId(column._id) : new mongoose.Types.ObjectId(),
-      title: column.title,
-      color: column.color,
-      order,
-    })),
-    removedIds: removed.map(column => column._id.toString()),
-  };
+  const columns = requested.map((column, order) => ({
+    _id: column._id ? new mongoose.Types.ObjectId(column._id) : new mongoose.Types.ObjectId(),
+    title: column.title,
+    color: column.color,
+    order,
+  }));
+
+  const inStoredOrder = [...board.columns].sort((a, b) => a.order - b.order);
+  const unchanged =
+    columns.length === inStoredOrder.length &&
+    columns.every((column, index) => {
+      const current = inStoredOrder[index];
+
+      return (
+        column._id.toString() === current._id.toString() &&
+        column.title === current.title &&
+        column.color.toString() === current.color.toString() &&
+        column.order === current.order
+      );
+    });
+
+  return { columns, removedIds: removed.map(column => column._id.toString()), unchanged };
 };
 
 // The schema checks that each member id is shaped like an id, and nothing
@@ -288,7 +306,21 @@ export const updateBoard = async (id, { columns, columnsVersion, ...fields }) =>
   // so a change that lands after the plan was made makes the write match
   // nothing instead of being overwritten, and the version moves on in the same
   // update.
-  const plan = columns === undefined ? null : await planColumns(id, columns, columnsVersion);
+  const planned = columns === undefined ? null : await planColumns(id, columns, columnsVersion);
+  // A list identical to the stored one is not a change to the columns: it is
+  // dropped here, and the version stays where it is.
+  const plan = planned?.unchanged ? null : planned;
+
+  if (planned?.unchanged && Object.keys(fields).length === 0) {
+    const current = await populateRenameAnswer(Board.findOne({ _id: id, deletedAt: null }));
+
+    if (!current) {
+      throw new ApiError(404, 'Board not found');
+    }
+
+    return current;
+  }
+
   const filter = { _id: id, deletedAt: null, ...(plan && atColumnsVersion(columnsVersion)) };
   const updateData = plan ? { ...fields, columns: plan.columns, $inc: { columnsVersion: 1 } } : fields;
 
@@ -319,7 +351,9 @@ export const updateBoard = async (id, { columns, columnsVersion, ...fields }) =>
       await rehomeStrandedTasks(id, { statuses: plan.removedIds });
     } catch (err) {
       // The columns are already saved, so the edit succeeded. Answering with an
-      // error would tell the owner that a change that was made was not.
+      // error would tell the owner that a change that was made was not. A card
+      // left behind stays hidden until the board's tasks are next read, and
+      // `getTasksByBoard` moves it then.
       logger.error({ err, boardId: String(id) }, 'Could not move the cards left in a removed column');
     }
   }
