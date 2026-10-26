@@ -720,7 +720,9 @@ describe('Board page owner actions', () => {
       await user.clear(field);
       await user.type(field, 'Inbox{Enter}');
 
-      expect(await screen.findByText('The column could not be renamed. Nothing was changed.')).toBeInTheDocument();
+      const message = 'The column could not be renamed. Nothing was changed.';
+      expect(await within(screen.getByRole('region', { name: 'Notifications' })).findByText(message)).toBeInTheDocument();
+      expect(field).toHaveAccessibleDescription(message);
       expect(field).toHaveValue('To Do');
     });
 
@@ -733,7 +735,9 @@ describe('Board page owner actions', () => {
       await user.clear(field);
       await user.type(field, 'done{Enter}');
 
-      expect(await screen.findByText('Another column already has that name')).toBeInTheDocument();
+      const message = 'Another column already has that name';
+      expect(await within(screen.getByRole('region', { name: 'Notifications' })).findByText(message)).toBeInTheDocument();
+      expect(field).toHaveAccessibleDescription(message);
       expect(mockedBoardService.update).not.toHaveBeenCalled();
       expect(field).toHaveValue('To Do');
     });

@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { IconPencil } from '@tabler/icons-react';
 import { Icon } from './Icon';
+import { acquireAnnouncer, announce } from './liveAnnouncer';
 
 export interface InlineEditProps {
   value: string;
@@ -58,10 +59,18 @@ const WRAPPED_CLASSES = 'resize-none overflow-hidden whitespace-normal break-wor
  * touch screen does not have. It is drawn at 80% of the tertiary ink, which is
  * 3:1 against the page and no darker: it sits inside the box of the heading,
  * and the heading's text is measured against the darkest pixel of that box, so
- * a darker pencil would take the text below 4.5:1. A successful save is announced through a polite
- * live region of its own. The region is rendered into the page body and not
- * beside the field: the field sits inside a heading, and text inside a heading
- * becomes part of its accessible name.
+ * a darker pencil would take the text below 4.5:1.
+ *
+ * A successful save is announced through one polite live region that every
+ * field on the page shares. It lives in the page body and not beside the field:
+ * the field sits inside a heading, and text inside a heading becomes part of its
+ * accessible name.
+ *
+ * A text that is refused, or a save that fails, puts the saved text back and
+ * returns focus to the field. The reason stays on the field through
+ * `aria-invalid` and `aria-describedby` until the next edit, so it is read
+ * with the field and not only shown for a moment in a toast. It is rendered in
+ * the page body for the same reason the live region is.
  */
 export const InlineEdit = ({
   value,
@@ -77,11 +86,15 @@ export const InlineEdit = ({
 }: InlineEditProps) => {
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
-  const [announcement, setAnnouncement] = useState('');
+  // Why the last text was not saved, until the next edit.
+  const [problem, setProblem] = useState<string | null>(null);
+  const problemId = useId();
   const editing = useRef(false);
   // Escape reverts and then blurs, and the blur must not save what was reverted.
   const abandoned = useRef(false);
   const field = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  useEffect(() => acquireAnnouncer(), []);
 
   useEffect(() => {
     if (!editing.current) setDraft(value);
@@ -130,9 +143,18 @@ export const InlineEdit = ({
 
     const refusal = next === '' ? emptyMessage : (validate?.(next) ?? null);
 
-    if (refusal) {
+    // Focus is returned on the next turn: this runs inside the blur, and the
+    // browser is about to move focus to whatever was chosen, which would
+    // otherwise win over a focus call made here.
+    const refuse = (message: string) => {
       setDraft(value);
-      onError?.(refusal);
+      setProblem(message);
+      onError?.(message);
+      setTimeout(() => field.current?.focus(), 0);
+    };
+
+    if (refusal) {
+      refuse(refusal);
       return;
     }
 
@@ -140,21 +162,26 @@ export const InlineEdit = ({
     try {
       await onSave(next);
       setDraft(next);
-      setAnnouncement(`${label} saved.`);
+      announce(`${label} saved.`);
     } catch {
-      setDraft(value);
-      onError?.(failureMessage);
+      refuse(failureMessage);
     } finally {
       setSaving(false);
     }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    // A key pressed to compose text with an input method editor (the Enter that
+    // picks a candidate, the Escape that drops it) belongs to the editor. 229 is
+    // the code browsers report for such a key when `isComposing` is not set.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+
     if (event.key === 'Enter') {
       event.preventDefault();
       event.currentTarget.blur();
     } else if (event.key === 'Escape') {
       abandoned.current = true;
+      setProblem(null);
       setDraft(value);
       event.currentTarget.blur();
     }
@@ -163,16 +190,20 @@ export const InlineEdit = ({
   const shared = {
     'aria-label': label,
     'aria-busy': saving || undefined,
+    'aria-invalid': problem ? true : undefined,
+    'aria-describedby': problem ? problemId : undefined,
     value: draft,
     maxLength,
     readOnly: saving,
     onFocus: () => {
       editing.current = true;
-      setAnnouncement('');
+      announce('');
     },
     // A pasted line break would put a second line in a name that has one.
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setDraft(event.target.value.replace(/\s*[\r\n]+\s*/g, ' ')),
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setProblem(null);
+      setDraft(event.target.value.replace(/\s*[\r\n]+\s*/g, ' '));
+    },
     onBlur: () => void commit(),
     onKeyDown,
     className: `${FIELD_CLASSES} ${wrap ? WRAPPED_CLASSES : ONE_LINE_CLASSES} ${className}`,
@@ -190,12 +221,13 @@ export const InlineEdit = ({
         size={16}
         className={`pointer-events-none absolute right-0 text-ink-tertiary opacity-80 peer-focus:hidden ${wrap ? 'top-2' : 'top-1/2 -translate-y-1/2'}`}
       />
-      {createPortal(
-        <span role="status" aria-live="polite" className="sr-only">
-          {announcement}
-        </span>,
-        document.body
-      )}
+      {problem &&
+        createPortal(
+          <span id={problemId} className="sr-only">
+            {problem}
+          </span>,
+          document.body
+        )}
     </span>
   );
 };

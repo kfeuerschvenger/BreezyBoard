@@ -200,7 +200,8 @@ describe('BoardHeader title in place', () => {
 
     expect(BoardService.update).not.toHaveBeenCalled();
     expect(titleField()).toHaveValue('Launch Plan');
-    expect(await screen.findByText('A board needs a name.')).toBeInTheDocument();
+    expect(await within(screen.getByRole('region', { name: 'Notifications' })).findByText('A board needs a name.')).toBeInTheDocument();
+    expect(titleField()).toHaveAccessibleDescription('A board needs a name.');
   });
 
   it('goes back to the old name and tells the person when the save fails', async () => {
@@ -211,7 +212,9 @@ describe('BoardHeader title in place', () => {
     await userEvent.type(titleField(), 'Relaunch Plan');
     await userEvent.tab();
 
-    expect(await screen.findByText('The board could not be renamed. Nothing was changed.')).toBeInTheDocument();
+    const message = 'The board could not be renamed. Nothing was changed.';
+    expect(await within(screen.getByRole('region', { name: 'Notifications' })).findByText(message)).toBeInTheDocument();
+    expect(titleField()).toHaveAccessibleDescription(message);
     expect(titleField()).toHaveValue('Launch Plan');
   });
 });

@@ -205,8 +205,10 @@ test.describe('managing a board\'s columns', () => {
     // A name another column has is refused and the field goes back.
     await inbox.fill('done');
     await inbox.press('Enter');
-    await expect(page.getByText('Another column already has that name')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Another column already has that name')).toBeVisible();
     await expect(inbox).toHaveValue('Inbox');
+    await expect(inbox).toHaveAccessibleDescription('Another column already has that name');
+    await expect(inbox).toBeFocused();
 
     const title = page.getByRole('textbox', { name: 'Board name' });
     await title.fill('Renamed in place');
