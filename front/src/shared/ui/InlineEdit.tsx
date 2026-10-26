@@ -55,7 +55,10 @@ const WRAPPED_CLASSES = 'resize-none overflow-hidden whitespace-normal break-wor
  * edited, so a title changed from another place appears here as well.
  *
  * A pencil beside the text says that it can be edited without a hover, which a
- * touch screen does not have. A successful save is announced through a polite
+ * touch screen does not have. It is drawn at 80% of the tertiary ink, which is
+ * 3:1 against the page and no darker: it sits inside the box of the heading,
+ * and the heading's text is measured against the darkest pixel of that box, so
+ * a darker pencil would take the text below 4.5:1. A successful save is announced through a polite
  * live region of its own. The region is rendered into the page body and not
  * beside the field: the field sits inside a heading, and text inside a heading
  * becomes part of its accessible name.
@@ -185,7 +188,7 @@ export const InlineEdit = ({
       <Icon
         as={IconPencil}
         size={16}
-        className={`pointer-events-none absolute right-0 text-ink-tertiary peer-focus:hidden ${wrap ? 'top-2' : 'top-1/2 -translate-y-1/2'}`}
+        className={`pointer-events-none absolute right-0 text-ink-tertiary opacity-80 peer-focus:hidden ${wrap ? 'top-2' : 'top-1/2 -translate-y-1/2'}`}
       />
       {createPortal(
         <span role="status" aria-live="polite" className="sr-only">
