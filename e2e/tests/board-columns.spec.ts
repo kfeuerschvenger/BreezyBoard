@@ -208,7 +208,8 @@ test.describe('managing a board\'s columns', () => {
     await expect(page.getByRole('region', { name: 'Notifications' }).getByText('Another column already has that name')).toBeVisible();
     await expect(inbox).toHaveValue('Inbox');
     await expect(inbox).toHaveAccessibleDescription('Another column already has that name');
-    await expect(inbox).toBeFocused();
+    // Focus is not pulled back to the field: Enter left it, and it stays left.
+    await expect(inbox).not.toBeFocused();
 
     const title = page.getByRole('textbox', { name: 'Board name' });
     await title.fill('Renamed in place');

@@ -103,7 +103,7 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(page.getByRole('link', { name: title })).toHaveCount(0);
 
     await toast.getByRole('button', { name: 'Undo' }).click();
-    await expect(page.getByRole('status')).toContainText(`Restored "${title}"`);
+    await expect(page.getByRole('region', { name: 'Notifications' }).getByRole('status')).toContainText(`Restored "${title}"`);
 
     // Undo keeps the person on the dashboard, where the board is back.
     await expect(page).toHaveURL(/\/$/);
@@ -166,7 +166,7 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(toast).toBeVisible();
 
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toContainText('Restored');
+    await expect(page.getByRole('region', { name: 'Notifications' }).getByRole('status')).toContainText('Restored');
   });
 
   test('cancelling the confirmation deletes nothing', async ({ page, authedUser }) => {
@@ -196,7 +196,7 @@ test.describe('editing and deleting a board from its page', () => {
     await expect(page.getByRole('link', { name: title })).toHaveCount(0);
 
     await page.getByTestId('toast').getByRole('button', { name: 'Undo' }).click();
-    await expect(page.getByRole('status')).toContainText(`Restored "${title}"`);
+    await expect(page.getByRole('region', { name: 'Notifications' }).getByRole('status')).toContainText(`Restored "${title}"`);
     await expect(page.getByRole('main').getByRole('link', { name: title, exact: true })).toBeVisible();
   });
 });
