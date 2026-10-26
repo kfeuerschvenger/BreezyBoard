@@ -9,24 +9,23 @@ import { ensureHueEntries } from './boardHues.js';
  *
  * A column's colour is one of the six hue entries a board's own colour comes
  * from, stored on the column and chosen by the owner: it is not derived from
- * the column's position. A database that predates this holds a hex entry of
- * the `column` palette on each column instead. This does three things in
- * order:
+ * the column's position. A column may still point at a hex entry of the
+ * `column` palette, which is not a hue. This does three things in order:
  *
  * 1. Makes sure the six hue entries exist in the palette.
  * 2. Points every column of every board and every template at the hue nearest
- *    its old colour on the colour wheel. A column whose colour entry is gone,
+ *    its hex colour on the colour wheel. A column whose colour entry is gone,
  *    or that has none, gets the default hue, since nothing says what it was
  *    meant to be.
- * 3. Removes the old `column` entries once nothing points at them.
+ * 3. Removes the `column` entries once nothing points at them.
  *
  * It can run any number of times. A second run finds every column on a hue
- * entry and no old entry left, and changes nothing. Boards in the deleted
- * state are migrated too, so a restore brings back a board already on the new
+ * entry and no `column` entry left, and changes nothing. Boards in the deleted
+ * state are migrated too, so a restore brings back a board already on the hue
  * palette, and the templates are, so a board created afterwards starts on it.
  *
- * Boards and templates are read and written as plain documents: an old colour
- * entry holds a hex value, which the palette model refuses to save, and a
+ * Boards and templates are read and written as plain documents: a `column`
+ * colour entry holds a hex value, which the palette model refuses to save, and a
  * column may carry no colour at all, which the column schema refuses.
  *
  * @returns {Promise<{
@@ -35,7 +34,7 @@ import { ensureHueEntries } from './boardHues.js';
  *   fromMissing: number,
  *   legacyEntriesRemoved: number,
  *   hueEntriesCreated: number,
- * }>} Columns now on each hue, how many moved from an old entry and from a
+ * }>} Columns now on each hue, how many moved from a `column` entry and from a
  *   missing one, and how many palette entries were removed and created.
  */
 export const migrateColumnHues = async () => {

@@ -26,8 +26,8 @@ export async function seedColorsAndTemplates() {
     type: 'board',
   });
 
-  // An entry of the old column palette, which nothing may be painted with any
-  // more.
+  // An entry of the hex `column` palette, which a board or a column may not be
+  // painted with: only the six hues of the board palette are accepted.
   const legacyColumnColor = await ColorPalette.create({
     name: 'Slate',
     value: '#64748B',
