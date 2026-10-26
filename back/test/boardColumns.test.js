@@ -557,6 +557,21 @@ describe('board columns', () => {
       expect((await stored())[0].title).toBe('BACKLOG');
     });
 
+    test('the name it already has is answered without a write or a new version', async () => {
+      const [first] = await stored();
+      const before = await Board.findById(board._id).select('updatedAt columnsVersion');
+
+      const res = await rename(first._id, `  ${first.title}  `);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.columns.find(column => column._id === first._id).title).toBe(first.title);
+      expect(res.body.data.columnsVersion).toBe(before.columnsVersion);
+
+      const after = await Board.findById(board._id).select('updatedAt columnsVersion');
+      expect(after.columnsVersion).toBe(before.columnsVersion);
+      expect(after.updatedAt).toEqual(before.updatedAt);
+    });
+
     test('of two renames to one name, exactly one is applied', async () => {
       const [first, last] = await stored();
 

@@ -10,6 +10,7 @@ import Workspace from '../models/Workspace.js';
 import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middleware.js';
 import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
+import logger from '../utils/logger.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 import { BOARD_HUES } from '../constants/boardHues.js';
 import { rehomeStrandedTasks } from './task.service.js';
@@ -314,13 +315,28 @@ export const updateBoard = async (id, { columns, columnsVersion, ...fields }) =>
   // that it was empty. Moving it now means it is never left in a column that no
   // board shows.
   if (plan?.removedIds.length) {
-    await rehomeStrandedTasks(id, { statuses: plan.removedIds });
+    try {
+      await rehomeStrandedTasks(id, { statuses: plan.removedIds });
+    } catch (err) {
+      // The columns are already saved, so the edit succeeded. Answering with an
+      // error would tell the owner that a change that was made was not.
+      logger.error({ err, boardId: String(id) }, 'Could not move the cards left in a removed column');
+    }
   }
 
   return board;
 };
 
 const RENAME_ATTEMPTS = 3;
+
+// The board as an update answers: members, colour, the colour of each column
+// and the template filled in.
+const populateRenameAnswer = query =>
+  query
+    .populate('members', 'firstName lastName email')
+    .populate('color', 'name value')
+    .populate('columns.color', 'name value')
+    .populate('template', 'name iconName');
 
 /**
  * Changes the name of one column and nothing else.
@@ -337,6 +353,9 @@ const RENAME_ATTEMPTS = 3;
  * lost that race is checked again against the board as it is now, so two
  * renames of different columns both succeed and a clash with the other one is
  * refused. The 409 is for a board that keeps changing under every attempt.
+ *
+ * A name identical to the one the column has (exact, after trimming) changes
+ * nothing: the board is answered as it is, with no write and no new version.
  *
  * @param {string} boardId
  * @param {string} columnId
@@ -363,15 +382,25 @@ export const renameColumn = async (boardId, columnId, title) => {
       throw new ApiError(400, `Another column is already called "${title}". Column names must be different`, [], ErrorCode.VALIDATION_ERROR);
     }
 
-    const updated = await Board.findOneAndUpdate(
-      { _id: boardId, deletedAt: null, 'columns._id': column._id, ...atColumnsVersion(board.columnsVersion) },
-      { $set: { 'columns.$.title': title }, $inc: { columnsVersion: 1 } },
-      { new: true, runValidators: true }
-    )
-      .populate('members', 'firstName lastName email')
-      .populate('color', 'name value')
-      .populate('columns.color', 'name value')
-      .populate('template', 'name iconName');
+    // The same name again is not a change: nothing is written and the version
+    // stays, so a dialog opened earlier is not told its columns went stale.
+    if (column.title === title) {
+      const unchanged = await populateRenameAnswer(Board.findOne({ _id: boardId, deletedAt: null }));
+
+      if (!unchanged) {
+        throw new ApiError(404, 'Board not found');
+      }
+
+      return unchanged;
+    }
+
+    const updated = await populateRenameAnswer(
+      Board.findOneAndUpdate(
+        { _id: boardId, deletedAt: null, 'columns._id': column._id, ...atColumnsVersion(board.columnsVersion) },
+        { $set: { 'columns.$.title': title }, $inc: { columnsVersion: 1 } },
+        { new: true, runValidators: true }
+      )
+    );
 
     if (updated) {
       return updated;

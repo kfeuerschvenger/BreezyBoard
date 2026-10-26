@@ -488,7 +488,7 @@ paths:
       tags:
         - Boards
       summary: Rename a column
-      description: "Changes the name of one column and nothing else, which is what the in-place rename in a column header uses so that it never sends the whole list. The name is 1 to 40 characters after trimming and different from every other column ignoring case, otherwise the answer is a 400. The change increments the board `columnsVersion`, so an edit dialog opened before it is refused with COLUMNS_STALE. A 404 means the column is no longer on the board. A 409 means the columns kept changing under every attempt: try again. Access: Board owner."
+      description: "Changes the name of one column and nothing else, which is what the in-place rename in a column header uses so that it never sends the whole list. The name is 1 to 40 characters after trimming and different from every other column ignoring case, otherwise the answer is a 400. The change increments the board `columnsVersion`, so an edit dialog opened before it is refused with COLUMNS_STALE. A name identical to the one the column already has changes nothing: the board is answered as it is and `columnsVersion` stays. A 404 means the column is no longer on the board. A 409 means the columns kept changing under every attempt: try again. Access: Board owner."
       operationId: patchBoardsByIdColumnsByColumnId
       security:
         - bearerAuth: []

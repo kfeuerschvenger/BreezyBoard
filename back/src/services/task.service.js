@@ -4,6 +4,7 @@ import env from '../config/env.js';
 import Task from '../models/Task.js';
 import Board from '../models/Board.js';
 import ApiError from '../utils/apiError.js';
+import logger from '../utils/logger.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 
 // The columns a task on this board may legally sit in. They are the board's
@@ -125,19 +126,37 @@ export const rehomeStrandedTasks = async (boardId, { taskId, statuses } = {}) =>
   return moved;
 };
 
-// Runs `rehomeStrandedTasks` for one task that has just been written, and
-// answers with the task as it is stored now, which is the one the response has
-// to show when it was moved.
+// Checks that a task that has just been written still names a column of its
+// board, and answers with the task as it is stored now, which is the one the
+// response has to show when it was moved.
+//
+// The check is one indexed existence query. Only a task whose column is gone
+// pays for `rehomeStrandedTasks`, so a drag or a move that lands in a column
+// that is still there costs one extra read and no more.
+//
+// The write has already been committed when this runs, so a failure here is
+// logged and the committed task is answered as it was written: reporting it
+// as an error would tell the person that a write that happened did not. A
+// task left in a missing column by such a failure is moved the next time it is
+// written.
 const settleColumn = async (task, boardId) => {
-  if ((await rehomeStrandedTasks(boardId, { taskId: task._id })) === 0) {
+  try {
+    const columnStands = await Board.exists({ _id: boardId, deletedAt: null, 'columns._id': task.status });
+
+    if (columnStands || (await rehomeStrandedTasks(boardId, { taskId: task._id })) === 0) {
+      return task;
+    }
+
+    return (
+      (await Task.findById(task._id)
+        .populate('owner', 'firstName lastName avatar')
+        .populate('color', 'name value')) ?? task
+    );
+  } catch (err) {
+    logger.error({ err, boardId: String(boardId), taskId: String(task._id) }, 'Could not check the column of a task that was written');
+
     return task;
   }
-
-  return (
-    (await Task.findById(task._id)
-      .populate('owner', 'firstName lastName avatar')
-      .populate('color', 'name value')) ?? task
-  );
 };
 
 /**

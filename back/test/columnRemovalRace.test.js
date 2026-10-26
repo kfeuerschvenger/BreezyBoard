@@ -45,6 +45,12 @@ describe('a task and the removal of its column racing', () => {
 
     vi.spyOn(Board, 'findOne').mockImplementation((...args) => {
       const query = original(...args);
+
+      // Once it has fired, reads are left as they are: the wrapped `select`
+      // below answers a promise, which a caller that goes on to chain query
+      // methods after it (`exists` does) cannot use.
+      if (!armed) return query;
+
       const select = query.select.bind(query);
 
       query.select = (...fields) =>
@@ -171,6 +177,50 @@ describe('a task and the removal of its column racing', () => {
 
     expect((await Task.findById(task._id)).order).toBe(task.order);
     expect(await strandedCount()).toBe(0);
+  });
+
+  describe('a write whose column is still there', () => {
+    test('costs one existence check and does not scan the board for stranded tasks', async () => {
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      const scan = vi.spyOn(Task, 'find');
+
+      const res = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe(extra);
+      expect(scan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a repair that fails after the write was committed', () => {
+    test('a moved task is answered as moved, not as an error', async () => {
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      vi.spyOn(Board, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+
+      const res = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe(extra);
+      expect((await Task.findById(task._id)).status).toBe(extra);
+    });
+
+    test('a created task is answered as created', async () => {
+      vi.spyOn(Board, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+
+      const res = await asUser('post', `/tasks/board/${board._id}`, owner).send({ title: 'Kept', status: first, color: colors.taskColor._id.toString() });
+
+      expect(res.status).toBe(201);
+      expect(await Task.countDocuments({ boardId: board._id, title: 'Kept' })).toBe(1);
+    });
+
+    test('a column removal is answered as saved', async () => {
+      await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      vi.spyOn(Task, 'find').mockRejectedValueOnce(new Error('connection lost'));
+
+      await removeExtra();
+
+      expect(await columnIds()).not.toContain(extra);
+    });
   });
 
   describe('rehomeStrandedTasks', () => {
