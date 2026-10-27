@@ -1,6 +1,38 @@
-# Future features and improvements
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/header-strip-dark.svg">
+  <img src="assets/brand/header-strip-light.svg" alt="BreezyBoard" width="100%">
+</picture>
 
-Ideas considered and deliberately left out of the current scope. Each entry states what it would add, why it is not built now, and what it would need before work starts.
+# Roadmap
+
+Ideas on the horizon, waiting for the right wind: what each one would add, why it is not built yet, and what it needs before work starts.
+
+Nothing here is promised or scheduled. Each entry was considered and deliberately left out of the current scope, and stays here so the reasoning is not lost.
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "lineColor": "#46b1e3", "textColor": "#2f7fa8", "edgeLabelBackground": "#ffffff"}}}%%
+flowchart LR
+  Comments["Task comments"] -.->|"shares the decision on"| Live["live updates"]
+  Shared["Shared notes"] -.-> Live
+  Rich["Rich note types"] -->|"chooses the renderer for"| Md["Markdown in task descriptions"]
+  Mine["My tasks view"]
+  classDef sky fill:#cbeeff,stroke:#00557e,color:#00557e
+  classDef teal fill:#bef4f1,stroke:#005d5b,color:#005d5b
+  classDef lavender fill:#ede0ff,stroke:#563e7b,color:#563e7b
+  classDef sand fill:#fbe5bf,stroke:#684600,color:#684600
+  class Comments,Mine sky
+  class Shared,Rich teal
+  class Md lavender
+  class Live sand
+```
+
+| Idea | In one line |
+|---|---|
+| [Task comments](#task-comments) | A discussion thread on every card |
+| [My tasks view](#my-tasks-view) | Every task assigned to you, across all your boards |
+| [Shared notes](#shared-notes) | Personal notes you can share with other people |
+| [Rich note types](#rich-note-types) | Markdown notes and checklist notes |
+| [Markdown in task descriptions](#markdown-in-task-descriptions) | Card descriptions written and shown as Markdown |
 
 ## Task comments
 
@@ -10,7 +42,7 @@ Not built now because a count with no thread behind it shows a number the user c
 
 Needs before work starts:
 
-- A design for the thread inside the task modal; the current reference shows only the count.
+- A design for the thread inside the task modal.
 - The permission rules for editing and deleting, consistent with the board roles.
 - A decision on live updates, which ties into the server push transport that the server state layer is built to accept.
 
@@ -61,5 +93,9 @@ Not built now for the same reason as rich notes, and because both should share o
 Needs before work starts:
 
 - The renderer and policy chosen for rich notes.
-- A preview or toggle in the task modal, which edits the description in a plain textarea today.
+- A preview or toggle in the task modal, which edits the description in a plain textarea.
 - How a description appears where it is shortened, should the card ever show it.
+
+---
+
+[Back to the README](../README.md) · Previous: [API](API.md)

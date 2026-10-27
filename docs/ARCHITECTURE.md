@@ -1,25 +1,29 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/header-strip-dark.svg">
+  <img src="assets/brand/header-strip-light.svg" alt="BreezyBoard" width="100%">
+</picture>
+
 # Architecture
 
-How BreezyBoard is put together: the backend layers, the session model, the data model, the frontend structure and the standing verification scripts. Setup and commands are in the [README](../README.md), the variables in [ENVIRONMENT.md](ENVIRONMENT.md) and the HTTP contract in [openapi.yaml](openapi.yaml).
+How the wind moves through BreezyBoard: one SPA, one API, one replica set, and a few firm rules about who may touch what.
+
+This page covers the backend layers, access control, the session model, the data model and the frontend structure. The variables live in [ENVIRONMENT.md](ENVIRONMENT.md), the tests in [TESTING.md](TESTING.md) and the HTTP contract in [API.md](API.md).
 
 ## System
 
-```mermaid
-graph LR
-  Browser -->|"/api/v1"| Back["back<br/>Express 5 on Node 22"]
-  Browser -->|page| Front["front<br/>React SPA<br/>Vite dev server, nginx in production"]
-  Back -->|Mongoose| Mongo[("MongoDB 7<br/>replica set rs0")]
-  Back -->|SMTP| Mail["Mailpit in development<br/>a relay in production"]
-  Back -->|files| Uploads[("uploads volume<br/>avatars")]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/architecture-dark.svg">
+  <img src="assets/diagrams/architecture-light.svg" alt="The browser runs the React SPA, which calls the Express API under /api/v1; the API stores data in a MongoDB replica set, avatars in an uploads volume, and sends reset mail over SMTP" width="100%">
+</picture>
 
-In production nginx serves the built page and proxies `/api` and `/uploads` to the backend, so the browser sees one origin and the backend trusts exactly one proxy hop for the address its rate limiters key on.
+In production nginx serves the built page and proxies `/api` and `/uploads` to the backend, so the browser sees one origin and the backend trusts exactly one proxy hop for the address its rate limiters key on. The diagram source is [assets/diagrams/architecture.d2](assets/diagrams/architecture.d2).
 
 ## Backend
 
 All of it lives in `back/src`. A request passes through the same stack of layers, and each layer has one job.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "secondaryColor": "#bef4f1", "secondaryBorderColor": "#005d5b", "secondaryTextColor": "#005d5b", "tertiaryColor": "#fbe5bf", "tertiaryBorderColor": "#684600", "tertiaryTextColor": "#684600", "lineColor": "#46b1e3", "textColor": "#2f7fa8", "edgeLabelBackground": "#ffffff", "clusterBkg": "#f1faff", "clusterBorder": "#46b1e3"}}}%%
 flowchart TD
   Req[Request] --> Log["logging.middleware<br/>request id, req.log"]
   Log --> Sec["helmet, cors, express.json 1 MB"]
@@ -29,12 +33,23 @@ flowchart TD
   Rate --> Auth["authenticate<br/>bearer JWT, revocation, absolute cap, renewal"]
   Auth --> Val["validate<br/>Zod params, body, query"]
   Val --> Role["requireWorkspaceRole, requireBoardRole,<br/>requireTaskBoardRole"]
-  Role --> Ctl["controllers<br/>read the request, call a service, answer with responseHandler"]
+  Role --> Ctl["controllers<br/>read the request, call a service, answer"]
   Ctl --> Svc["services<br/>the rules"]
   Svc --> Mod["models<br/>Mongoose schemas"]
   Mod --> DB[(MongoDB)]
   Ctl -.->|"next(error)"| Err["error.middleware<br/>one error body"]
   Svc -.->|"throw ApiError"| Err
+  classDef sky fill:#cbeeff,stroke:#00557e,color:#00557e
+  classDef teal fill:#bef4f1,stroke:#005d5b,color:#005d5b
+  classDef green fill:#cff3d5,stroke:#195c2e,color:#195c2e
+  classDef coral fill:#ffdcce,stroke:#7a3621,color:#7a3621
+  classDef lavender fill:#ede0ff,stroke:#563e7b,color:#563e7b
+  class Req lavender
+  class Log,Sec,Docs,Mount sky
+  class Rate,Auth,Val,Role teal
+  class Ctl,Svc,Mod sky
+  class DB green
+  class Err coral
 ```
 
 | Folder | Holds |
@@ -47,20 +62,23 @@ flowchart TD
 | `services` | The business rules: ordering keys, soft delete and restore, sessions, password reset, mail |
 | `models` | The Mongoose schemas: `User`, `Workspace`, `Board`, `Task`, `ColorPalette`, `BoardTemplate` and the shared column schema |
 | `jobs` | `boardPurge.job.js`, the timer that removes deleted boards and tasks past retention |
-| `constants`, `utils`, `migrations` | Error codes and board hues, the logger, `ApiError` and `responseHandler`, and `migrations/boardHues.js` and `migrations/columnHues.js`, the board and column hue migrations. They are run by `npm run migrate:board-hues` and `npm run migrate:column-hues`, which execute the scripts `seeds/migrate_board_hues.js` and `seeds/migrate_column_hues.js`: a script connects to the database and calls `migrateBoardHues` or `migrateColumnHues` from `src/migrations`, and the migration itself holds all of the logic |
+| `constants`, `utils` | Error codes and board hues, the logger, `ApiError` and `responseHandler` |
+| `migrations` | `boardHues.js` and `columnHues.js`, run by `npm run migrate:board-hues` and `npm run migrate:column-hues` through thin scripts in `back/seeds` that connect and call them |
 | `openapi` | The OpenAPI document built from the Zod schemas, and the development only Swagger UI mount |
 
-Every failure leaves through `error.middleware.js` as `{ success: false, message, code, errors? }`. An `ApiError` carries its status and a machine readable `code` (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TOKEN_REVOKED`, `SESSION_EXPIRED`, `RATE_LIMITED`, `INVALID_RESET_TOKEN`, `WRONG_CURRENT_PASSWORD`, `CONFLICT`, `INTERNAL`). A Mongoose `CastError` or `ValidationError` becomes a 400, and anything else a 500 that names nothing.
+Every failure leaves through `error.middleware.js` as one body with a machine readable `code`. The codes and the body are listed in [API.md](API.md#errors). A Mongoose `CastError` or `ValidationError` becomes a 400, and anything else a 500 that names nothing.
 
 `startServer.js` connects the database, listens, starts the purge job and, on `SIGINT` or `SIGTERM`, stops the job, lets the server drain and closes the connection.
 
-The backend is meant to run as a single Node process: the queue that serialises the repairs of one board's stranded cards, and the record that throttles the check for them, live in that process's memory, so a second instance would run its own queue and the repairs of one board could overlap.
+> [!NOTE]
+> The backend is meant to run as a single Node process. The queue that serialises the repairs of one board's stranded cards, and the record that throttles the check for them, live in that process's memory, so a second instance would run its own queue and the repairs of one board could overlap.
 
 ### Access control
 
 Access has two levels, resolved in `auth.middleware.js` and never in a route.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "secondaryColor": "#bef4f1", "secondaryBorderColor": "#005d5b", "secondaryTextColor": "#005d5b", "tertiaryColor": "#fbe5bf", "tertiaryBorderColor": "#684600", "tertiaryTextColor": "#684600", "lineColor": "#46b1e3", "textColor": "#2f7fa8", "edgeLabelBackground": "#ffffff", "clusterBkg": "#f1faff", "clusterBorder": "#46b1e3"}}}%%
 flowchart LR
   A[Request on a board] --> W{"Role in the<br/>board's workspace?"}
   W -->|none| N["no role: 404 or 403"]
@@ -70,15 +88,22 @@ flowchart LR
   C -->|no| M{"In board.members?"}
   M -->|yes| Mem[member]
   M -->|no| N
+  classDef green fill:#cff3d5,stroke:#195c2e,color:#195c2e
+  classDef coral fill:#ffdcce,stroke:#7a3621,color:#7a3621
+  classDef sand fill:#fbe5bf,stroke:#684600,color:#684600
+  class O,Mem green
+  class N coral
+  class W,C,M sand
 ```
 
 A route asks for a minimum role: `member` or `owner` on a board, `member` or `admin` on a workspace. A soft deleted board or task is a missing one for every route except its own restore, which resolves the role first so that a caller with no role cannot tell a deleted board from an unknown id.
 
 ## Authentication and sessions
 
-The session contract, in one diagram and one table.
+The session slides like a kite on a steady gust: every request you make keeps it up, and it lands on its own when you stop.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "secondaryColor": "#bef4f1", "secondaryBorderColor": "#005d5b", "secondaryTextColor": "#005d5b", "tertiaryColor": "#fbe5bf", "tertiaryBorderColor": "#684600", "tertiaryTextColor": "#684600", "lineColor": "#46b1e3", "textColor": "#2f7fa8", "actorBkg": "#cbeeff", "actorBorder": "#00557e", "actorTextColor": "#00557e", "signalColor": "#46b1e3", "signalTextColor": "#2f7fa8", "labelBoxBkgColor": "#bef4f1", "labelBoxBorderColor": "#005d5b", "labelTextColor": "#005d5b", "loopTextColor": "#005d5b", "noteBkgColor": "#ede0ff", "noteBorderColor": "#563e7b", "noteTextColor": "#563e7b"}}}%%
 sequenceDiagram
   participant C as Client
   participant S as API
@@ -101,12 +126,13 @@ sequenceDiagram
 | Revocation | `tokenVersion` on the user is part of every token. Logout and a password change bump it |
 | Renewal | A side effect of `authenticate`, before the handler runs, so a 403 or a 500 still renews: a human made the request |
 | Client | The token is in `localStorage`. `useKeepAlive` pings from a keydown, a pointer down, a scroll or a tab becoming visible, never from a timer, and `useSessionExpiry` warns 60 seconds before the deadline. Open tabs share renewals over a `BroadcastChannel` |
-| Why no polling | The server cannot enforce inactivity on its own, because it renews on every request it sees. A stray interval in the client would turn the window into a session that never ends, which `e2e/verify/idle.mjs` is there to catch |
+| No polling | The server cannot enforce inactivity on its own, because it renews on every request it sees. A stray interval in the client would turn the window into a session that never ends, which `e2e/verify/idle.mjs` is there to catch |
 | Password reset | A mailed link with a token whose SHA-256 is stored, bounded in number and lifetime, and a successful reset revokes every session |
 
 ## Data model
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "secondaryColor": "#bef4f1", "secondaryBorderColor": "#005d5b", "tertiaryColor": "#fbe5bf", "lineColor": "#46b1e3", "textColor": "#2f7fa8", "attributeBackgroundColorOdd": "#f1faff", "attributeBackgroundColorEven": "#ffffff"}}}%%
 erDiagram
   USER {
     ObjectId _id
@@ -170,25 +196,37 @@ erDiagram
   COLORPALETTE ||--o{ TASK : colours
 ```
 
+<details>
+<summary><strong>The design decisions behind the model</strong></summary>
+
 | Decision | Why |
 |---|---|
 | Every account gets a personal workspace at registration, in the same transaction as the account | A board always has a workspace, so no query handles a board that belongs to nothing |
 | A board's columns are copied from its template and embedded | Renaming or removing a column on one board touches no other board. A task's `status` is the id of one of those embedded columns |
 | A board's colour is one of six hues: `sky`, `teal`, `green`, `sand`, `coral`, `lavender` | The `value` of a board colour is the hue key, and the interface derives its tints from it. A column is painted from the same six entries, chosen by the owner and stored on the column, so adding or removing a column never recolours its neighbours. Task colours keep hex values |
 | A board's owner edits its columns with one request that carries the complete ordered list | A column that carries its `_id` keeps it, so every task's `status` still points at it, and a column left out is removed only while it has no live tasks. A name is 1 to 40 characters and unique on the board ignoring case, a board has 2 to 8 columns, and every rule is checked before one write on the board document, so a refused edit changes nothing. A deleted task whose column was removed stays in the trash and is restored into the first column |
-| A save of the column list carries the `columnsVersion` it was built on, and a rename is its own request | The board holds a counter that every change to its columns increments in the same update. A save applies only while the board still has the version the client read, as a condition in the filter of the write itself, and otherwise answers 409 with the code `COLUMNS_STALE`, so a second tab cannot drop a column another session added. The rename in a column header is `PATCH /boards/:id/columns/:columnId`, which changes one name and never resends the list |
-| A task is never left in a column the board no longer has, and no transaction is needed for it | A task and the board are two documents, so a write cannot be conditional on the column still existing. Instead each side looks again after its own write: creating, moving, editing and restoring a task check that its column is still there, and removing a column looks for tasks still naming it, and either moves such a task to the first column at the foot of it. Whichever write lands second finds the other in place |
+| A save of the column list carries the `columnsVersion` it was built on, and a rename is its own request | Every change to the columns increments the counter in the same update. A save applies only while the board still has the version the client read, as a condition in the filter of the write itself, and otherwise answers 409 with `COLUMNS_STALE`, so a second tab cannot drop a column another session added. The rename in a column header is `PATCH /boards/:id/columns/:columnId`, which changes one name and never resends the list |
+| A task is never left in a column the board no longer has, with no transaction needed | A task and the board are two documents, so a write cannot be conditional on the column still existing. Each side looks again after its own write: creating, moving, editing and restoring a task check that its column is still there, and removing a column looks for tasks still naming it, and either moves such a task to the foot of the first column. Whichever write lands second finds the other in place |
 | A task's `order` is a fractional index key | Keys sort lexicographically, so moving a card writes one document. The client sends the two neighbours it dropped between, never a key, and a neighbour that has moved answers 409 |
-| `deletedAt` on boards and tasks | A soft delete: every read treats the document as missing and a restore brings back exactly what was there. Within the retention window only |
+| `deletedAt` on boards and tasks | A soft delete: every read treats the document as missing and a restore brings back exactly what was there, within the retention window |
 | Names are stored in lowercase and capitalized when presented | `User.toJSON` capitalizes them. Queries read through `lean()` skip that transform and return the stored form |
+
+</details>
 
 ### Soft delete, restore and purge
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "lineColor": "#46b1e3", "textColor": "#2f7fa8", "edgeLabelBackground": "#ffffff"}}}%%
 flowchart LR
   Live["live<br/>deletedAt null"] -->|DELETE| Marked["marked<br/>deletedAt is a date"]
   Marked -->|"restore, inside BOARD_RETENTION_MS"| Live
-  Marked -->|"job, past BOARD_RETENTION_MS"| Gone["removed for good<br/>a board together with its tasks, in a transaction"]
+  Marked -->|"job, past BOARD_RETENTION_MS"| Gone["removed for good<br/>a board with its tasks, in a transaction"]
+  classDef green fill:#cff3d5,stroke:#195c2e,color:#195c2e
+  classDef sand fill:#fbe5bf,stroke:#684600,color:#684600
+  classDef coral fill:#ffdcce,stroke:#7a3621,color:#7a3621
+  class Live green
+  class Marked sand
+  class Gone coral
 ```
 
 The purge job runs once at start and then every `BOARD_PURGE_INTERVAL_MS`. A restore past the retention window answers 404 whether or not the job has reached the document yet, so the window never stretches by an interval.
@@ -198,8 +236,9 @@ The purge job runs once at start and then every `BOARD_PURGE_INTERVAL_MS`. A res
 All of it lives in `front/src`, a React 19 single page application. Server state is TanStack Query with `refetchOnWindowFocus`, a 30 second `staleTime` and no retries, so a window nobody touches never fetches.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif", "primaryColor": "#cbeeff", "primaryBorderColor": "#00557e", "primaryTextColor": "#00557e", "lineColor": "#46b1e3", "textColor": "#2f7fa8"}}}%%
 graph TD
-  Main[main.tsx] --> App[App.tsx<br/>providers and routes]
+  Main[main.tsx] --> App["App.tsx<br/>providers and routes"]
   App --> Context["context<br/>AuthProvider, AuthToastProvider"]
   App --> AppDir["app<br/>layouts, ErrorBoundary, queryClient"]
   App --> Pages["pages<br/>Auth, ResetPassword, Home, Board, Profile, NotFound"]
@@ -208,6 +247,14 @@ graph TD
   Pages --> Services["services<br/>axios client and one module per resource"]
   Features --> Services
   Services --> Models["models<br/>TypeScript types of the API"]
+  classDef sky fill:#cbeeff,stroke:#00557e,color:#00557e
+  classDef teal fill:#bef4f1,stroke:#005d5b,color:#005d5b
+  classDef lavender fill:#ede0ff,stroke:#563e7b,color:#563e7b
+  classDef sand fill:#fbe5bf,stroke:#684600,color:#684600
+  class Main,App lavender
+  class Context,AppDir,Pages sky
+  class Features,Shared teal
+  class Services,Models sand
 ```
 
 | Folder | Holds |
@@ -222,18 +269,6 @@ graph TD
 
 Any 401 clears the stored session and redirects to the sign in page. The production build is `tsc -b && vite build`, and it is also the type check. `VITE_API_URL` and `VITE_USE_STRICT_MODE` are the only variables the application reads, and Vite inlines them at build time.
 
-## End to end and verification
+---
 
-`e2e/tests` holds the Playwright suite, and `e2e/verify` holds standing scripts for what no unit test can see: a real browser, real time, a real database, the production CSP. Both run against the development stack, except `csp.mjs`, which needs the production one.
-
-```mermaid
-graph LR
-  Stack["development stack<br/>docker compose up -d, seed:all"] --> PW["Playwright suite<br/>core loop, edit and delete, profile, password reset"]
-  Stack --> V["verify scripts"]
-  V --> Sec["authorization, session, idle<br/>revocation, renewal, zero idle traffic"]
-  V --> Api["api-surface, integrity, workspaces<br/>versioning, pagination, transactions, two level access"]
-  V --> Ux["drafts, accessibility, rendered-layout,<br/>board-layout, responsive, design-tokens"]
-  Prod["production stack<br/>docker-compose.prod.yml"] --> Csp["csp<br/>no policy violation"]
-```
-
-What each script asserts, and why it exists, is in [e2e/verify/README.md](../e2e/verify/README.md). The `back` and `front` CI jobs, the audit gate and the branch convention are in the [README](../README.md).
+[Back to the README](../README.md) · Next: [Environment](ENVIRONMENT.md)
