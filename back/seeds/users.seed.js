@@ -5,6 +5,12 @@ import bcrypt from 'bcryptjs';
 import User from '../src/models/User.js';
 import Workspace from '../src/models/Workspace.js';
 
+/** The environment variable that holds the password of every example account. */
+const PASSWORD_VARIABLE = 'SEED_USER_PASSWORD';
+
+/** The shortest password the registration rules accept. */
+const MIN_PASSWORD_LENGTH = 8;
+
 const connectDB = async () => {
   try {
     await mongoose.connect(env.MONGODB_URI);
@@ -15,12 +21,13 @@ const connectDB = async () => {
   }
 };
 
+// Example accounts on a reserved domain. Their password is not written here:
+// it comes from the environment, so no credential lives in the repository.
 const seedUsers = [
   {
-    firstName: 'kevin',
-    lastName: 'feuerschvenger',
-    email: 'kfeuerschvenger@gmail.com',
-    password: 'kevin123',
+    firstName: 'olivia',
+    lastName: 'owner',
+    email: 'owner@breezyboard.local',
     role: 'Admin',
     department: 'Management',
     avatar: '',
@@ -28,8 +35,7 @@ const seedUsers = [
   {
     firstName: 'admin',
     lastName: 'user',
-    email: 'admin@example.com',
-    password: 'admin123',
+    email: 'admin@breezyboard.local',
     role: 'Admin',
     department: 'Management',
     avatar: 'https://i.pravatar.cc/150?u=admin',
@@ -37,8 +43,7 @@ const seedUsers = [
   {
     firstName: 'john',
     lastName: 'doe',
-    email: 'john@example.com',
-    password: 'john123',
+    email: 'john@breezyboard.local',
     role: 'Developer',
     department: 'Engineering',
     avatar: 'https://i.pravatar.cc/150?u=john',
@@ -46,8 +51,7 @@ const seedUsers = [
   {
     firstName: 'jane',
     lastName: 'smith',
-    email: 'jane@example.com',
-    password: 'jane123',
+    email: 'jane@breezyboard.local',
     role: 'Designer',
     department: 'Creative',
     avatar: 'https://i.pravatar.cc/150?u=jane',
@@ -55,8 +59,7 @@ const seedUsers = [
   {
     firstName: 'mike',
     lastName: 'johnson',
-    email: 'mike@example.com',
-    password: 'mike123',
+    email: 'mike@breezyboard.local',
     role: 'Manager',
     department: 'Operations',
     avatar: 'https://i.pravatar.cc/150?u=mike',
@@ -64,8 +67,7 @@ const seedUsers = [
   {
     firstName: 'sarah',
     lastName: 'williams',
-    email: 'sarah@example.com',
-    password: 'sarah123',
+    email: 'sarah@breezyboard.local',
     role: 'QA',
     department: 'Testing',
     avatar: 'https://i.pravatar.cc/150?u=sarah',
@@ -73,6 +75,21 @@ const seedUsers = [
 ];
 
 const seed = async () => {
+  const password = process.env[PASSWORD_VARIABLE] ?? '';
+
+  // Without a password there is nothing safe to create, and deleting the
+  // existing accounts first would leave a database with none. The script ends
+  // before it touches anything, and says how to run it, so the reference
+  // data seed that runs next to it still completes.
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    console.warn(
+      `Skipping the example accounts: ${PASSWORD_VARIABLE} must be set to a password of at least ` +
+        `${MIN_PASSWORD_LENGTH} characters. Nothing was changed. For example: ` +
+        `docker compose exec -e ${PASSWORD_VARIABLE}=<password> back npm run seed:users`
+    );
+    process.exit();
+  }
+
   await connectDB();
 
   // Delete existing users, and the personal workspaces that belong to them.
@@ -81,13 +98,15 @@ const seed = async () => {
   await User.deleteMany();
   await Workspace.deleteMany({ isPersonal: true });
 
+  // One hash for every account: the password is the same, and hashing is the
+  // slow part.
+  const salt = await bcrypt.genSalt(env.SALT);
+  const hashedPassword = await bcrypt.hash(password, salt);
+
   // Create users with hashed passwords. Each one gets the personal
   // workspace that registration would have given it, because a user without
   // one cannot create a board at all.
   for (const user of seedUsers) {
-    const salt = await bcrypt.genSalt(env.SALT);
-    const hashedPassword = await bcrypt.hash(user.password, salt);
-
     const created = await User.create({
       ...user,
       password: hashedPassword,
