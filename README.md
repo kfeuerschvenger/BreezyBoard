@@ -8,6 +8,17 @@ BreezyBoard is a web application for planning work on boards. People sign in, be
 
 Access has two levels. A workspace member may be added to individual boards, and a workspace admin administers every board in the workspace. Every authenticated request slides the session forward, and an inactive session ends after 15 minutes by default.
 
+## Tour
+
+![A card dragged into the last column, where it lands](docs/assets/screens/hero.gif)
+
+| | |
+|---|---|
+| ![The home page with four boards](docs/assets/screens/boards-overview.png) | ![A board with four columns](docs/assets/screens/board.png) |
+| ![A card open for editing](docs/assets/screens/task-detail.png) | ![The column management dialog](docs/assets/screens/edit-columns.png) |
+
+The images are generated from the demo workspace by [e2e/showcase](e2e/showcase/README.md).
+
 ## Tech stack
 
 | Layer | Technology |
@@ -37,8 +48,12 @@ Prerequisite: Docker Desktop. Node 22 and npm 11.17.0 are needed only to run the
 
 1. Start Docker Desktop and wait until `docker info` answers.
 2. From the repository root, start the stack: `docker compose up -d --build`
-3. Seed the reference data and the demo accounts: `docker compose exec back npm run seed:all`
-4. Open http://localhost:5173 and sign in as `admin@example.com` with the password `admin123`.
+3. Seed the reference data and the example accounts, choosing the password they share: `docker compose exec -e SEED_USER_PASSWORD=<a password of 8 characters or more> back npm run seed:all`
+4. Open http://localhost:5173 and sign in as `admin@breezyboard.local` with that password.
+
+Without `SEED_USER_PASSWORD` the example accounts are skipped, with a message, and the reference data is still seeded. You can also register your own account from the sign in page.
+
+To explore a populated workspace, seed the demo: `docker compose exec -e DEMO_PASSWORD=<a password of 8 characters or more> back npm run seed:demo`, then sign in as `demo@breezyboard.local`. It creates four boards with cards in every column, and running it again replaces exactly the same data and nothing else. It is separate from `seed:all`, and `seed:users` deletes every account, the demo's included, so run the demo seed last.
 
 The seed scripts delete data, so they refuse to run unless `NODE_ENV` is `development` or `test`, and unless the database host in `MONGODB_URI` is `localhost`, `127.0.0.1`, `::1` or `mongo`, the compose service. A `mongodb+srv` string always counts as remote. To seed a remote database on purpose, run one script directly with the flag, for example `node seeds/users.seed.js --allow-remote`. The demo accounts exist only in development.
 

@@ -14,7 +14,8 @@ const backDir =path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Runs a seed script as a real process, the way `npm run seed:*` does, against the test database. */
 const runSeed = (script, nodeEnv, { mongoUri, args = [] } = {}) => {
-  const env = { ...process.env };
+  // The user seed has no password of its own and skips the accounts without one.
+  const env = { ...process.env, SEED_USER_PASSWORD: 'Example-pass-1' };
 
   if (nodeEnv === undefined) {
     delete env.NODE_ENV;

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser frame</title>
+    <style>
+      /*
+       * The window a raw screenshot is placed in. The capture script loads this
+       * page, calls window.placeShot(...) with the screenshot as a data URL, and
+       * screenshots the .stage element. Nothing here reads the network.
+       *
+       * The colours are the brand's: the ground and sky of the banner, with the
+       * mid blue of the mark.
+       */
+      :root {
+        --sky-light: #46b1e3;
+        --sky-deep: #00557e;
+        --ink: #0f1b2d;
+        --ground: #f3f6f9;
+        --pad: 88px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: #dcecf7;
+      }
+
+      .stage {
+        position: relative;
+        display: inline-block;
+        padding: var(--pad);
+        overflow: hidden;
+        background:
+          radial-gradient(1100px 700px at 12% 8%, rgb(255 255 255 / 0.85), transparent 60%),
+          radial-gradient(900px 600px at 95% 100%, rgb(70 177 227 / 0.55), transparent 65%),
+          linear-gradient(135deg, #e9f3fa 0%, #c7e4f5 48%, #8fc8ea 100%);
+      }
+
+      /* Soft wind strokes behind the window, the banner's motif. */
+      .wind {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .window {
+        position: relative;
+        overflow: hidden;
+        border-radius: 16px;
+        background: var(--ground);
+        box-shadow:
+          0 0 0 1px rgb(15 27 45 / 0.1),
+          0 2px 6px rgb(15 27 45 / 0.08),
+          0 30px 60px -18px rgb(0 60 100 / 0.45),
+          0 60px 120px -30px rgb(0 40 80 / 0.35);
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        height: 46px;
+        padding: 0 18px;
+        background: linear-gradient(#f8fafc, #eef2f6);
+        border-bottom: 1px solid rgb(15 27 45 / 0.08);
+      }
+
+      .dots {
+        display: flex;
+        gap: 9px;
+      }
+
+      .dots i {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+      }
+
+      .dots i:nth-child(1) {
+        background: #ff5f57;
+      }
+
+      .dots i:nth-child(2) {
+        background: #febc2e;
+      }
+
+      .dots i:nth-child(3) {
+        background: #28c840;
+      }
+
+      .title {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        /* The same width as the dots, so the title sits in the middle of the bar. */
+        margin-right: 61px;
+      }
+
+      .title span {
+        min-width: 280px;
+        max-width: 520px;
+        padding: 5px 16px;
+        overflow: hidden;
+        border-radius: 8px;
+        background: rgb(15 27 45 / 0.06);
+        color: #4b586b;
+        font: 500 13px/1.3 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .window img {
+        display: block;
+        width: var(--shot-width, 1600px);
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage">
+      <svg class="wind" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
+        <g fill="none" stroke-linecap="round">
+          <path d="M-20 90C140 40 300 140 470 90S800 40 1030 110" stroke="#ffffff" stroke-width="3" opacity="0.55" />
+          <path d="M-20 170C150 130 330 210 500 170S820 130 1030 190" stroke="#46b1e3" stroke-width="2.5" opacity="0.35" />
+          <path d="M-20 560C170 520 330 610 520 565S830 520 1030 590" stroke="#00557e" stroke-width="2.5" opacity="0.18" />
+          <path d="M-20 630C180 600 340 670 540 635S840 600 1030 650" stroke="#ffffff" stroke-width="3.5" opacity="0.5" />
+        </g>
+      </svg>
+      <div class="window">
+        <div class="bar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          <div class="title"><span id="title">breezyboard</span></div>
+        </div>
+        <img id="shot" alt="" />
+      </div>
+    </div>
+    <script>
+      /**
+       * Puts a screenshot in the window.
+       *
+       * @param {{ src: string, width: number, title?: string }} shot The image as a data URL, and the width in CSS pixels it was taken at.
+       */
+      window.placeShot = async ({ src, width, title }) => {
+        document.documentElement.style.setProperty('--shot-width', `${width}px`);
+        document.getElementById('title').textContent = title || 'breezyboard';
+
+        const image = document.getElementById('shot');
+        image.src = src;
+        await image.decode();
+      };
+    </script>
+  </body>
+</html>
