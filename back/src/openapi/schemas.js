@@ -98,6 +98,7 @@ export const BoardSchema = z.looseObject({
   color: ColorRefSchema,
   template: TemplateRefSchema.nullable(),
   columns: z.array(ColumnSchema),
+  columnsVersion: z.number().int().min(0).describe('Counts the changes made to the columns. A save of the whole column list must send the value it was built on.'),
   workspaceId: objectIdSchema,
   createdBy: z.union([objectIdSchema, UserSummarySchema]).describe('The creator, populated in reads and left as an id in write responses.'),
   members: z.array(z.union([objectIdSchema, UserSummarySchema])).describe('Member ids, or populated people when the response lists members.'),

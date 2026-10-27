@@ -10,6 +10,10 @@ export interface Board {
   // for provenance and for the icon on the dashboard, and its columns are no
   // longer what the board renders.
   columns: Column[];
+  // Counts the changes made to `columns`. A save of the whole list sends the
+  // value its list was built on, and the server refuses it when the columns
+  // have changed since.
+  columnsVersion?: number;
   template: Template | string;
   createdBy: User | string;
   members: User[] | string[];

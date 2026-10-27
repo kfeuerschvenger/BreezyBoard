@@ -7,7 +7,7 @@ import type { Column as ColumnType, Task } from '@/models';
 import { useBreeze } from '@/features/breeze';
 import { CardComposer } from '@/features/tasks';
 import type { LeavingCard, MoveTarget } from '@/features/tasks';
-import { Icon } from '@/shared/ui';
+import { DEFAULT_HUE, Icon, InlineEdit, MID_BACKGROUND, isHue } from '@/shared/ui';
 import TaskCard, { TaskCardLeaving } from './TaskCard';
 import type { CardEntrance } from './TaskCard';
 
@@ -48,6 +48,23 @@ interface ColumnProps {
    */
   leaving?: LeavingCard[];
   onLeavingEnd?: (taskId: string) => void;
+  /**
+   * Makes the column's name editable where it is read, which the board's owner
+   * gets and nobody else. Without it the name is text.
+   */
+  rename?: ColumnRename;
+}
+
+/** What renaming a column in its header needs from the board page. */
+export interface ColumnRename {
+  /** Saves the trimmed name. Rejects when it could not be saved. */
+  save: (title: string) => Promise<void>;
+  /** The reason a name may not be used, or null. */
+  problem: (title: string) => string | null;
+  /** The most characters a name may have. */
+  maxLength?: number;
+  /** Tells the person why the name was not saved. */
+  onError: (message: string) => void;
 }
 
 /** The empty slot a held card would drop into, 58 pixels tall as in the reference design. */
@@ -117,6 +134,7 @@ const Column: React.FC<ColumnProps> = ({
   composerRequest,
   leaving = [],
   onLeavingEnd,
+  rename,
 }) => {
   const { setNodeRef } = useDroppable({
     id: column._id,
@@ -176,7 +194,11 @@ const Column: React.FC<ColumnProps> = ({
   if (gapIndex !== null && gapIndex >= visible) items.push(<Gap key="gap" />);
 
   const empty = visible === 0 && gapIndex === null && heldAway.length === 0;
-  const dot = typeof column.color === 'string' ? column.color : column.color.value;
+  // The dot is the column's stored hue, whichever column it is. The last one
+  // is told apart by the arrival icon, which follows its position, and not by a
+  // colour of its own, so a colour the owner chose is never overridden.
+  const stored = typeof column.color === 'string' ? column.color : column.color?.value;
+  const dot = isHue(stored) ? stored : DEFAULT_HUE;
 
   return (
     <div
@@ -190,12 +212,30 @@ const Column: React.FC<ColumnProps> = ({
     >
       {/* Column header with its colour, title and task count */}
       <div className="flex shrink-0 items-center gap-2.5 px-4 pb-2.5 pt-3.5">
-        <span
-          aria-hidden="true"
-          className={`size-2.5 shrink-0 rotate-12 rounded-[3px] ${isLast ? 'bg-green-mid' : ''}`}
-          style={isLast ? undefined : { backgroundColor: dot }}
-        />
-        <h2 className="min-w-0 truncate font-heading text-[14.5px] font-bold text-ink">{column.title}</h2>
+        <span aria-hidden="true" className={`size-2.5 shrink-0 rotate-12 rounded-[3px] ${MID_BACKGROUND[dot]}`} />
+        {/*
+          A field fills its heading, which is what gives it a width to fill and
+          lets the field cut a long name short with its own ellipsis. The heading's
+          own `truncate` would clip the 8 pixels the field extends into the gap.
+        */}
+        <h2
+          className={`min-w-0 font-heading text-[14.5px] font-bold text-ink ${rename ? 'flex-1' : 'truncate'}`}
+        >
+          {rename ? (
+            <InlineEdit
+              value={column.title}
+              label={`Name of column ${column.title}`}
+              emptyMessage="A column needs a name."
+              failureMessage="The column could not be renamed. Nothing was changed."
+              validate={rename.problem}
+              maxLength={rename.maxLength}
+              onError={rename.onError}
+              onSave={rename.save}
+            />
+          ) : (
+            column.title
+          )}
+        </h2>
         {isLast && <Icon as={IconPlaneArrival} size={16} className="shrink-0 text-green-deep" aria-hidden="true" />}
         <span className="ml-auto inline-flex h-[22px] min-w-6 items-center justify-center rounded-chip bg-line-06 px-1.5 font-mono text-[11.5px] text-ink-secondary">
           {tasks.length}

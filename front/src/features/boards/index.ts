@@ -13,6 +13,8 @@ export {
   useAddBoardMembers,
   useTemplates,
 } from './queries';
+export { useRenameColumn } from './hooks/useRenameColumn';
+export type { ColumnRenamer } from './hooks/useRenameColumn';
 export { boardHueOf, boardHueOptions } from './boardHue';
 export type { BoardHueOption } from './boardHue';
 export { eyebrowFor, greetingFor, partOfDay } from './greeting';

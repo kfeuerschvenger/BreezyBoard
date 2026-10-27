@@ -9,8 +9,10 @@ import {
 } from '../validation/auth.validation.js';
 import {
   addBoardMembersSchema,
+  columnParamsSchema as columnParams,
   createBoardSchema,
   idParamSchema as boardIdParam,
+  renameColumnSchema,
   updateBoardSchema,
 } from '../validation/board.validation.js';
 import { getColorsQuerySchema, idParamSchema as colorIdParam } from '../validation/color.validation.js';
@@ -59,6 +61,7 @@ export const requestModels = {
   ChangePasswordRequest: changePasswordSchema,
   CreateBoardRequest: createBoardSchema,
   UpdateBoardRequest: updateBoardSchema,
+  RenameColumnRequest: renameColumnSchema,
   AddBoardMembersRequest: addBoardMembersSchema,
   CreateTaskRequest: createTaskSchema,
   UpdateTaskRequest: updateTaskSchema,
@@ -270,12 +273,24 @@ export const operations = [
     path: '/boards/{id}',
     tag: 'Boards',
     summary: 'Update a board',
-    description: 'Only title, description and color are applied. Other fields are ignored.',
+    description: 'Only title, description, color and columns are applied. Other fields are ignored. `columns` is the complete new list in its new order: a column that carries its `_id` keeps it, one without is created, and one left out is removed. A name is 1 to 40 characters and unique on the board ignoring case, a board has 2 to 8 columns, and each color is the id of a hue. A column can be removed only while it has no live tasks, otherwise the answer is a 409 naming it. Every rule is checked before anything is written, so a refused edit changes nothing. A save of `columns` must send `columnsVersion`, the value the board had when the list was read, and is applied only while the board still has it: when someone else has changed the columns since, the answer is a 409 with the code COLUMNS_STALE and nothing is written, and the client reloads the board and redoes the edit. Every change to the columns increments the version, and a list identical to the stored one (same ids, names, colors and order) changes nothing: the version is still checked, and the board is answered as it is with `columnsVersion` unchanged. A card that lands in a removed column while the edit is being applied is moved to the first column.',
     access: 'Board owner.',
     request: { params: boardIdParam },
     body: 'UpdateBoardRequest',
     success: { status: 200, model: 'BoardResponse', description: 'The updated board.' },
-    errors: [403, 404],
+    errors: [400, 403, 404, 409],
+  },
+  {
+    method: 'patch',
+    path: '/boards/{id}/columns/{columnId}',
+    tag: 'Boards',
+    summary: 'Rename a column',
+    description: 'Changes the name of one column and nothing else, which is what the in-place rename in a column header uses so that it never sends the whole list. The name is 1 to 40 characters after trimming and different from every other column ignoring case, otherwise the answer is a 400. The change increments the board `columnsVersion`, so an edit dialog opened before it is refused with COLUMNS_STALE. A name identical to the one the column already has changes nothing: the board is answered as it is and `columnsVersion` stays. A 404 means the column is no longer on the board. A 409 means the columns kept changing under every attempt: try again.',
+    access: 'Board owner.',
+    request: { params: columnParams },
+    body: 'RenameColumnRequest',
+    success: { status: 200, model: 'BoardResponse', description: 'The updated board.' },
+    errors: [400, 403, 404, 409],
   },
   {
     method: 'delete',

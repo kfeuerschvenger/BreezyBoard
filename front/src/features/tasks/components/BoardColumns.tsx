@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import Column from '@/components/Column';
+import type { ColumnRename } from '@/components/Column';
 import { TaskCardOverlay } from '@/components/TaskCard';
 import type { Task } from '@/models';
 import { DEFAULT_HUE } from '@/shared/ui';
@@ -33,6 +34,11 @@ export interface BoardColumnsProps {
   /** Deleted cards still playing their exit, and the call that says one has finished. */
   leaving?: LeavingCard[];
   onLeavingEnd?: (taskId: string) => void;
+  /**
+   * What renames a column from its header. Given to the board's owner only, so
+   * that anybody else sees the names as text.
+   */
+  columnRename?: (columnId: string) => ColumnRename;
 }
 
 /**
@@ -53,6 +59,7 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
   onRequestComposer,
   leaving,
   onLeavingEnd,
+  columnRename,
 }) => {
   const colorOf = (task: Task) => resolveColor(task.color, taskColors);
 
@@ -177,6 +184,7 @@ export const BoardColumns: React.FC<BoardColumnsProps> = ({
               composerRequest={column.id === firstColumnId ? composerRequest : 0}
               leaving={leaving}
               onLeavingEnd={onLeavingEnd}
+              rename={columnRename?.(column.id)}
             />
           ))}
         </div>

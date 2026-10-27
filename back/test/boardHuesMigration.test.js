@@ -103,12 +103,12 @@ describe('board hue migration', () => {
   });
 
   test('leaves task and column colours alone', async () => {
-    const { taskColor, columnColor } = await seedColorsAndTemplates();
+    const { taskColor, legacyColumnColor } = await seedColorsAndTemplates();
 
     await migrateBoardHues();
 
     expect(await ColorPalette.exists({ _id: taskColor._id })).toBeTruthy();
-    expect(await ColorPalette.exists({ _id: columnColor._id })).toBeTruthy();
+    expect(await ColorPalette.exists({ _id: legacyColumnColor._id })).toBeTruthy();
   });
 
   test('reports how many boards sit on each hue', async () => {
