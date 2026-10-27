@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 96" role="img" aria-label="breezyboard">
+  <defs>
+    <linearGradient id="bb-ground" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0f1b2d"/>
+      <stop offset="1" stop-color="#163152"/>
+    </linearGradient>
+    <linearGradient id="bb-sky" gradientUnits="userSpaceOnUse" x1="14" y1="10" x2="86" y2="90">
+      <stop offset="0" stop-color="#7fd0f5"/>
+      <stop offset="1" stop-color="#2a9bd0"/>
+    </linearGradient>
+    <linearGradient id="bb-fade" gradientUnits="userSpaceOnUse" x1="150" y1="0" x2="1260" y2="0">
+      <stop offset="0" stop-color="#7fd0f5" stop-opacity="0"/>
+      <stop offset="0.35" stop-color="#7fd0f5" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#7fd0f5" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+  <style>
+    @media (prefers-reduced-motion: no-preference) {
+      .drift { animation: bb-drift 9s ease-in-out infinite alternate; }
+      .d2 { animation-duration: 11s; animation-delay: -3s; }
+      .d3 { animation-duration: 8s; animation-delay: -5s; }
+      @keyframes bb-drift { from { transform: translateX(0); } to { transform: translateX(-24px); } }
+    }
+  </style>
+  <rect width="1280" height="96" rx="14" fill="url(#bb-ground)"/>
+  <g fill="none" stroke="url(#bb-fade)" stroke-linecap="round">
+    <path class="drift" d="M150 34C330 18 470 52 650 34S1000 16 1250 36" stroke-width="4"/>
+    <path class="drift d2" d="M190 50C380 38 520 68 700 52S1060 40 1230 54" stroke-width="3"/>
+    <path class="drift d3" d="M240 68C420 58 560 82 740 68S1040 60 1200 70" stroke-width="5"/>
+  </g>
+  <g transform="translate(36 16) scale(0.64)">
+    <path d="M14 8V92" fill="none" stroke="url(#bb-sky)" stroke-width="8" stroke-linecap="round"/>
+    <g fill="url(#bb-sky)" stroke="url(#bb-sky)" stroke-width="4" stroke-linejoin="round">
+      <polygon points="27,14 41.3,17.3 41.3,66.4 27,70"/>
+      <polygon points="53.3,20 67.6,23.3 67.6,59.9 53.3,63.5"/>
+      <polygon points="79.6,26.1 94,29.4 94,53.3 79.6,57.9"/>
+    </g>
+  </g>
+</svg>
