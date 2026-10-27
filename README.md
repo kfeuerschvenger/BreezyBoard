@@ -42,6 +42,8 @@ Prerequisite: Docker Desktop. Node 22 and npm 11.17.0 are needed only to run the
 
 Without `SEED_USER_PASSWORD` the example accounts are skipped, with a message, and the reference data is still seeded. You can also register your own account from the sign in page.
 
+To explore a populated workspace, seed the demo: `docker compose exec -e DEMO_PASSWORD=<a password of 8 characters or more> back npm run seed:demo`, then sign in as `demo@breezyboard.local`. It creates four boards with cards in every column, and running it again replaces exactly the same data and nothing else. It is separate from `seed:all`, and `seed:users` deletes every account, the demo's included, so run the demo seed last.
+
 The seed scripts delete data, so they refuse to run unless `NODE_ENV` is `development` or `test`, and unless the database host in `MONGODB_URI` is `localhost`, `127.0.0.1`, `::1` or `mongo`, the compose service. A `mongodb+srv` string always counts as remote. To seed a remote database on purpose, run one script directly with the flag, for example `node seeds/users.seed.js --allow-remote`. The demo accounts exist only in development.
 
 | What | Where |

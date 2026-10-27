@@ -63,6 +63,7 @@ Read by the seed scripts only, never by the application, and never given a defau
 | Variable | Read in | Meaning |
 |---|---|---|
 | `SEED_USER_PASSWORD` | `seeds/users.seed.js` | The password of every example account on `breezyboard.local`. At least 8 characters. When unset or shorter, the script prints a warning and changes nothing, so `seed:all` still seeds the reference data |
+| `DEMO_PASSWORD` | `seeds/demo.seed.js`, and `e2e/showcase/capture.mjs` to sign in | The password of the demo account `demo@breezyboard.local` and its two teammates. At least 8 characters. When unset or shorter, the seed fails before it connects |
 
 ## Frontend
 
