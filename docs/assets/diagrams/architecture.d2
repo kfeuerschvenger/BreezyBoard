@@ -1,0 +1,56 @@
+# BreezyBoard architecture, light variant.
+# Render from this folder:
+#   d2 --theme 0 --pad 40 architecture.d2 architecture-light.svg
+#   d2 --theme 200 --pad 40 architecture-dark.d2 architecture-dark.svg
+# The colours are the six board hues (OKLCH hue angles 232, 192, 150, 82, 38, 300).
+# architecture-dark.d2 imports this file and swaps the classes for dark tones.
+
+grid-columns: 3
+horizontal-gap: 160
+
+classes: {
+  sky: {style: {fill: "#cbeeff"; stroke: "#00557e"; font-color: "#00557e"; border-radius: 12; stroke-width: 2}}
+  teal: {style: {fill: "#bef4f1"; stroke: "#005d5b"; font-color: "#005d5b"; border-radius: 12; stroke-width: 2}}
+  green: {style: {fill: "#cff3d5"; stroke: "#195c2e"; font-color: "#195c2e"; stroke-width: 2}}
+  sand: {style: {fill: "#fbe5bf"; stroke: "#684600"; font-color: "#684600"; stroke-width: 2}}
+  coral: {style: {fill: "#ffdcce"; stroke: "#7a3621"; font-color: "#7a3621"; border-radius: 12; stroke-width: 2}}
+  lavender: {style: {fill: "#ede0ff"; stroke: "#563e7b"; font-color: "#563e7b"; border-radius: 12; stroke-width: 2}}
+  group-sky: {style: {fill: "#f1faff"; stroke: "#46b1e3"; font-color: "#00557e"; border-radius: 16; stroke-dash: 4; bold: true}}
+  group-teal: {style: {fill: "#effcfb"; stroke: "#10b9b5"; font-color: "#005d5b"; border-radius: 16; stroke-dash: 4; bold: true}}
+  group-sand: {style: {fill: "#fffaf1"; stroke: "#c7993e"; font-color: "#684600"; border-radius: 16; stroke-dash: 4; bold: true}}
+  flow: {style: {stroke: "#46b1e3"; font-color: "#00557e"; stroke-width: 2}}
+}
+
+client: "In the browser" {
+  class: group-sky
+  grid-rows: 2
+  vertical-gap: 70
+  browser: "Someone with\na board to plan" {class: lavender}
+  spa: "React 19 SPA\nTanStack Query, dnd-kit, Motion\nVite in development, nginx in production" {class: sky}
+}
+
+back: "back · Express 5 on Node 22" {
+  class: group-teal
+  grid-rows: 4
+  vertical-gap: 40
+  gate: "Middleware\nhelmet, CORS, rate limits,\nsliding JWT, role gates" {class: teal}
+  zod: "Zod validation\nalso generates openapi.yaml" {class: teal}
+  logic: "Controllers and services\nordering, soft delete, mail" {class: teal}
+  models: "Mongoose models\nand the purge job" {class: teal}
+}
+
+data: "Where things land" {
+  class: group-sand
+  grid-rows: 3
+  vertical-gap: 50
+  mail: "SMTP\nMailpit in development\na relay in production" {class: coral}
+  uploads: "uploads volume\navatars" {shape: cylinder; class: sand}
+  mongo: "MongoDB 7\nreplica set rs0" {shape: cylinder; class: green}
+}
+
+client.browser -> client.spa {class: flow}
+client.spa -> back.gate: "/api/v1, Bearer in,\nX-Auth-Token out" {class: flow}
+back.gate -> back.zod -> back.logic -> back.models {class: flow}
+back.models -> data.mongo {class: flow}
+back.logic -> data.uploads {class: flow}
+back.logic -> data.mail {class: flow}
