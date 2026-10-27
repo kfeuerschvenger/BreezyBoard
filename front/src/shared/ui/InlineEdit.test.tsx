@@ -304,7 +304,7 @@ describe('InlineEdit', () => {
 
   it('announces a successful save through a polite live region, and the reason for a refused one', async () => {
     const user = userEvent.setup();
-    renderField({ validate: next => (next === 'Done' ? 'Taken.' : null) });
+    renderField({ validate: next => (next === 'Done' ? 'Taken.' : null), onError: undefined });
     const status = screen.getByRole('status');
 
     expect(status).toHaveAttribute('aria-live', 'polite');
@@ -323,6 +323,18 @@ describe('InlineEdit', () => {
 
     await user.click(field());
     expect(status).toBeEmptyDOMElement();
+  });
+
+  it('leaves the shared live region silent on a refusal when onError says why', async () => {
+    const user = userEvent.setup();
+    const { onError } = renderField({ validate: next => (next === 'Done' ? 'Taken.' : null) });
+
+    await user.clear(field());
+    await user.type(field(), 'Done');
+    await user.tab();
+
+    expect(onError).toHaveBeenCalledWith('Taken.');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('keeps its live region out of the heading it sits in, so the heading keeps its name', async () => {

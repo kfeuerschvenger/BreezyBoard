@@ -62,7 +62,8 @@ const WRAPPED_CLASSES = 'resize-none overflow-hidden whitespace-normal break-wor
  * a darker pencil would take the text below 4.5:1.
  *
  * A successful save, and the reason a text was not saved, are announced through
- * one polite live region that every field on the page shares. It lives in the
+ * one polite live region that every field on the page shares. When `onError` is
+ * given the reason is left to it, so it is spoken once and not by both. It lives in the
  * page body and not beside the field: the field sits inside a heading, and text
  * inside a heading becomes part of its accessible name.
  *
@@ -151,8 +152,9 @@ export const InlineEdit = ({
     const refuse = (message: string) => {
       setDraft(value);
       setProblem(message);
-      announce(message);
-      onError?.(message);
+      // With `onError` the caller says why, so the region is not told a second time.
+      if (onError) onError(message);
+      else announce(message);
     };
 
     if (refusal) {
