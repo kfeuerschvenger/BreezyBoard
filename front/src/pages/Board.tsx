@@ -4,7 +4,7 @@ import type { Task } from '@/models';
 import { TaskService } from '@/services';
 import type { TaskNeighbours } from '@/services/task.service';
 import { byOrder } from '@/features/board';
-import { BoardHeader, boardHueOf } from '@/features/boards';
+import { BoardHeader, boardHueOf, useRenameColumn } from '@/features/boards';
 import { useColors } from '@/features/colors';
 import {
   BoardColumns,
@@ -45,6 +45,15 @@ const Board = () => {
     columns,
     cache,
   });
+
+  // The owner renames a column from its header, and the edit dialog uses the
+  // live cards per column to tell which columns can be removed.
+  const renameColumn = useRenameColumn(board);
+  const taskCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const task of tasks) counts[task.status] = (counts[task.status] ?? 0) + 1;
+    return counts;
+  }, [tasks]);
 
   // A deleted card is off the board's list at once and plays its exit from a
   // picture kept here. Neither the request nor the toast wait for it.
@@ -192,7 +201,14 @@ const Board = () => {
     // so the only things that scroll are the column row sideways and each
     // column body down.
     <div className="flex min-h-0 flex-1 animate-bb-view-once flex-col overflow-hidden">
-      <BoardHeader board={board} landed={landed} total={tasks.length} onDeleted={() => navigate('/')} />
+      <BoardHeader
+        board={board}
+        landed={landed}
+        total={tasks.length}
+        onDeleted={() => navigate('/')}
+        taskCounts={taskCounts}
+        onRefreshTasks={cache.refetch}
+      />
 
       <ShellAction>
         <Button
@@ -218,6 +234,7 @@ const Board = () => {
         onRequestComposer={requestComposer}
         leaving={leaving}
         onLeavingEnd={end}
+        columnRename={renameColumn ?? undefined}
       />
 
       <TaskModal

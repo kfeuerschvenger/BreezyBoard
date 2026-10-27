@@ -47,12 +47,14 @@ flowchart TD
 | `services` | The business rules: ordering keys, soft delete and restore, sessions, password reset, mail |
 | `models` | The Mongoose schemas: `User`, `Workspace`, `Board`, `Task`, `ColorPalette`, `BoardTemplate` and the shared column schema |
 | `jobs` | `boardPurge.job.js`, the timer that removes deleted boards and tasks past retention |
-| `constants`, `utils`, `migrations` | Error codes and board hues, the logger, `ApiError` and `responseHandler`, and `migrations/boardHues.js`, the board hue migration. The migration is run by `npm run migrate:board-hues`, which executes the script `seeds/migrate_board_hues.js`: the script connects to the database and calls `migrateBoardHues` from `src/migrations`, and the migration itself holds all of the logic |
+| `constants`, `utils`, `migrations` | Error codes and board hues, the logger, `ApiError` and `responseHandler`, and `migrations/boardHues.js` and `migrations/columnHues.js`, the board and column hue migrations. They are run by `npm run migrate:board-hues` and `npm run migrate:column-hues`, which execute the scripts `seeds/migrate_board_hues.js` and `seeds/migrate_column_hues.js`: a script connects to the database and calls `migrateBoardHues` or `migrateColumnHues` from `src/migrations`, and the migration itself holds all of the logic |
 | `openapi` | The OpenAPI document built from the Zod schemas, and the development only Swagger UI mount |
 
 Every failure leaves through `error.middleware.js` as `{ success: false, message, code, errors? }`. An `ApiError` carries its status and a machine readable `code` (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `TOKEN_REVOKED`, `SESSION_EXPIRED`, `RATE_LIMITED`, `INVALID_RESET_TOKEN`, `WRONG_CURRENT_PASSWORD`, `CONFLICT`, `INTERNAL`). A Mongoose `CastError` or `ValidationError` becomes a 400, and anything else a 500 that names nothing.
 
 `startServer.js` connects the database, listens, starts the purge job and, on `SIGINT` or `SIGTERM`, stops the job, lets the server drain and closes the connection.
+
+The backend is meant to run as a single Node process: the queue that serialises the repairs of one board's stranded cards, and the record that throttles the check for them, live in that process's memory, so a second instance would run its own queue and the repairs of one board could overlap.
 
 ### Access control
 
@@ -130,6 +132,7 @@ erDiagram
     ObjectId color "ColorPalette of type board"
     ObjectId template
     array columns "title, color, order"
+    number columnsVersion "counts changes to columns"
     ObjectId workspaceId
     ObjectId createdBy
     array members
@@ -171,7 +174,10 @@ erDiagram
 |---|---|
 | Every account gets a personal workspace at registration, in the same transaction as the account | A board always has a workspace, so no query handles a board that belongs to nothing |
 | A board's columns are copied from its template and embedded | Renaming or removing a column on one board touches no other board. A task's `status` is the id of one of those embedded columns |
-| A board's colour is one of six hues: `sky`, `teal`, `green`, `sand`, `coral`, `lavender` | The `value` of a board colour is the hue key, and the interface derives its tints from it. Task and column colours keep hex values |
+| A board's colour is one of six hues: `sky`, `teal`, `green`, `sand`, `coral`, `lavender` | The `value` of a board colour is the hue key, and the interface derives its tints from it. A column is painted from the same six entries, chosen by the owner and stored on the column, so adding or removing a column never recolours its neighbours. Task colours keep hex values |
+| A board's owner edits its columns with one request that carries the complete ordered list | A column that carries its `_id` keeps it, so every task's `status` still points at it, and a column left out is removed only while it has no live tasks. A name is 1 to 40 characters and unique on the board ignoring case, a board has 2 to 8 columns, and every rule is checked before one write on the board document, so a refused edit changes nothing. A deleted task whose column was removed stays in the trash and is restored into the first column |
+| A save of the column list carries the `columnsVersion` it was built on, and a rename is its own request | The board holds a counter that every change to its columns increments in the same update. A save applies only while the board still has the version the client read, as a condition in the filter of the write itself, and otherwise answers 409 with the code `COLUMNS_STALE`, so a second tab cannot drop a column another session added. The rename in a column header is `PATCH /boards/:id/columns/:columnId`, which changes one name and never resends the list |
+| A task is never left in a column the board no longer has, and no transaction is needed for it | A task and the board are two documents, so a write cannot be conditional on the column still existing. Instead each side looks again after its own write: creating, moving, editing and restoring a task check that its column is still there, and removing a column looks for tasks still naming it, and either moves such a task to the first column at the foot of it. Whichever write lands second finds the other in place |
 | A task's `order` is a fractional index key | Keys sort lexicographically, so moving a card writes one document. The client sends the two neighbours it dropped between, never a key, and a neighbour that has moved answers 409 |
 | `deletedAt` on boards and tasks | A soft delete: every read treats the document as missing and a restore brings back exactly what was there. Within the retention window only |
 | Names are stored in lowercase and capitalized when presented | `User.toJSON` capitalizes them. Queries read through `lean()` skip that transform and return the stored form |

@@ -63,7 +63,8 @@ export const moveTask = async (req, res, next) => {
 export const getBoardTasks = async (req, res, next) => {
   try {
     const { limit, offset } = req.query;
-    const { tasks, pagination } = await taskService.getTasksByBoard(req.params.boardId, { limit, offset });
+    const columnIds = req.board.columns.map(column => column._id.toString());
+    const { tasks, pagination } = await taskService.getTasksByBoard(req.params.boardId, { limit, offset, columnIds });
     responseHandler(res, 200, tasks, { pagination });
   } catch (error) {
     next(error);

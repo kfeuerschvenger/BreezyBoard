@@ -31,6 +31,15 @@ export const updateBoard = async (req, res, next) => {
   }
 };
 
+export const renameColumn = async (req, res, next) => {
+  try {
+    const board = await boardService.renameColumn(req.params.id, req.params.columnId, req.body.title);
+    responseHandler(res, 200, board);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const deleteBoard = async (req, res, next) => {
   try {
     const board = await boardService.deleteBoard(req.params.id);

@@ -161,7 +161,7 @@ describe('boards', () => {
   });
 
   test('create refuses a task color and a column color, and writes nothing', async () => {
-    for (const color of [colors.taskColor, colors.columnColor]) {
+    for (const color of [colors.taskColor, colors.legacyColumnColor]) {
       const res = await request(app)
         .post('/api/boards')
         .set('Authorization', `Bearer ${owner.token}`)

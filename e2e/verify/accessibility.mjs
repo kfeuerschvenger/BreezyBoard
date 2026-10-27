@@ -520,7 +520,21 @@ await page.getByRole('menuitem', { name: 'Edit board' }).click();
 await page.getByRole('dialog', { name: 'Edit board' }).waitFor();
 await page.getByRole('radio').first().waitFor({ state: 'attached' });
 await scan('board, edit dialog open');
+
+// The columns section holds the rows' named controls, a swatch group on each
+// row and a form that adds a column. A refused name is announced as an alert
+// under the field, which is scanned showing.
+const editDialog = page.getByRole('dialog', { name: 'Edit board' });
+await editDialog.getByRole('textbox', { name: 'New column name' }).fill('   ');
+await editDialog.getByRole('button', { name: 'Add column', exact: true }).click();
+await editDialog.getByRole('alert').filter({ hasText: 'A column needs a name' }).waitFor();
+await scan('board, edit dialog with a refused column name');
 await page.keyboard.press('Escape');
+
+// The owner's column names are fields in the headings, drawn as the heading
+// until they are hovered or focused: scanned with the first one focused.
+await page.getByRole('textbox', { name: /^Name of column / }).first().focus();
+await scan('board, a column name field focused');
 
 // Home with a board on it: the banner over its gradient, the tile's cover, its
 // progress figure and the counts in the tertiary ink on glass. Every earlier

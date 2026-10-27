@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DndContext } from '@dnd-kit/core';
 import Column from './Column';
+import type { ColumnRename } from './Column';
 import { BreezeContext } from '@/features/breeze/breezeContext';
 import type { BreezeContextValue } from '@/features/breeze/breezeContext';
 import type { Column as ColumnModel, Task } from '@/models';
@@ -10,7 +11,7 @@ import type { Column as ColumnModel, Task } from '@/models';
 const column: ColumnModel = {
   _id: 'col-todo',
   title: 'To Do',
-  color: { _id: 'c1', value: '#3B82F6' },
+  color: { _id: 'c1', value: 'sky' },
   order: 0,
 };
 
@@ -105,12 +106,20 @@ describe('Column', () => {
 });
 
 describe('Column, the last one', () => {
-  it('is drawn as where work lands: the arrival icon in the header, a green dot', () => {
+  it('is drawn as where work lands: the arrival icon in the header, and its own hue for a dot', () => {
     renderColumn([], { isLast: true });
 
     const header = screen.getByRole('heading', { name: 'To Do' }).parentElement as HTMLElement;
     expect(header.querySelector('svg.text-green-deep')).not.toBeNull();
-    expect(header.querySelector('span.bg-green-mid')).not.toBeNull();
+    expect(header.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-sky-mid');
+    expect(header.querySelector('span.bg-green-mid')).toBeNull();
+  });
+
+  it('keeps the colour the owner chose, whichever column it is', () => {
+    renderColumn([], { isLast: true, column: { ...column, color: { _id: 'c2', value: 'coral' } } });
+
+    const header = screen.getByRole('heading', { name: 'To Do' }).parentElement as HTMLElement;
+    expect(header.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-coral-mid');
   });
 
   it('keeps its own name', () => {
@@ -131,7 +140,7 @@ describe('Column, the last one', () => {
 
     const header = screen.getByRole('heading', { name: 'To Do' }).parentElement as HTMLElement;
     expect(header.querySelector('svg')).toBeNull();
-    expect(header.querySelector('span[aria-hidden="true"]')).toHaveStyle({ backgroundColor: '#3B82F6' });
+    expect(header.querySelector('span[aria-hidden="true"]')).toHaveClass('bg-sky-mid');
   });
 });
 
@@ -329,5 +338,94 @@ describe('Column, the composer at its foot', () => {
 
     const body = document.querySelector('[data-column-body]') as HTMLElement;
     expect(body.contains(screen.getByRole('button', { name: 'Add a card to To Do' }))).toBe(false);
+  });
+});
+
+describe('Column, renamed in place', () => {
+  const makeRename = (overrides: Partial<ColumnRename> = {}): ColumnRename => ({
+    save: vi.fn().mockResolvedValue(undefined),
+    problem: () => null,
+    onError: vi.fn(),
+    ...overrides,
+  });
+
+  const field = () => screen.getByRole('textbox', { name: 'Name of column To Do' });
+
+  it('is plain text, the heading of the column, when it cannot be renamed', () => {
+    renderColumn([]);
+
+    expect(screen.getByRole('heading', { name: 'To Do' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('keeps the heading, and holds the name in a field inside it, when it can be renamed', () => {
+    renderColumn([], { rename: makeRename() });
+
+    expect(screen.getByRole('heading', { level: 2, name: 'To Do' })).toContainElement(field());
+    expect(field()).toHaveValue('To Do');
+  });
+
+  it('saves the new name when the field loses focus', async () => {
+    const rename = makeRename();
+    renderColumn([], { rename });
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'Inbox');
+    await userEvent.tab();
+
+    expect(rename.save).toHaveBeenCalledExactlyOnceWith('Inbox');
+  });
+
+  it('saves on Enter and puts the name back on Escape without saving', async () => {
+    const rename = makeRename();
+    renderColumn([], { rename });
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'Inbox{Enter}');
+    expect(rename.save).toHaveBeenCalledExactlyOnceWith('Inbox');
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'Discarded{Escape}');
+    expect(field()).toHaveValue('To Do');
+    expect(rename.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a name the board does not accept, says why and keeps the old one', async () => {
+    const rename = makeRename({ problem: title => (title === 'Done' ? 'Another column already has that name' : null) });
+    renderColumn([], { rename });
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'Done');
+    await userEvent.tab();
+
+    expect(rename.save).not.toHaveBeenCalled();
+    expect(rename.onError).toHaveBeenCalledWith('Another column already has that name');
+    expect(field()).toHaveValue('To Do');
+  });
+
+  it('refuses an empty name', async () => {
+    const rename = makeRename();
+    renderColumn([], { rename });
+
+    await userEvent.clear(field());
+    await userEvent.tab();
+
+    expect(rename.save).not.toHaveBeenCalled();
+    expect(rename.onError).toHaveBeenCalledWith('A column needs a name.');
+    expect(field()).toHaveValue('To Do');
+  });
+
+  it('goes back to the old name and says so when the save fails', async () => {
+    const rename = makeRename({ save: vi.fn().mockRejectedValue(new Error('offline')) });
+    renderColumn([], { rename });
+
+    await userEvent.clear(field());
+    await userEvent.type(field(), 'Inbox');
+    await userEvent.tab();
+
+    await waitFor(() =>
+      expect(rename.onError).toHaveBeenCalledWith('The column could not be renamed. Nothing was changed.')
+    );
+    expect(field()).toHaveValue('To Do');
   });
 });
