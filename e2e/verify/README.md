@@ -13,6 +13,8 @@ docker compose up -d
 docker compose exec back npm run seed:all
 ```
 
+`seed:all` seeds the templates and colours the scripts need. It also creates the example accounts when `SEED_USER_PASSWORD` is passed, which none of these scripts uses: each one registers its own accounts.
+
 The stack includes Mailpit, the development mail catcher, on port 8025 (`E2E_MAIL_URL` overrides it). The Playwright suite reads the password reset email through its HTTP API, so that container must be up for `tests/password-reset.spec.ts`.
 
 Then, from `e2e/`:

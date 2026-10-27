@@ -37,8 +37,10 @@ Prerequisite: Docker Desktop. Node 22 and npm 11.17.0 are needed only to run the
 
 1. Start Docker Desktop and wait until `docker info` answers.
 2. From the repository root, start the stack: `docker compose up -d --build`
-3. Seed the reference data and the demo accounts: `docker compose exec back npm run seed:all`
-4. Open http://localhost:5173 and sign in as `admin@example.com` with the password `admin123`.
+3. Seed the reference data and the example accounts, choosing the password they share: `docker compose exec -e SEED_USER_PASSWORD=<a password of 8 characters or more> back npm run seed:all`
+4. Open http://localhost:5173 and sign in as `admin@breezyboard.local` with that password.
+
+Without `SEED_USER_PASSWORD` the example accounts are skipped, with a message, and the reference data is still seeded. You can also register your own account from the sign in page.
 
 The seed scripts delete data, so they refuse to run unless `NODE_ENV` is `development` or `test`, and unless the database host in `MONGODB_URI` is `localhost`, `127.0.0.1`, `::1` or `mongo`, the compose service. A `mongodb+srv` string always counts as remote. To seed a remote database on purpose, run one script directly with the flag, for example `node seeds/users.seed.js --allow-remote`. The demo accounts exist only in development.
 

@@ -37,8 +37,10 @@ Requisito previo: Docker Desktop. Node 22 y npm 11.17.0 hacen falta solo para ej
 
 1. Iniciar Docker Desktop y esperar a que `docker info` responda.
 2. Desde la raíz del repositorio, levantar el stack: `docker compose up -d --build`
-3. Cargar los datos de referencia y las cuentas de demostración: `docker compose exec back npm run seed:all`
-4. Abrir http://localhost:5173 e iniciar sesión como `admin@example.com` con la contraseña `admin123`.
+3. Cargar los datos de referencia y las cuentas de ejemplo, eligiendo la contraseña que comparten: `docker compose exec -e SEED_USER_PASSWORD=<una contraseña de 8 caracteres o más> back npm run seed:all`
+4. Abrir http://localhost:5173 e iniciar sesión como `admin@breezyboard.local` con esa contraseña.
+
+Sin `SEED_USER_PASSWORD` las cuentas de ejemplo se omiten, con un mensaje, y los datos de referencia se cargan igual. También se puede registrar una cuenta propia desde la pantalla de inicio de sesión.
 
 Los scripts de carga eliminan datos, por lo que se niegan a ejecutarse salvo que `NODE_ENV` sea `development` o `test` y que el host de la base de datos en `MONGODB_URI` sea `localhost`, `127.0.0.1`, `::1` o `mongo`, el servicio de compose. Una cadena `mongodb+srv` siempre se considera remota. Para cargar una base de datos remota a propósito, ejecutar un script directamente con la opción, por ejemplo `node seeds/users.seed.js --allow-remote`. Las cuentas de demostración existen solo en desarrollo.
 

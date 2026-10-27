@@ -56,6 +56,14 @@ Values in the Development column are what `docker-compose.yml` sets, and in the 
 
 The test suite sets `MONGODB_URI` to its in-memory replica set, `NODE_ENV` to `test`, `JWT_SECRET` when unset, `PASSWORD_RESET_COOLDOWN_MS` to 1 and `TRUST_PROXY_HOPS` to 1 in `test/globalSetup.js`, and the rate limiters skip themselves under `NODE_ENV=test` unless a test turns them on.
 
+### Seed passwords
+
+Read by the seed scripts only, never by the application, and never given a default: a password written in the repository is a credential for every clone of it. Pass them to the container with `docker compose exec -e NAME=value back npm run ...`, or export them before running a script directly.
+
+| Variable | Read in | Meaning |
+|---|---|---|
+| `SEED_USER_PASSWORD` | `seeds/users.seed.js` | The password of every example account on `breezyboard.local`. At least 8 characters. When unset or shorter, the script prints a warning and changes nothing, so `seed:all` still seeds the reference data |
+
 ## Frontend
 
 Vite inlines every `VITE_` variable into the bundle when the page is built, so a value is fixed by the build and every one of them is readable by anyone who opens the page. Never put a secret in one.
