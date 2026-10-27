@@ -1,21 +1,19 @@
 import { Link } from 'react-router-dom';
 
-/** The three wind swirls of the logo, drawn on a 24 pixel grid in the current text colour. */
+/**
+ * The windsock of the logo, drawn on a 100 unit grid in the current text
+ * colour: a pole and three rounded bands that narrow away from it, each one a
+ * kanban column. The gaps between the bands are wide enough to stay separate
+ * at 16 pixels.
+ */
 export const LogoGlyph = ({ size = 21, className = '' }: { size?: number; className?: string }) => (
-  <svg
-    viewBox="0 0 24 24"
-    width={size}
-    height={size}
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={2}
-    strokeLinecap="round"
-    aria-hidden="true"
-    className={className}
-  >
-    <path d="M3 9h10a3 3 0 1 0-3-3" />
-    <path d="M3 13.5h15a3 3 0 1 1-3 3" />
-    <path d="M3 18h6" />
+  <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden="true" className={className}>
+    <path d="M14 8V92" fill="none" stroke="currentColor" strokeWidth={8} strokeLinecap="round" />
+    <g fill="currentColor" stroke="currentColor" strokeWidth={4} strokeLinejoin="round">
+      <polygon points="27,14 41.3,17.3 41.3,66.4 27,70" />
+      <polygon points="53.3,20 67.6,23.3 67.6,59.9 53.3,63.5" />
+      <polygon points="79.6,26.1 94,29.4 94,53.3 79.6,57.9" />
+    </g>
   </svg>
 );
 
