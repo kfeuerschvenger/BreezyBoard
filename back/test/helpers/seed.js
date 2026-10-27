@@ -18,7 +18,17 @@ export async function seedColorsAndTemplates() {
     type: 'task',
   });
 
+  // A column is painted in a hue, like a board, so this is a second hue entry
+  // of the board palette.
   const columnColor = await ColorPalette.create({
+    name: 'Teal',
+    value: 'teal',
+    type: 'board',
+  });
+
+  // An entry of the hex `column` palette, which a board or a column may not be
+  // painted with: only the six hues of the board palette are accepted.
+  const legacyColumnColor = await ColorPalette.create({
     name: 'Slate',
     value: '#64748B',
     type: 'column',
@@ -34,5 +44,5 @@ export async function seedColorsAndTemplates() {
     ],
   });
 
-  return { boardColor, taskColor, columnColor, template };
+  return { boardColor, taskColor, columnColor, legacyColumnColor, template };
 }

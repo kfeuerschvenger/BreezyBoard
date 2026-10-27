@@ -1,0 +1,435 @@
+import mongoose from 'mongoose';
+import request from 'supertest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import app from '../src/app.js';
+import Board from '../src/models/Board.js';
+import ColorPalette from '../src/models/ColorPalette.js';
+import Task from '../src/models/Task.js';
+import { getTasksByBoard, rehomeStrandedTasks, strandedChecksRecorded } from '../src/services/task.service.js';
+import logger from '../src/utils/logger.js';
+import { createBoard } from './helpers/board.factory.js';
+import { seedColorsAndTemplates } from './helpers/seed.js';
+import { boardColumns, createTask } from './helpers/task.factory.js';
+import { registerUser } from './helpers/user.factory.js';
+
+const asUser = (method, path, account) =>
+  request(app)[method](`/api${path}`).set('Authorization', `Bearer ${account.token}`);
+
+// A column is removed while a task is being written into it. The two are
+// separate documents, so each test lands one side between the other side's
+// check and its write, which is the only way to meet the gap on purpose.
+describe('a task and the removal of its column racing', () => {
+  let colors;
+  let owner;
+  let board;
+  let extra;
+  let first;
+
+  const columnIds = async () => (await boardColumns(board._id)).map(column => column._id.toString());
+
+  const removeExtra = async () => {
+    const kept = (await boardColumns(board._id))
+      .filter(column => column._id.toString() !== extra)
+      .map(column => ({ _id: column._id.toString(), title: column.title, color: column.color.toString() }));
+    const { columnsVersion } = await Board.findById(board._id).select('columnsVersion');
+    const res = await asUser('put', `/boards/${board._id}`, owner).send({ columns: kept, columnsVersion });
+
+    expect(res.status).toBe(200);
+  };
+
+  // Runs `action` once, right after the next read of the board's columns that
+  // a task write makes to check its column, and before that write goes ahead.
+  // That read is the one call site that asks for the `columns` projection and
+  // nothing else: every other read of the board, and every query that is not
+  // that call, is returned exactly as the model built it.
+  const afterNextColumnCheck = action => {
+    const original = Board.findOne.bind(Board);
+    let armed = true;
+
+    vi.spyOn(Board, 'findOne').mockImplementation((...args) => {
+      const query = original(...args);
+      const select = query.select.bind(query);
+
+      query.select = (...fields) => {
+        const selected = select(...fields);
+
+        if (!armed || fields.length !== 1 || fields[0] !== 'columns') return selected;
+
+        armed = false;
+
+        return selected.then(async result => {
+          await action();
+
+          return result;
+        });
+      };
+
+      return query;
+    });
+  };
+
+  const strandedCount = async () => Task.countDocuments({ boardId: board._id, deletedAt: null, status: { $nin: await columnIds() } });
+
+  beforeEach(async () => {
+    colors = await seedColorsAndTemplates();
+    await ColorPalette.create({ name: 'sand', value: 'sand', type: 'board' });
+    owner = await registerUser();
+    board = await createBoard(owner.token, colors.boardColor._id, { title: 'Race' });
+
+    const sand = await ColorPalette.findOne({ value: 'sand' });
+    const current = await boardColumns(board._id);
+    const { columnsVersion } = await Board.findById(board._id).select('columnsVersion');
+    const grown = [
+      ...current.map(column => ({ _id: column._id.toString(), title: column.title, color: column.color.toString() })),
+      { title: 'Review', color: sand._id.toString() },
+    ];
+
+    await asUser('put', `/boards/${board._id}`, owner).send({ columns: grown, columnsVersion });
+    const columns = await boardColumns(board._id);
+
+    first = columns[0]._id.toString();
+    extra = columns.find(column => column.title === 'Review')._id.toString();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('a task created into a column that is removed meanwhile ends up in the first column, and is on the board', async () => {
+    afterNextColumnCheck(removeExtra);
+
+    const res = await asUser('post', `/tasks/board/${board._id}`, owner).send({ title: 'Late', status: extra, color: colors.taskColor._id.toString() });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe(first);
+    expect(await strandedCount()).toBe(0);
+
+    const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+    expect(onBoard.body.data.map(task => task.title)).toEqual(['Late']);
+    expect(onBoard.body.pagination.total).toBe(1);
+  });
+
+  test('a task moved into a column that is removed meanwhile ends up in the first column', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+    afterNextColumnCheck(removeExtra);
+
+    const res = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe(first);
+    expect(await strandedCount()).toBe(0);
+  });
+
+  test('a task whose status is edited to a column that is removed meanwhile ends up in the first column', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+    afterNextColumnCheck(removeExtra);
+
+    const res = await asUser('put', `/tasks/${task._id}`, owner).send({ status: extra });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe(first);
+    expect(await strandedCount()).toBe(0);
+  });
+
+  test('a trashed task restored into a column that is removed meanwhile ends up in the first column', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: extra });
+    await asUser('delete', `/tasks/${task._id}`, owner);
+    afterNextColumnCheck(removeExtra);
+
+    const res = await asUser('post', `/tasks/${task._id}/restore`, owner);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe(first);
+    expect(await strandedCount()).toBe(0);
+  });
+
+  test('a column removed after it was found empty, while a task lands in it, leaves that task in the first column', async () => {
+    const original = Task.distinct.bind(Task);
+    // The emptiness check is the first thing the removal does, so a task
+    // created here is in the gap between the check and the write.
+    vi.spyOn(Task, 'distinct').mockImplementationOnce((...args) =>
+      original(...args).then(async result => {
+        await createTask(owner.token, board._id, colors.taskColor._id, { title: 'In the gap', status: extra });
+        return result;
+      })
+    );
+
+    await removeExtra();
+
+    expect(await strandedCount()).toBe(0);
+    const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+    expect(onBoard.body.data.map(task => task.title)).toEqual(['In the gap']);
+    expect(onBoard.body.data[0].status).toBe(first);
+  });
+
+  test('the moved task sits at the foot of the first column, below the cards already there', async () => {
+    const resident = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+    afterNextColumnCheck(removeExtra);
+
+    const res = await asUser('post', `/tasks/board/${board._id}`, owner).send({ title: 'Late', status: extra, color: colors.taskColor._id.toString() });
+
+    expect(res.body.data.order > resident.order).toBe(true);
+  });
+
+  test('a removal that has no card in the gap moves nothing', async () => {
+    const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+
+    await removeExtra();
+
+    expect((await Task.findById(task._id)).order).toBe(task.order);
+    expect(await strandedCount()).toBe(0);
+  });
+
+  describe('a write whose column is still there', () => {
+    test('costs one existence check and does not scan the board for stranded tasks', async () => {
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      const scan = vi.spyOn(Task, 'find');
+
+      const res = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe(extra);
+      expect(scan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a repair that fails after the write was committed', () => {
+    test('a moved task is answered as moved, not as an error', async () => {
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      vi.spyOn(Board, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+
+      const res = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe(extra);
+      expect((await Task.findById(task._id)).status).toBe(extra);
+    });
+
+    test('a created task is answered as created', async () => {
+      vi.spyOn(Board, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+
+      const res = await asUser('post', `/tasks/board/${board._id}`, owner).send({ title: 'Kept', status: first, color: colors.taskColor._id.toString() });
+
+      expect(res.status).toBe(201);
+      expect(await Task.countDocuments({ boardId: board._id, title: 'Kept' })).toBe(1);
+    });
+
+    test('a column removal is answered as saved', async () => {
+      await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      const failure = new Error('connection lost');
+      // The repair reads the stranded tasks as `find(...).select(...)`, so it is
+      // the `select` that rejects, as it does when the connection drops.
+      vi.spyOn(Task, 'find').mockImplementationOnce(() => ({ select: () => Promise.reject(failure) }));
+      const logged = vi.spyOn(logger, 'error');
+
+      await removeExtra();
+
+      expect(await columnIds()).not.toContain(extra);
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ err: failure }),
+        'Could not move the cards left in a removed column'
+      );
+    });
+
+    test('a card the failed repair left behind is moved when the tasks of the board are next read', async () => {
+      const task = await Task.create({ title: 'Left behind', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      expect(await strandedCount()).toBe(1);
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(onBoard.status).toBe(200);
+      expect(onBoard.body.data.map(listed => listed.title)).toEqual(['Left behind']);
+      expect(onBoard.body.data[0].status).toBe(first);
+      expect(onBoard.body.pagination.total).toBe(1);
+      expect((await Task.findById(task._id)).status).toBe(first);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('reading the tasks of the board still answers when the repair cannot run', async () => {
+      await Task.create({ title: 'Left behind', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      vi.spyOn(Task, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+      const logged = vi.spyOn(logger, 'error');
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(onBoard.status).toBe(200);
+      expect(logged).toHaveBeenCalled();
+    });
+
+    test('a task another repair has already moved is answered where it is now', async () => {
+      const original = Board.exists.bind(Board);
+      // Between the write and the column check, the column goes and another
+      // repair moves the task, so this call's own repair finds nothing to move.
+      vi.spyOn(Board, 'exists').mockImplementationOnce(async (...args) => {
+        await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+        await rehomeStrandedTasks(board._id);
+
+        return original(...args);
+      });
+
+      const res = await asUser('post', `/tasks/board/${board._id}`, owner).send({ title: 'Late', status: extra, color: colors.taskColor._id.toString() });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.status).toBe(first);
+    });
+  });
+
+  describe('reading the tasks of a board', () => {
+    test('reads no board beyond the one the route has already loaded', async () => {
+      const read = vi.spyOn(Board, 'findOne');
+
+      const res = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(res.status).toBe(200);
+      // The one call is the authorization middleware's own read of the board.
+      expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    test('checks for stranded tasks once within the window, not on every read', async () => {
+      const check = vi.spyOn(Task, 'exists');
+
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(1);
+    });
+
+    test('checks again once the window has passed', async () => {
+      const check = vi.spyOn(Task, 'exists');
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      clock.mockReturnValue(now + 31_000);
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(2);
+    });
+
+    test('checks and repairs right after a column was removed, inside the window', async () => {
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      const original = Task.distinct.bind(Task);
+      vi.spyOn(Task, 'distinct').mockImplementationOnce((...args) =>
+        original(...args).then(async result => {
+          await createTask(owner.token, board._id, colors.taskColor._id, { title: 'In the gap', status: extra });
+          return result;
+        })
+      );
+      // The removal's own repair fails, which leaves the card behind.
+      vi.spyOn(Task, 'find').mockImplementationOnce(() => ({ select: () => Promise.reject(new Error('connection lost')) }));
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      await removeExtra();
+      expect(await strandedCount()).toBe(1);
+      const check = vi.spyOn(Task, 'exists');
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(onBoard.body.data[0].status).toBe(first);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('checks and repairs right after a write whose own repair failed, inside the window', async () => {
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      vi.spyOn(Board, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const moved = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+      expect(moved.status).toBe(200);
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      expect(await strandedCount()).toBe(1);
+      const check = vi.spyOn(Task, 'exists');
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(onBoard.body.data[0].status).toBe(first);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('refuses to run without the columns of the board', async () => {
+      await expect(getTasksByBoard(board._id, { limit: 1 })).rejects.toThrow('columnIds');
+      await expect(getTasksByBoard(board._id)).rejects.toThrow('columnIds');
+    });
+
+    test('keeps no more boards on record than its cap, and lets expired ones go', async () => {
+      vi.spyOn(Task, 'exists').mockResolvedValue(null);
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+      const read = id => getTasksByBoard(id, { columnIds: ['column'], limit: 1 });
+
+      for (let count = 0; count < 1005; count += 1) {
+        await read(new mongoose.Types.ObjectId());
+      }
+
+      expect(strandedChecksRecorded()).toBeLessThanOrEqual(1000);
+
+      clock.mockReturnValue(now + 31_000);
+      await read(new mongoose.Types.ObjectId());
+
+      expect(strandedChecksRecorded()).toBe(1);
+    });
+  });
+
+  describe('rehomeStrandedTasks', () => {
+    test('moves only live tasks of a missing column, and leaves the trash alone', async () => {
+      const live = await Task.create({ title: 'Live', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      const trashed = await Task.create({ title: 'Trashed', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a1', deletedAt: new Date() });
+      const resident = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+
+      const moved = await rehomeStrandedTasks(board._id);
+
+      expect(moved).toBe(1);
+      expect((await Task.findById(live._id)).status).toBe(first);
+      expect((await Task.findById(trashed._id)).status).toBe(extra);
+      expect((await Task.findById(resident._id)).status).toBe(first);
+    });
+
+    test('is limited to the scope it is given', async () => {
+      const a = await Task.create({ title: 'A', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      const b = await Task.create({ title: 'B', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a1' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+
+      expect(await rehomeStrandedTasks(board._id, { taskId: a._id })).toBe(1);
+
+      expect((await Task.findById(a._id)).status).toBe(first);
+      expect((await Task.findById(b._id)).status).toBe(extra);
+    });
+
+    test('two repairs running together give the tasks they move different positions', async () => {
+      const a = await Task.create({ title: 'A', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      const b = await Task.create({ title: 'B', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a1' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+
+      const moved = await Promise.all([rehomeStrandedTasks(board._id, { taskId: a._id }), rehomeStrandedTasks(board._id, { taskId: b._id })]);
+
+      expect(moved).toEqual([1, 1]);
+      const orders = (await Task.find({ boardId: board._id }).select('order status')).map(task => task.order);
+      expect(new Set(orders).size).toBe(2);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('a repair that fails does not stop the one queued behind it', async () => {
+      const task = await Task.create({ title: 'A', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      vi.spyOn(Task, 'find').mockImplementationOnce(() => ({ select: () => Promise.reject(new Error('connection lost')) }));
+
+      const [failed, next] = await Promise.allSettled([rehomeStrandedTasks(board._id), rehomeStrandedTasks(board._id)]);
+
+      expect(failed.status).toBe('rejected');
+      expect(next).toEqual({ status: 'fulfilled', value: 1 });
+      expect((await Task.findById(task._id)).status).toBe(first);
+    });
+
+    test('does nothing for a deleted board', async () => {
+      const task = await Task.create({ title: 'A', boardId: board._id, status: extra, color: colors.taskColor._id, order: 'a0' });
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } }, deletedAt: new Date() });
+
+      expect(await rehomeStrandedTasks(board._id)).toBe(0);
+      expect((await Task.findById(task._id)).status).toBe(extra);
+    });
+  });
+});

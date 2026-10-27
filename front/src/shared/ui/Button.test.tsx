@@ -170,4 +170,18 @@ describe('IconButton', () => {
     expect(button).toHaveClass('focus-ring', 'cursor-not-allowed');
     expect(button).not.toHaveClass('cursor-pointer');
   });
+
+  it('looks blocked, gives no hover response and stays focusable when it is aria-disabled', () => {
+    render(
+      <IconButton aria-label="Close" aria-disabled="true">
+        x
+      </IconButton>
+    );
+
+    const button = screen.getByRole('button', { name: 'Close' });
+    expect(button).toBeEnabled();
+    expect(button).toHaveClass('cursor-not-allowed', 'opacity-60');
+    expect(button).not.toHaveClass('cursor-pointer');
+    expect(button).not.toHaveClass('enabled:hover:text-ink');
+  });
 });

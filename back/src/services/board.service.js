@@ -10,8 +10,10 @@ import Workspace from '../models/Workspace.js';
 import { resolveBoardRole, resolveWorkspaceRole } from '../middleware/auth.middleware.js';
 import { ensureWorkspaceMembership } from './workspace.service.js';
 import ApiError from '../utils/apiError.js';
+import logger from '../utils/logger.js';
 import { ErrorCode } from '../constants/errorCodes.js';
 import { BOARD_HUES } from '../constants/boardHues.js';
+import { forgetStrandedCheck, rehomeStrandedTasks } from './task.service.js';
 
 // Columns are copied out of the template rather than referenced, so that the
 // board owns its column ids. Mongoose assigns fresh subdocument ids on the
@@ -56,6 +58,137 @@ const assertBoardColorExists = async colorId => {
   if (!(await ColorPalette.exists({ _id: colorId, type: 'board', value: { $in: BOARD_HUES } }))) {
     throw new ApiError(400, 'color must be the id of a board color', [], ErrorCode.VALIDATION_ERROR);
   }
+};
+
+// A column is painted in one of the six hues, the same entries a board's own
+// colour comes from, because a hue key is unique in the palette and so one
+// entry per hue serves both. Every id is looked up before it is written, for
+// the reason a board colour is, and a repeated id counts once.
+const assertColumnColorsExist = async colorIds => {
+  const unique = [...new Set(colorIds.map(String))];
+  const found = await ColorPalette.countDocuments({ _id: { $in: unique }, type: 'board', value: { $in: BOARD_HUES } });
+
+  if (found !== unique.length) {
+    throw new ApiError(400, 'every column color must be the id of a hue', [], ErrorCode.VALIDATION_ERROR);
+  }
+};
+
+const staleColumns = () =>
+  new ApiError(
+    409,
+    "The board's columns were changed by someone else after they were loaded. Reload the columns and try again.",
+    [],
+    ErrorCode.COLUMNS_STALE
+  );
+
+// The filter that matches a board whose `columnsVersion` is `version`. A board
+// stored before the field existed has none, and Mongo does not match a missing
+// field against 0, so version 0 also matches a missing one.
+const atColumnsVersion = version => ({ columnsVersion: version === 0 ? { $in: [0, null] } : version });
+
+/**
+ * Turns the list of columns an edit sends into the list to store, or refuses.
+ *
+ * The request is the whole new list in its new order. A column that carries an
+ * id is one of the board's own and keeps it, which is what keeps every task's
+ * `status` pointing at it; one without an id is new. A column of the board that
+ * the list leaves out is a removal, and a removal needs the column to have no
+ * live tasks: it is refused with a 409 naming the first column that still has
+ * some, before anything is written. Deleted tasks do not block it. They stay in
+ * the trash under the id of a column that no longer exists, and a restore puts
+ * them in the first column.
+ *
+ * The list is built on the columns the client last read, so it is refused with
+ * a 409 and the code COLUMNS_STALE when the board's `columnsVersion` is no
+ * longer the one the client sent. The write that follows repeats that check in
+ * its own filter, because a change landing between this read and that write
+ * must not be overwritten either.
+ *
+ * The emptiness check and the write that follows are two operations, so a card
+ * created in the column in the gap between them is not excluded here. The
+ * caller moves any such card once the write is done (`rehomeStrandedTasks`).
+ *
+ * A list that is the stored one, with the same ids, names, colours and order, is
+ * a save of nothing: `unchanged` says so, and the caller writes no columns and
+ * does not move the version. The version check comes first, so a stale list is
+ * still refused.
+ *
+ * @param {string} boardId
+ * @param {Array<{ _id?: string, title: string, color: string }>} requested
+ * @param {number} columnsVersion the version the list was built on
+ * @returns {Promise<{ columns: Array<{ _id: mongoose.Types.ObjectId, title: string, color: string, order: number }>, removedIds: string[], unchanged: boolean }>}
+ */
+const planColumns = async (boardId, requested, columnsVersion) => {
+  const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns columnsVersion');
+
+  if (!board) {
+    throw new ApiError(404, 'Board not found');
+  }
+
+  if (board.columnsVersion !== columnsVersion) {
+    throw staleColumns();
+  }
+
+  const storedIds = new Set(board.columns.map(column => column._id.toString()));
+  const keptIds = new Set();
+
+  for (const column of requested) {
+    if (!column._id) continue;
+
+    const id = column._id.toLowerCase();
+
+    if (!storedIds.has(id)) {
+      throw new ApiError(400, 'columns may only keep the ids of columns the board already has', [], ErrorCode.VALIDATION_ERROR);
+    }
+    keptIds.add(id);
+  }
+
+  await assertColumnColorsExist(requested.map(column => column.color));
+
+  const removed = board.columns.filter(column => !keptIds.has(column._id.toString()));
+
+  if (removed.length > 0) {
+    const occupied = new Set(
+      await Task.distinct('status', {
+        boardId,
+        status: { $in: removed.map(column => column._id.toString()) },
+        deletedAt: null,
+      })
+    );
+    const blocking = [...removed].sort((a, b) => a.order - b.order).find(column => occupied.has(column._id.toString()));
+
+    if (blocking) {
+      throw new ApiError(
+        409,
+        `The column "${blocking.title}" still has tasks. Move them to another column before removing it.`,
+        [{ columnId: blocking._id.toString(), title: blocking.title }],
+        ErrorCode.CONFLICT
+      );
+    }
+  }
+
+  const columns = requested.map((column, order) => ({
+    _id: column._id ? new mongoose.Types.ObjectId(column._id) : new mongoose.Types.ObjectId(),
+    title: column.title,
+    color: column.color,
+    order,
+  }));
+
+  const inStoredOrder = [...board.columns].sort((a, b) => a.order - b.order);
+  const unchanged =
+    columns.length === inStoredOrder.length &&
+    columns.every((column, index) => {
+      const current = inStoredOrder[index];
+
+      return (
+        column._id.toString() === current._id.toString() &&
+        column.title === current.title &&
+        column.color.toString() === current.color.toString() &&
+        column.order === current.order
+      );
+    });
+
+  return { columns, removedIds: removed.map(column => column._id.toString()), unchanged };
 };
 
 // The schema checks that each member id is shaped like an id, and nothing
@@ -159,12 +292,39 @@ export const getBoardById = async id => {
  * below carry `deletedAt: null` in their own filter and treat no match as a
  * missing board.
  */
-export const updateBoard = async (id, updateData) => {
-  if (updateData.color !== undefined) {
-    await assertBoardColorExists(updateData.color);
+export const updateBoard = async (id, { columns, columnsVersion, ...fields }) => {
+  if (fields.color !== undefined) {
+    await assertBoardColorExists(fields.color);
   }
 
-  const board = await Board.findOneAndUpdate({ _id: id, deletedAt: null }, updateData, {
+  // Every rule is checked before the one write below, and that write replaces
+  // the whole list on one document, so a rejected column leaves the title, the
+  // colour and the columns exactly as they were.
+  //
+  // A save of the columns applies only while the board still has the version
+  // the list was built on. That condition is in the filter of the write itself,
+  // so a change that lands after the plan was made makes the write match
+  // nothing instead of being overwritten, and the version moves on in the same
+  // update.
+  const planned = columns === undefined ? null : await planColumns(id, columns, columnsVersion);
+  // A list identical to the stored one is not a change to the columns: it is
+  // dropped here, and the version stays where it is.
+  const plan = planned?.unchanged ? null : planned;
+
+  if (planned?.unchanged && Object.keys(fields).length === 0) {
+    const current = await populateRenameAnswer(Board.findOne({ _id: id, deletedAt: null }));
+
+    if (!current) {
+      throw new ApiError(404, 'Board not found');
+    }
+
+    return current;
+  }
+
+  const filter = { _id: id, deletedAt: null, ...(plan && atColumnsVersion(columnsVersion)) };
+  const updateData = plan ? { ...fields, columns: plan.columns, $inc: { columnsVersion: 1 } } : fields;
+
+  const board = await Board.findOneAndUpdate(filter, updateData, {
     new: true,
     runValidators: true,
   })
@@ -174,10 +334,117 @@ export const updateBoard = async (id, updateData) => {
     .populate('template', 'name iconName');
 
   if (!board) {
+    // Nothing matched: the board was deleted, or its columns changed after the
+    // plan read them. Which one decides the answer.
+    if (plan && (await Board.exists({ _id: id, deletedAt: null }))) {
+      throw staleColumns();
+    }
+
     throw new ApiError(404, 'Board not found');
   }
 
+  // A card can have been created in a removed column after the plan checked
+  // that it was empty. Moving it now means it is never left in a column that no
+  // board shows.
+  if (plan?.removedIds.length) {
+    // The next read of the board's tasks checks for stranded cards again.
+    forgetStrandedCheck(id);
+
+    try {
+      await rehomeStrandedTasks(id, { statuses: plan.removedIds });
+    } catch (err) {
+      // The columns are already saved, so the edit succeeded. Answering with an
+      // error would tell the owner that a change that was made was not. A card
+      // left behind stays hidden until the board's tasks are next read, and
+      // `getTasksByBoard` moves it then, because the check was forgotten above.
+      logger.error({ err, boardId: String(id) }, 'Could not move the cards left in a removed column');
+    }
+  }
+
   return board;
+};
+
+const RENAME_ATTEMPTS = 3;
+
+// The board as an update answers: members, colour, the colour of each column
+// and the template filled in.
+const populateRenameAnswer = query =>
+  query
+    .populate('members', 'firstName lastName email')
+    .populate('color', 'name value')
+    .populate('columns.color', 'name value')
+    .populate('template', 'name iconName');
+
+/**
+ * Changes the name of one column and nothing else.
+ *
+ * The in-place rename in a column header uses this instead of sending the
+ * whole list: a list built from a stale view would drop a column another
+ * session added, and a rename has no reason to carry the others at all. The
+ * name follows the rules of a name in the list, 1 to 40 characters after
+ * trimming and different from every other column ignoring case.
+ *
+ * The write is conditional on the version the name was checked against, and
+ * increments it, so it cannot slip a duplicate past a rename that landed in the
+ * meantime, and a dialog opened earlier finds out it is stale. A rename that
+ * lost that race is checked again against the board as it is now, so two
+ * renames of different columns both succeed and a clash with the other one is
+ * refused. The 409 is for a board that keeps changing under every attempt.
+ *
+ * A name identical to the one the column has (exact, after trimming) changes
+ * nothing: the board is answered as it is, with no write and no new version.
+ *
+ * @param {string} boardId
+ * @param {string} columnId
+ * @param {string} title the trimmed new name
+ * @returns {Promise<object>} the board, as an update answers
+ */
+export const renameColumn = async (boardId, columnId, title) => {
+  const wanted = columnId.toLowerCase();
+
+  for (let attempt = 0; attempt < RENAME_ATTEMPTS; attempt += 1) {
+    const board = await Board.findOne({ _id: boardId, deletedAt: null }).select('columns columnsVersion');
+
+    if (!board) {
+      throw new ApiError(404, 'Board not found');
+    }
+
+    const column = board.columns.find(candidate => candidate._id.toString() === wanted);
+
+    if (!column) {
+      throw new ApiError(404, 'Column not found');
+    }
+
+    if (board.columns.some(other => other !== column && other.title.toLowerCase() === title.toLowerCase())) {
+      throw new ApiError(400, `Another column is already called "${title}". Column names must be different`, [], ErrorCode.VALIDATION_ERROR);
+    }
+
+    // The same name again is not a change: nothing is written and the version
+    // stays, so a dialog opened earlier is not told its columns went stale.
+    if (column.title === title) {
+      const unchanged = await populateRenameAnswer(Board.findOne({ _id: boardId, deletedAt: null }));
+
+      if (!unchanged) {
+        throw new ApiError(404, 'Board not found');
+      }
+
+      return unchanged;
+    }
+
+    const updated = await populateRenameAnswer(
+      Board.findOneAndUpdate(
+        { _id: boardId, deletedAt: null, 'columns._id': column._id, ...atColumnsVersion(board.columnsVersion) },
+        { $set: { 'columns.$.title': title }, $inc: { columnsVersion: 1 } },
+        { new: true, runValidators: true }
+      )
+    );
+
+    if (updated) {
+      return updated;
+    }
+  }
+
+  throw new ApiError(409, "The board's columns keep changing. Try again.", [], ErrorCode.CONFLICT);
 };
 
 /**

@@ -25,17 +25,26 @@ const SHAPE_CLASSES: Record<IconButtonShape, string> = {
 // The glyph inherits the button's colour, so a caller never styles the icon
 // to make it muted: secondary text at rest, ink on hover.
 const BASE_CLASSES =
-  'inline-flex shrink-0 items-center justify-center text-ink-secondary transition-colors duration-200 ' +
-  'enabled:hover:bg-line-06 enabled:hover:text-ink focus-ring';
+  'inline-flex shrink-0 items-center justify-center text-ink-secondary transition-colors duration-200 focus-ring';
+
+const HOVER_CLASSES = 'enabled:hover:bg-line-06 enabled:hover:text-ink';
 
 /**
  * IconButton
  * Shared icon-only button primitive. Requires aria-label so it can never be
  * rendered without an accessible name.
+ *
+ * A control that is blocked and must still be reached by keyboard and screen
+ * reader, so that the reason it is blocked can be announced from its
+ * `aria-describedby`, is given `aria-disabled` instead of `disabled`. It looks
+ * the same as a disabled one and gives no hover response, and its caller
+ * ignores the click.
  */
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   ({ disabled, size = 'md', shape = 'square', className = '', ...rest }, ref) => {
-    const cursorClass = disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer';
+    const ariaDisabled = rest['aria-disabled'];
+    const blocked = Boolean(disabled) || ariaDisabled === true || ariaDisabled === 'true';
+    const cursorClass = blocked ? 'cursor-not-allowed opacity-60' : `cursor-pointer ${HOVER_CLASSES}`;
 
     return (
       <button

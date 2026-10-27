@@ -21,6 +21,45 @@ export const apiErrorCodeOf = (error: unknown): string | undefined => {
 };
 
 /**
+ * The `message` of a failed request's error body, or undefined when there is
+ * none. Only for answers whose text is written for a person to read, such as
+ * the 409 that names the column that still has cards.
+ */
+export const apiErrorMessageOf = (error: unknown): string | undefined => {
+  if (!isAxiosError(error)) {
+    return undefined;
+  }
+
+  const message = (error.response?.data as { message?: unknown } | undefined)?.message;
+
+  return typeof message === 'string' ? message : undefined;
+};
+
+/**
+ * The fields a 400 names as invalid, in the order the server listed them. The
+ * API reports a refused request body as `errors: [{ field, message }]`, and a
+ * caller that must tell which part was refused reads the field names here
+ * instead of comparing message text. Empty when the body has none.
+ */
+export const apiErrorFieldsOf = (error: unknown): string[] => {
+  if (!isAxiosError(error)) {
+    return [];
+  }
+
+  const errors = (error.response?.data as { errors?: unknown } | undefined)?.errors;
+
+  if (!Array.isArray(errors)) {
+    return [];
+  }
+
+  return errors.flatMap(entry =>
+    typeof entry === 'object' && entry !== null && typeof (entry as { field?: unknown }).field === 'string'
+      ? [(entry as { field: string }).field]
+      : []
+  );
+};
+
+/**
  * Whether a failed read means the address does not lead to anything the
  * caller can see, as opposed to the request having failed.
  *

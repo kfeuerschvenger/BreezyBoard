@@ -4,6 +4,7 @@ import { toColorLookup, useColors } from '@/features/colors';
 import type { ColorLookup } from '@/features/colors';
 import { useBoard } from '@/features/boards';
 import { isAddressUnreachable } from '@/shared/lib/httpStatus';
+import { DEFAULT_HUE } from '@/shared/ui';
 import { useBoardTasks, useTaskCacheWriter } from '../queries';
 
 /** A board column as the page renders it, with its colour already resolved. */
@@ -11,6 +12,7 @@ export interface ColumnData {
   _id: string;
   id: string;
   title: string;
+  /** The key of the column's hue, which the column's dot is drawn in. */
   color: string;
   order: number;
 }
@@ -61,7 +63,7 @@ export function useBoardData(boardId?: string): UseBoardDataResult {
           id: column._id,
           _id: column._id,
           title: column.title,
-          color: typeof column.color === 'string' ? column.color : (column.color?.value ?? '#64748B'),
+          color: typeof column.color === 'string' ? column.color : (column.color?.value ?? DEFAULT_HUE),
           order: column.order,
         }))
         .sort((a, b) => a.order - b.order),

@@ -342,7 +342,9 @@ test.describe('board core loop', () => {
         const row = document.querySelector('[role="region"][aria-label="Board columns"]')!;
         return [...row.querySelectorAll('h2')].map(heading => {
           const column = heading.closest('div[class*="shrink-0"]')!.parentElement!;
-          return `${heading.textContent}: ${[...column.querySelectorAll('h3')].map(card => card.textContent).join(', ')}`;
+          // The owner's column name is a field inside the heading, a member's is text.
+          const name = heading.querySelector('input')?.value ?? heading.textContent;
+          return `${name}: ${[...column.querySelectorAll('h3')].map(card => card.textContent).join(', ')}`;
         });
       });
 
