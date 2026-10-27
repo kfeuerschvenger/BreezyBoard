@@ -8,6 +8,17 @@ BreezyBoard es una aplicación web para planificar el trabajo en tableros. Las p
 
 El acceso tiene dos niveles. A un miembro de un espacio de trabajo se lo puede agregar a tableros individuales, y un administrador del espacio administra todos los tableros del espacio. Cada solicitud autenticada desplaza la sesión hacia adelante, y una sesión inactiva termina a los 15 minutos por defecto.
 
+## Recorrido
+
+![Una tarjeta arrastrada a la última columna, donde aterriza](docs/assets/screens/hero.gif)
+
+| | |
+|---|---|
+| ![La página de inicio con cuatro tableros](docs/assets/screens/boards-overview.png) | ![Un tablero con cuatro columnas](docs/assets/screens/board.png) |
+| ![Una tarjeta abierta para editar](docs/assets/screens/task-detail.png) | ![El diálogo de gestión de columnas](docs/assets/screens/edit-columns.png) |
+
+Las imágenes se generan a partir del espacio de trabajo de demostración con [e2e/showcase](e2e/showcase/README.md).
+
 ## Stack tecnológico
 
 | Capa | Tecnología |

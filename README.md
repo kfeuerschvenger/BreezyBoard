@@ -8,6 +8,17 @@ BreezyBoard is a web application for planning work on boards. People sign in, be
 
 Access has two levels. A workspace member may be added to individual boards, and a workspace admin administers every board in the workspace. Every authenticated request slides the session forward, and an inactive session ends after 15 minutes by default.
 
+## Tour
+
+![A card dragged into the last column, where it lands](docs/assets/screens/hero.gif)
+
+| | |
+|---|---|
+| ![The home page with four boards](docs/assets/screens/boards-overview.png) | ![A board with four columns](docs/assets/screens/board.png) |
+| ![A card open for editing](docs/assets/screens/task-detail.png) | ![The column management dialog](docs/assets/screens/edit-columns.png) |
+
+The images are generated from the demo workspace by [e2e/showcase](e2e/showcase/README.md).
+
 ## Tech stack
 
 | Layer | Technology |
