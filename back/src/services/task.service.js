@@ -159,7 +159,9 @@ const rehomeNow = async (boardId, { taskId, statuses }) => {
 // logged and the committed task is answered as it was written: reporting it
 // as an error would tell the person that a write that happened did not. A
 // task left in a missing column by such a failure is hidden from the board
-// until its tasks are next read, and `getTasksByBoard` moves it then.
+// until its tasks are next read, and `getTasksByBoard` moves it then: a failed
+// repair here forgets the board's last check, so that read checks again whatever
+// the throttle window says.
 //
 // Whenever the column was gone, the task is read again, whether this call moved
 // it or another repair got there first: the task in hand holds the status it
@@ -180,6 +182,7 @@ const settleColumn = async (task, boardId) => {
         .populate('color', 'name value')) ?? task
     );
   } catch (err) {
+    forgetStrandedCheck(boardId);
     logger.error({ err, boardId: String(boardId), taskId: String(task._id) }, 'Could not check the column of a task that was written');
 
     return task;
@@ -533,8 +536,14 @@ const repairStrandedTasks = async (boardId, columnIds) => {
 //
 // `columnIds` are the ids of the board's columns, taken from the board the
 // request has already loaded.
+// A caller that left them out would skip the repair without saying so, so they
+// are required.
 export const getTasksByBoard = async (boardId, { limit, offset, columnIds } = {}) => {
-  await repairStrandedTasks(boardId, columnIds ?? []);
+  if (!Array.isArray(columnIds)) {
+    throw new Error('getTasksByBoard needs the `columnIds` of the board, as an array.');
+  }
+
+  await repairStrandedTasks(boardId, columnIds);
 
   const filter = { boardId, deletedAt: null };
 

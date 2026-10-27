@@ -331,6 +331,29 @@ describe('a task and the removal of its column racing', () => {
       expect(await strandedCount()).toBe(0);
     });
 
+    test('checks and repairs right after a write whose own repair failed, inside the window', async () => {
+      const task = await createTask(owner.token, board._id, colors.taskColor._id, { status: first });
+      await asUser('get', `/tasks/board/${board._id}`, owner);
+      vi.spyOn(Board, 'exists').mockRejectedValueOnce(new Error('connection lost'));
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const moved = await asUser('patch', `/tasks/${task._id}/move`, owner).send({ status: extra });
+      expect(moved.status).toBe(200);
+      await Board.updateOne({ _id: board._id }, { $pull: { columns: { _id: extra } } });
+      expect(await strandedCount()).toBe(1);
+      const check = vi.spyOn(Task, 'exists');
+
+      const onBoard = await asUser('get', `/tasks/board/${board._id}`, owner);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(onBoard.body.data[0].status).toBe(first);
+      expect(await strandedCount()).toBe(0);
+    });
+
+    test('refuses to run without the columns of the board', async () => {
+      await expect(getTasksByBoard(board._id, { limit: 1 })).rejects.toThrow('columnIds');
+      await expect(getTasksByBoard(board._id)).rejects.toThrow('columnIds');
+    });
+
     test('keeps no more boards on record than its cap, and lets expired ones go', async () => {
       vi.spyOn(Task, 'exists').mockResolvedValue(null);
       const now = Date.now();

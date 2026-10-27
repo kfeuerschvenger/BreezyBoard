@@ -356,7 +356,7 @@ export const updateBoard = async (id, { columns, columnsVersion, ...fields }) =>
       // The columns are already saved, so the edit succeeded. Answering with an
       // error would tell the owner that a change that was made was not. A card
       // left behind stays hidden until the board's tasks are next read, and
-      // `getTasksByBoard` moves it then.
+      // `getTasksByBoard` moves it then, because the check was forgotten above.
       logger.error({ err, boardId: String(id) }, 'Could not move the cards left in a removed column');
     }
   }
