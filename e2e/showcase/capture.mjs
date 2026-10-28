@@ -284,10 +284,21 @@ const CURSOR_SCRIPT = () => {
   });
 };
 
-const recordHero = async (browser, storageState) => {
+/**
+ * The hero runs in the full Chromium build in its new headless mode, not in the
+ * headless shell that Playwright launches by default. The shell rasterizes in
+ * software and renders this board's drag at about 13 frames a second, which the
+ * video shows as stutter. The full build renders at the display rate (60), and
+ * the 25 frames a second the recorder keeps are all distinct. Stills do not
+ * move, so they stay on the shell.
+ */
+const launchHeroBrowser = () => chromium.launch({ channel: 'chromium' });
+
+const recordHero = async storageState => {
   const dir = path.join(WORK, 'video');
   await rm(dir, { recursive: true, force: true });
 
+  const browser = await launchHeroBrowser();
   const context = await openContext(browser, {
     deviceScaleFactor: 1,
     storageState,
@@ -352,7 +363,7 @@ const recordHero = async (browser, storageState) => {
       const t = step / steps;
       const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
       await page.mouse.move(x0 + 12 + (x1 - x0 - 12) * eased, y0 + 12 + (y1 - y0 - 12) * eased);
-      await page.waitForTimeout(24);
+      await page.waitForTimeout(40);
     }
     await page
       .waitForFunction(
@@ -381,6 +392,7 @@ const recordHero = async (browser, storageState) => {
     await writeFile(path.join(WORK, 'hero.json'), JSON.stringify({ start: Number(startAt.toFixed(2)), end: Number(endAt.toFixed(2)) }));
   } finally {
     await context.close().catch(() => {});
+    await browser.close().catch(() => {});
     if (token && boardId) await putCardBack(token, boardId);
   }
 };
@@ -435,7 +447,7 @@ const main = async () => {
 
     if (slugs.includes('hero')) {
       try {
-        await recordHero(browser, storageState);
+        await recordHero(storageState);
         report('hero', true, 'recorded, run gif.mjs to convert it');
       } catch (error) {
         report('hero', false, error.message.split('\n')[0]);
