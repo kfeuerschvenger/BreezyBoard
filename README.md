@@ -89,7 +89,18 @@ flowchart LR
 A React single page app talks to a layered Express API over a versioned `/api/v1`, and MongoDB runs as a replica set so a board and its cards can be deleted in one transaction. The OpenAPI contract is generated from the same Zod schemas that validate every request, so the docs cannot drift from the code.
 
 <p align="center">
-  <img src="https://skillicons.dev/icons?i=react,ts,vite,tailwind,nodejs,express,mongodb,docker,nginx,githubactions,vitest,playwright" alt="React, TypeScript, Vite, Tailwind CSS, Node.js, Express, MongoDB, Docker, nginx, GitHub Actions, Vitest and Playwright">
+  <img src="https://skillicons.dev/icons?i=react" alt="React" title="React" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=ts" alt="TypeScript" title="TypeScript" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=vite" alt="Vite" title="Vite" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=tailwind" alt="Tailwind CSS" title="Tailwind CSS" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=nodejs" alt="Node.js" title="Node.js" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=express" alt="Express" title="Express" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=mongodb" alt="MongoDB" title="MongoDB" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=docker" alt="Docker" title="Docker" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=nginx" alt="nginx" title="nginx" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=githubactions" alt="GitHub Actions" title="GitHub Actions" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=vitest" alt="Vitest" title="Vitest" width="48">&nbsp;
+  <img src="https://skillicons.dev/icons?i=playwright" alt="Playwright" title="Playwright" width="48">
 </p>
 
 ## Quick start
