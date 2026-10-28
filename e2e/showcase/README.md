@@ -66,6 +66,7 @@ Every still also leaves its unframed screenshot in `showcase/out/<slug>.raw.png`
 - `new Date()` answers a fixed morning in March, so the greeting and the date on the home page do not depend on the hour. `Date.now()` is left alone, because the session schedules its expiry from it.
 - The Breeze control is hidden: it is a setting, not part of the tour.
 - A shot fails when a loading indicator or a notice is on screen, and it waits for every finite animation to end.
+- The hero is recorded in the full Chromium build (`channel: 'chromium'`, new headless mode) at a pixel density of 1. The default headless shell rasterizes in software and renders the drag at about 13 frames a second, which stutters on video. The full build renders at 60, and the recorder keeps 25 distinct frames a second. The MP4 is encoded at 25 fps to match, and the GIF at 20 fps and 1100 pixels wide.
 - Cards, ids and timestamps come from the seed, which is deterministic.
 
 ## Maintenance

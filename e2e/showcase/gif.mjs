@@ -1,7 +1,7 @@
 // Converts the video that `node showcase/capture.mjs hero` records into
 // the README's animation: a GIF built with a two pass palette, and an MP4.
 //
-// The GIF is 12 frames a second at 1100 pixels wide, trimmed to the part of the
+// The GIF is 20 frames a second at 1100 pixels wide, trimmed to the part of the
 // recording that shows the card being dragged and landing (capture.mjs writes
 // the cut points beside the video). It must stay under 8 MB, which is what the
 // README can carry without slowing the page.
@@ -21,7 +21,7 @@ const OUT = process.env.SHOWCASE_OUT
   ? path.resolve(process.env.SHOWCASE_OUT)
   : path.resolve(here, '..', '..', 'docs', 'assets', 'screens');
 
-const FPS = 12;
+const FPS = 20;
 const WIDTH = 1100;
 const MAX_GIF_BYTES = 8 * 1024 * 1024;
 
@@ -86,7 +86,7 @@ run('encoding the GIF', [
 run('encoding the MP4', [
   ...trim,
   '-vf',
-  'fps=30,scale=1440:-2:flags=lanczos',
+  'fps=25,scale=1440:-2:flags=lanczos',
   '-c:v',
   'libx264',
   '-crf',
